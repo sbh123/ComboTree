@@ -5,9 +5,21 @@
 
 namespace combotree {
 
-namespace {
+bool CLevel::Insert(uint64_t key, uint64_t value) {
+  return leaf_.Insert(key, value);
+}
 
-} // anonymous namespace
+bool CLevel::Update(uint64_t key, uint64_t value) {
+  return leaf_.Update(key, value);
+}
+
+bool CLevel::Get(uint64_t key, uint64_t& value) {
+  return leaf_.Get(key, value);
+}
+
+bool CLevel::Delete(uint64_t key) {
+  return leaf_.Delete(key);
+}
 
 // find entry index which is less or equal to key
 int LeafNode::Find_(uint64_t key, bool& find) const {
@@ -20,7 +32,7 @@ int LeafNode::Find_(uint64_t key, bool& find) const {
     uint64_t mid_key = GetEntryKey_(mid_idx);
     if (mid_key == key) {
       find = true;
-      return mid_idx; // find
+      return middle; // find
     } else if (mid_key < key) {
       left = middle + 1;
     } else {
@@ -32,7 +44,7 @@ int LeafNode::Find_(uint64_t key, bool& find) const {
   return left;
 }
 
-void LeafNode::PrintSortedArray_() const {
+void LeafNode::PrintSortedArray() const {
   for (int i = 0; i < 16; ++i) {
     std::cout << i << ": " << GetSortedEntry_(i) << std::endl;
   }
@@ -87,38 +99,106 @@ bool LeafNode::Insert(uint64_t key, uint64_t value) {
   }
 
   uint64_t new_sorted_array;
-  int entry_idx = (next_entry != CLEVEL_NODE_LEAF_ENTRYS) ? next_entry + 1
+  int entry_idx = (next_entry != CLEVEL_NODE_LEAF_ENTRYS) ? next_entry
                                                           : GetFreeIndex_();
 
-  uint64_t free_mask = (~0x0FUL) >> ((nr_entry + 1) * 4);
+  uint64_t free_mask =
+      next_entry == (nr_entry + 1) ? 0 : (~0x00UL) >> ((nr_entry + 1) * 4);
   uint64_t free_index = sorted_array & free_mask;
 
   uint64_t after_mask = 0x0FUL;
   for (int i = 0; i < nr_entry - sorted_index - 1; ++i)
     after_mask = (after_mask << 4) | 0x0FUL;
-  after_mask = sorted_index == (CLEVEL_NODE_LEAF_ENTRYS - 1) ? 0 :
-      after_mask << ((CLEVEL_NODE_LEAF_ENTRYS - 1 - sorted_index) * 4);
+  after_mask = sorted_index == nr_entry ? 0 :
+      after_mask << ((CLEVEL_NODE_LEAF_ENTRYS - nr_entry) * 4);
   uint64_t after_index = (sorted_array & after_mask) >> 4;
 
-  uint64_t before_mask = sorted_index == 0 ? 0 : ~((~0x00UL) >> (sorted_index * 4));
+  uint64_t before_mask =
+      sorted_index == 0 ? 0 : ~((~0x00UL) >> (sorted_index * 4));
   uint64_t before_index = sorted_array & before_mask;
   new_sorted_array =
       before_index |
-      (entry_idx << ((CLEVEL_NODE_LEAF_ENTRYS - 1 - sorted_index) * 4)) |
+      ((uint64_t)entry_idx << ((CLEVEL_NODE_LEAF_ENTRYS - 1 - sorted_index) * 4)) |
       after_index |
       free_index;
 
   entry[entry_idx].key = key;
   entry[entry_idx].value = value;
   nr_entry++;
+  if (entry_idx == next_entry) next_entry++;
   sorted_array = new_sorted_array;
+
+  // PrintSortedArray();
+  return true;
+}
+
+bool LeafNode::Delete(uint64_t key) {
+  bool find;
+  int sorted_index = Find_(key, find);
+  if (!find) {
+    // key not exist
+    return false;
+  }
+
+  int entry_index = GetSortedEntry_(sorted_index);
+
+  uint64_t free_mask = next_entry == nr_entry ? 0 : ~((~0x00UL) << ((next_entry - nr_entry) * 4));
+  uint64_t free_index = sorted_array & free_mask;
+
+  uint64_t after_mask = 0x0FUL;
+  for (int i = 0; i < nr_entry - sorted_index - 2; ++i)
+    after_mask = (after_mask << 4) | 0x0FUL;
+  after_mask = sorted_index == (nr_entry - 1) ? 0 :
+      after_mask << ((CLEVEL_NODE_LEAF_ENTRYS - nr_entry) * 4);
+  uint64_t after_index = (sorted_array & after_mask) << 4;
+
+  uint64_t before_mask = sorted_index == 0 ? 0 : ~((~0x00UL) >> (sorted_index * 4));
+  uint64_t before_index = sorted_array & before_mask;
+  uint64_t new_sorted_array =
+      before_index |
+      after_index |
+      ((uint64_t)entry_index << ((next_entry - nr_entry) * 4)) |
+      free_index;
+
+  sorted_array = new_sorted_array;
+  nr_entry--;
+
+  // PrintSortedArray();
+  return true;
+}
+
+bool LeafNode::Update(uint64_t key, uint64_t value) {
+  bool find;
+  int sorted_index = Find_(key, find);
+  if (!find) {
+    // key not exist
+    return false;
+  }
+
+  int entry_index = GetSortedEntry_(sorted_index);
+  entry[entry_index].value = value;
+  return true;
+}
+
+bool LeafNode::Get(uint64_t key, uint64_t& value) {
+  bool find;
+  int sorted_index = Find_(key, find);
+  if (!find) {
+    // key not exist
+    return false;
+  }
+
+  int entry_index = GetSortedEntry_(sorted_index);
+  value = entry[entry_index].value;
+  return true;
 }
 
 bool IndexNode::Split_() {
-
+  return true;
 }
 
 bool IndexNode::Insert(pmem::obj::persistent_ptr<LeafNode> leaf) {
+  assert(nr_entry < CLEVEL_NODE_INDEX_ENTRYS);
   uint64_t leaf_key = leaf->entry[0].key;
   int left = 0;
   int right = nr_entry - 1;
@@ -145,6 +225,20 @@ bool IndexNode::Insert(pmem::obj::persistent_ptr<LeafNode> leaf) {
   child[nr_entry + 1] = leaf;
   memcpy(sorted_array, new_sorted_array, sizeof(sorted_array));
   nr_entry++;
+
+  return true;
+}
+
+Iterator* CLevel::begin() {
+  Iterator* iter = new Iter(this);
+  iter->SeekToFirst();
+  return iter;
+}
+
+Iterator* CLevel::end() {
+  Iterator* iter = new Iter(this);
+  iter->SeekToLast();
+  return iter;
 }
 
 } // namespace combotree

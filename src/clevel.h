@@ -1,8 +1,9 @@
 #pragma once
 
-#include <libpmemobj++/persistent_ptr.hpp>
 #include <cstdint>
 #include <cassert>
+#include <libpmemobj++/persistent_ptr.hpp>
+#include "iterator.h"
 
 namespace combotree {
 
@@ -10,6 +11,8 @@ namespace combotree {
 #define CLEVEL_NODE_INDEX_ENTRYS  8
 
 struct Entry {
+  Entry() : key(0), value(0) {}
+
   uint64_t key;
   union {
     uint64_t value;
@@ -17,7 +20,12 @@ struct Entry {
   };
 };
 
+class CLevel;
+
 struct LeafNode {
+  LeafNode() : prev(nullptr), next(nullptr), parent(nullptr),
+               sorted_array(0), nr_entry(0), next_entry(0) {}
+
   pmem::obj::persistent_ptr<struct LeafNode> prev;
   pmem::obj::persistent_ptr<struct LeafNode> next;
   pmem::obj::persistent_ptr<struct IndexNode> parent;
@@ -30,6 +38,8 @@ struct LeafNode {
   bool Update(uint64_t key, uint64_t value);
   bool Get(uint64_t key, uint64_t& value);
   bool Delete(uint64_t key);
+
+  void PrintSortedArray() const;
 
  private:
   bool Split_();
@@ -51,7 +61,7 @@ struct LeafNode {
    */
   int GetSortedEntry_(int sorted_index) const {
 #ifndef NDEBUG
-    assert(sorted_index < nr_entry);
+    // assert(sorted_index < nr_entry);
 #endif // NDEBUG
     uint64_t mask = GetSortedArrayMask_(sorted_index);
     return (sorted_array & mask) >> ((CLEVEL_NODE_LEAF_ENTRYS - 1 - sorted_index) * 4);
@@ -70,7 +80,8 @@ struct LeafNode {
     return entry[entry_idx].key;
   }
 
-  void PrintSortedArray_() const;
+  friend class CLevel;
+
 };
 
 struct IndexNode {
@@ -85,11 +96,56 @@ struct IndexNode {
 
 class CLevel {
  public:
-  CLevel() {}
-  ~CLevel() {}
+  class Iter;
+
+  bool Insert(uint64_t key, uint64_t value);
+  bool Update(uint64_t key, uint64_t value);
+  bool Get(uint64_t key, uint64_t& value);
+  bool Delete(uint64_t key);
+
+  Iterator* begin();
+  Iterator* end();
 
  private:
+  LeafNode leaf_;
+};
 
+class CLevel::Iter : public Iterator {
+ public:
+  Iter(CLevel* clevel) : sorted_index_(0), clevel_(clevel) {}
+  ~Iter() {};
+
+  bool Begin() const { return sorted_index_ == 0; }
+
+  bool End() const { return sorted_index_ == clevel_->leaf_.nr_entry - 1; }
+
+  void SeekToFirst() { sorted_index_ = 0; }
+
+  void SeekToLast() { sorted_index_ = clevel_->leaf_.nr_entry - 1; }
+
+  void Seek(uint64_t target) {
+    bool find;
+    int idx = clevel_->leaf_.Find_(target, find);
+    if (find) sorted_index_ = idx;
+  }
+
+  void Next() { sorted_index_++; }
+
+  void Prev() { sorted_index_--; }
+
+  uint64_t key() const {
+    int entry_idx = clevel_->leaf_.GetSortedEntry_(sorted_index_);
+    return clevel_->leaf_.entry[entry_idx].key;
+  }
+
+  uint64_t value() const {
+    int entry_idx = clevel_->leaf_.GetSortedEntry_(sorted_index_);
+    return clevel_->leaf_.entry[entry_idx].value;
+  }
+
+ private:
+  int sorted_index_;
+  CLevel* clevel_;
 };
 
 } // namespace combotree
