@@ -11,7 +11,7 @@ using pmem::kv::db;
 
 PmemKV::PmemKV(std::string path, size_t size,
                std::string engine, bool force_create)
-    : db_(new db())
+    : db_(new db()), write_ref_(0), read_ref_(0)
 {
   std::string rm_cmd = "rm " + path;
   system(rm_cmd.c_str());

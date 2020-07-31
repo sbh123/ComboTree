@@ -47,10 +47,10 @@ class ALevel {
 
   int span_;
   BLevel* blevel_;
-  uint64_t nr_blevel_entry_;
-  uint64_t nr_entry_;
   uint64_t min_key_;
   uint64_t max_key_;
+  uint64_t nr_blevel_entry_;
+  uint64_t nr_entry_;
   Entry* entry_;
 
   double CalculateCDF_(uint64_t key) const {

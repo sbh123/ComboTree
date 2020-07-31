@@ -4,6 +4,9 @@
 #include <cstdlib>
 #include <libpmemkv.hpp>
 #include <vector>
+#include <atomic>
+#include <mutex>
+#include <algorithm>
 #include "iterator.h"
 
 namespace combotree {
@@ -15,6 +18,10 @@ namespace {
 
 const uint64_t SIZE = 1024UL * 1024UL * 1024UL; // 1G
 
+void int2char(uint64_t integer, char* buf) {
+  *(uint64_t*)buf = integer;
+}
+
 } // anonymous namespace
 
 class PmemKV {
@@ -23,48 +30,66 @@ class PmemKV {
                   std::string engine = "cmap", bool force_create = true);
 
   bool Insert(uint64_t key, uint64_t value) {
+    WriteRef_();
     char key_buf[sizeof(uint64_t)];
     char value_buf[sizeof(uint64_t)];
-    IntToCharBuf_(key, key_buf);
-    IntToCharBuf_(value, value_buf);
+    int2char(key, key_buf);
+    int2char(value, value_buf);
 
     auto s = db_->put(string_view(key_buf, sizeof(uint64_t)),
                       string_view(value_buf, sizeof(uint64_t)));
+    WriteUnRef_();
     return s == status::OK;
   }
 
   bool Update(uint64_t key, uint64_t value) {
+    WriteRef_();
     char key_buf[sizeof(uint64_t)];
     char value_buf[sizeof(uint64_t)];
-    IntToCharBuf_(key, key_buf);
-    IntToCharBuf_(value, value_buf);
+    int2char(key, key_buf);
+    int2char(value, value_buf);
 
     auto s = db_->put(string_view(key_buf, sizeof(uint64_t)),
                       string_view(value_buf, sizeof(uint64_t)));
+    WriteUnRef_();
     return s == status::OK;
   }
 
   bool Get(uint64_t key, uint64_t& value) const {
+    ReadRef_();
     char key_buf[sizeof(uint64_t)];
-    IntToCharBuf_(key, key_buf);
+    int2char(key, key_buf);
 
     auto s = db_->get(string_view(key_buf, sizeof(uint64_t)),
         [&](string_view value_str){ value = *(uint64_t*)value_str.data(); });
+    WriteUnRef_();
     return s == status::OK;
   }
 
   bool Delete(uint64_t key) {
+    WriteRef_();
     char key_buf[sizeof(uint64_t)];
-    IntToCharBuf_(key, key_buf);
+    int2char(key, key_buf);
     auto s = db_->remove(string_view(key_buf, sizeof(uint64_t)));
+    WriteUnRef_();
     return s == status::OK;
   }
 
   size_t Size() const {
+    ReadRef_();
     size_t size;
     auto s = db_->count_all(size);
     assert(s == status::OK);
+    ReadUnRef_();
     return size;
+  }
+
+  bool NoWriteRef() const {
+    return write_ref_.load() == 0;
+  }
+
+  bool NoReadRef() const {
+    return read_ref_.load() == 0;
   }
 
   class Iter;
@@ -74,16 +99,20 @@ class PmemKV {
 
  private:
   pmem::kv::db* db_;
+  mutable std::atomic<int> write_ref_;
+  mutable std::atomic<int> read_ref_;
 
-  void IntToCharBuf_(uint64_t integer, char* buf) const {
-    *(uint64_t*)buf = integer;
-  }
+  void WriteRef_() const { write_ref_++; }
+  void WriteUnRef_() const { write_ref_--; }
+  void ReadRef_() const { read_ref_++; }
+  void ReadUnRef_() const { read_ref_--; }
 };
 
 class PmemKV::Iter : public Iterator {
  public:
   Iter(PmemKV* pmemkv) : pmemkv_(pmemkv), size_(0), index_(0)
   {
+    pmemkv_->ReadRef_();
     auto s =pmemkv_->db_->get_all(
       [&](string_view key_str, string_view value_str) {
         uint64_t key = *(uint64_t*)key_str.data();
@@ -92,10 +121,11 @@ class PmemKV::Iter : public Iterator {
         size_++;
         return 0;
       });
+    std::sort(kv_pair_.begin(), kv_pair_.end());
     assert(s == status::OK);
   }
 
-  ~Iter() {};
+  ~Iter() { pmemkv_->ReadUnRef_(); }
 
   bool Begin() const { return index_ == 0; }
 
@@ -122,10 +152,10 @@ class PmemKV::Iter : public Iterator {
   }
 
  private:
+  std::vector<std::pair<uint64_t, uint64_t>> kv_pair_;
   PmemKV* pmemkv_;
   size_t size_;
   int index_;
-  std::vector<std::pair<uint64_t, uint64_t>> kv_pair_;
 };
 
 } // namespace combotree

@@ -23,16 +23,17 @@ int main(void) {
   Iterator* iter = new MapIterator(&kv);
   iter->SeekToFirst();
   BLevel* blevel = new BLevel(pop, iter, kv.size());
+  ALevel* alevel = new ALevel(blevel);
 
-  for (int i = 1; i < 2000; i += 2) {
-    bool res = blevel->Insert(i, i);
+  for (int i = 1; i < 1000; i += 2) {
+    bool res = alevel->Insert(i, i);
     assert(res);
   }
 
   for (int i = 0; i < 200; ++i) {
     bool find;
     uint64_t value;
-    find = blevel->Get(i, value);
+    find = alevel->Get(i, value);
     assert(find && value == (uint64_t)i);
   }
 

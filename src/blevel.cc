@@ -1,5 +1,3 @@
-#include <iostream>
-#include <cassert>
 #include <libpmemobj++/persistent_ptr.hpp>
 #include <libpmemobj++/make_persistent.hpp>
 #include <libpmemobj++/make_persistent_array.hpp>
@@ -7,15 +5,19 @@
 #include <libpmemobj++/make_persistent_atomic.hpp>
 #include "iterator.h"
 #include "blevel.h"
+#include "debug.h"
 
 namespace combotree {
 
 BLevel::BLevel(pmem::obj::pool_base& pop, Iterator* iter, uint64_t size)
     : pop_(pop)
 {
+  pmem::obj::pool<Root> pool(pop);
+  CLevel::SetPoolBase(pop);
+  root_ = pool.root();
   root_->nr_entry_ = iter->key() == 0 ? size : size + 1;
   root_->size_ = size;
-  pmem::obj::make_persistent_atomic<Entry[]>(pop, root_->entry_, size);
+  pmem::obj::make_persistent_atomic<Entry[]>(pop_, root_->entry_, size);
   int pos = 0;
   if (iter->key() != 0)
     GetEntry_(pos++)->key = 0;
@@ -118,10 +120,8 @@ bool BLevel::Entry::Delete(uint64_t pkey) {
 }
 
 uint64_t BLevel::Find_(uint64_t key, uint64_t begin, uint64_t end) const {
-#ifndef NDEBUG
-  assert(begin >= 0 && begin < EntrySize());
-  assert(end >= 0 && end < EntrySize());
-#endif // NDEBUG
+  debug_assert(begin >= 0 && begin < EntrySize());
+  debug_assert(end >= 0 && end < EntrySize());
   int left = begin;
   int right = end;
   // binary search
