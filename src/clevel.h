@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <libpmemobj++/persistent_ptr.hpp>
+#include <libpmemobj.h>
 #include "iterator.h"
 #include "debug.h"
 
@@ -156,28 +157,74 @@ struct CLevel::IndexNode {
   }
 };
 
+// TODO: Begin(), End(), CLevel::begin(), CLevel::end()
+// is not the same.
 class CLevel::Iter : public Iterator {
  public:
-  Iter(CLevel* clevel) : sorted_index_(0), clevel_(clevel) {}
+  Iter(CLevel* clevel)
+      : clevel_(clevel), leaf_(clevel_->head_), sorted_index_(0)  {}
   ~Iter() {};
 
-  bool Begin() const { return sorted_index_ == 0; }
-
-  bool End() const { return sorted_index_ == leaf_->nr_entry - 1; }
-
-  void SeekToFirst() { sorted_index_ = 0; }
-
-  void SeekToLast() { sorted_index_ = leaf_->nr_entry - 1; }
-
-  void Seek(uint64_t target) {
-    bool find;
-    int idx = leaf_->Find_(target, find);
-    if (find) sorted_index_ = idx;
+  bool Begin() const {
+    return OID_EQUALS(leaf_.raw(), clevel_->head_.raw()) &&
+           sorted_index_ == 0;
   }
 
-  void Next() { sorted_index_++; }
+  // leaf_ point to the last, sorted_index_ equals nr_entry
+  bool End() const {
+    return OID_EQUALS(leaf_.raw(), clevel_->head_->prev.raw()) &&
+           sorted_index_ == leaf_->nr_entry;
+  }
 
-  void Prev() { sorted_index_--; }
+  void SeekToFirst() {
+    leaf_ = clevel_->head_;
+    while (!OID_EQUALS(leaf_.raw(), clevel_->head_->prev.raw()) &&
+           leaf_->nr_entry == 0) {
+      leaf_ = leaf_->next;
+    }
+    sorted_index_ = 0;
+  }
+
+  void SeekToLast() {
+    leaf_ = clevel_->head_->prev;
+    while (!OID_EQUALS(leaf_.raw(), clevel_->head_.raw()) &&
+           leaf_->nr_entry == 0) {
+      leaf_ = leaf_->prev;
+    }
+    sorted_index_ = std::max(0, leaf_->nr_entry - 1);
+  }
+
+  void Seek(uint64_t target) {
+    assert(0);
+  }
+
+  void Next() {
+    if (sorted_index_ < leaf_->nr_entry - 1) {
+      sorted_index_++;
+    } else if (OID_EQUALS(leaf_.raw(), clevel_->head_->prev.raw())) {
+      sorted_index_ = leaf_->nr_entry;
+    } else {
+      do {
+        leaf_ = leaf_->next;
+      } while (!OID_EQUALS(leaf_.raw(), clevel_->head_->prev.raw()) &&
+               leaf_->nr_entry == 0);
+      sorted_index_ = 0;
+    }
+  }
+
+  void Prev() {
+    if (sorted_index_ > 0) {
+      sorted_index_--;
+    } else if (OID_EQUALS(leaf_.raw(), clevel_->head_.raw())) {
+      sorted_index_ = 0;
+    } else {
+      do {
+        leaf_ = leaf_->prev;
+      } while (!OID_EQUALS(leaf_.raw(), clevel_->head_.raw()) &&
+               leaf_->nr_entry == 0);
+      sorted_index_ = std::max(0, leaf_->nr_entry - 1);
+    }
+  }
 
   uint64_t key() const {
     int entry_idx = leaf_->GetSortedEntry_(sorted_index_);
@@ -190,9 +237,9 @@ class CLevel::Iter : public Iterator {
   }
 
  private:
-  int sorted_index_;
   CLevel* clevel_;
-  LeafNode* leaf_;
+  pmem::obj::persistent_ptr<LeafNode> leaf_;
+  int sorted_index_;
 };
 
 } // namespace combotree

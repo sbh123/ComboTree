@@ -17,6 +17,8 @@ CLevel::CLevel()
     : type_(NodeType::LEAF)
 {
   make_persistent_atomic<LeafNode>(GetPoolBase(), head_);
+  head_->prev = head_;
+  head_->next = head_;
   root_ = head_;
 }
 
@@ -104,6 +106,8 @@ bool CLevel::LeafNode::Split_(persistent_ptr_base& root) {
   }
   new_node->prev = this;
   new_node->next = next;
+  new_node->next->prev = new_node;
+  new_node->prev->next = new_node;
   new_node->parent = parent;
   new_node->nr_entry = LEAF_ENTRYS / 2;
   new_node->next_entry = LEAF_ENTRYS / 2;
@@ -112,7 +116,6 @@ bool CLevel::LeafNode::Split_(persistent_ptr_base& root) {
   new_node.persist();
 
   nr_entry = LEAF_ENTRYS - LEAF_ENTRYS / 2;
-  next = new_node;
   parent->InsertChild(new_node->entry[new_node->GetSortedEntry_(0)].key, new_node, root);
   return true;
 }
