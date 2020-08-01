@@ -135,29 +135,31 @@ bool CLevel::LeafNode::Insert(uint64_t key, uint64_t value, persistent_ptr_base&
   }
 
   uint64_t new_sorted_array;
-  int entry_idx = (next_entry != LEAF_ENTRYS) ? next_entry
+  uint64_t entry_idx = (next_entry != LEAF_ENTRYS) ? next_entry
                                                           : GetFreeIndex_();
 
   // free mask is free index in sorted_array
   // after mask is the index which is bigger than sorted_index
   // before mask is the index which is less than sorted_index
-  uint64_t free_mask =
-      next_entry == (nr_entry + 1) ? 0 : (~0x00UL) >> ((nr_entry + 1) * 4);
+  uint64_t free_mask = 0;
+  int nr_free = next_entry - (nr_entry + 1);
+  for (int i = 0; i < nr_free; ++i)
+    free_mask = (free_mask << 4) | 0x0FUL;
   uint64_t free_index = sorted_array & free_mask;
 
-  uint64_t after_mask = 0x0FUL;
-  for (int i = 0; i < nr_entry - sorted_index - 1; ++i)
+  uint64_t after_mask = 0;
+  for (int i = 0; i < nr_entry - sorted_index; ++i)
     after_mask = (after_mask << 4) | 0x0FUL;
-  after_mask = sorted_index == nr_entry ? 0 :
-      after_mask << ((LEAF_ENTRYS - nr_entry) * 4);
+  after_mask = after_mask << ((LEAF_ENTRYS - nr_entry) * 4);
   uint64_t after_index = (sorted_array & after_mask) >> 4;
 
-  uint64_t before_mask =
-      sorted_index == 0 ? 0 : ~((~0x00UL) >> (sorted_index * 4));
+  uint64_t before_mask = 0;
+  for (int i = 0; i < sorted_index; ++i)
+    before_mask = (before_mask >> 4) | 0xF000000000000000UL;
   uint64_t before_index = sorted_array & before_mask;
   new_sorted_array =
       before_index |
-      ((uint64_t)entry_idx << ((LEAF_ENTRYS - 1 - sorted_index) * 4)) |
+      (entry_idx << ((LEAF_ENTRYS - 1 - sorted_index) * 4)) |
       after_index |
       free_index;
 
@@ -249,20 +251,16 @@ persistent_ptr<CLevel::LeafNode> CLevel::IndexNode::FindLeafNode_(uint64_t key) 
     uint64_t mid_key = keys[sorted_array[middle]];
     if (mid_key > key) { // TODO:
       right = middle - 1;
-    } else if (mid_key == key) {
-      if (child_type == CLevel::NodeType::LEAF)
-        return leaf_child_(sorted_array[middle] + 1);
-      else
-        return index_child_(sorted_array[middle] + 1)->FindLeafNode_(key);
-    } else if (mid_key < key) {
+    } else if (mid_key <= key) {
       left = middle + 1;
     }
   }
 
+  int child_idx = right == -1 ? 0 : sorted_array[right] + 1;
   if (child_type == CLevel::NodeType::LEAF)
-    return leaf_child_(sorted_array[left]);
+    return leaf_child_(child_idx);
   else
-    return index_child_(sorted_array[left])->FindLeafNode_(key);
+    return index_child_(child_idx)->FindLeafNode_(key);
 }
 
 void CLevel::IndexNode::AdoptChild_() {

@@ -30,6 +30,8 @@ ALevel::ALevel(BLevel* blevel, int span)
       }
     }
   }
+  entry_[nr_entry_ - 1].key = max_key_;
+  entry_[nr_entry_ - 1].offset = nr_blevel_entry_;
 }
 
 void ALevel::GetBLevelRange_(uint64_t key, uint64_t& begin, uint64_t& end) const {
@@ -44,14 +46,17 @@ void ALevel::GetBLevelRange_(uint64_t key, uint64_t& begin, uint64_t& end) const
     return;
   }
 
-  int cdf_index = CDFIndex_(key);
+  uint64_t cdf_index = CDFIndex_(key);
   if (key >= entry_[cdf_index].key) {
     begin = entry_[cdf_index].offset;
-    end = entry_[cdf_index + 1].offset;
+    if (cdf_index == nr_entry_ - 1)
+      end = begin;
+    else
+      end = entry_[cdf_index + 1].offset;
   } else {
     begin = entry_[cdf_index - 1].offset;
     end = entry_[cdf_index].offset;
-    assert(begin != end);
+    // assert(begin != end);
     if (begin == end) begin--;
   }
 }

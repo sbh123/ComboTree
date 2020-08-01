@@ -1,11 +1,17 @@
+#include <map>
 #include <filesystem>
+#include <fstream>
 #include "iterator.h"
 #include "clevel.h"
+#include "random.h"
 
 using combotree::CLevel;
 using combotree::Iterator;
 
-#define PATH  "/mnt/pmem0/persistent"
+using namespace std;
+
+#define PATH        "/mnt/pmem0/persistent"
+#define TEST_SIZE   500000
 
 int main(void) {
   std::filesystem::remove(PATH);
@@ -13,48 +19,83 @@ int main(void) {
                                           PMEMOBJ_MIN_POOL * 128, 0666);
   CLevel::SetPoolBase(pop);
 
-  CLevel clevel;
+  CLevel* db;
+  db = new CLevel();
+  db->InitLeaf();
 
-  for (uint64_t i = 0; i < 120000; ++i) {
-    bool res = clevel.Insert(i, i);
-    assert(res);
-  }
+  combotree::RandomUniformUint64 rnd;
+  // std::map<uint64_t, uint64_t> right_kv;
 
-  for (uint64_t i = 0; i < 1200; ++i) {
-    bool res = clevel.Delete(i);
-    assert(res);
-  }
+  // fstream f("/home/qyzhang/Projects/ComboTree/build/workload.txt", ios::in);
 
-  for (uint64_t i = 0; i < 1200; ++i) {
+  // for (int i = 0; i < TEST_SIZE; ++i) {
+  //   uint64_t key;
+  //   f >> key;
+  //   uint64_t value = key;
+  //   bool res = db->Insert(key, value);
+  //   assert(res);
+  // }
+
+  // f.seekg(0);
+  // for (int i = 0; i < TEST_SIZE; ++i) {
+  //   uint64_t key;
+  //   f >> key;
+  //   uint64_t value;
+  //   bool res = db->Get(key, value);
+  //   assert(res && value == key);
+  // }
+
+  // for (int i = 0; i < 70000 - TEST_SIZE; ++i) {
+  //   uint64_t key;
+  //   f >> key;
+  //   uint64_t value;
+  //   bool res = db->Get(key, value);
+  //   assert(!res);
+  // }
+  std::map<uint64_t, uint64_t> right_kv;
+
+  for (int i = 0; i < TEST_SIZE; ++i) {
+    int op = rnd.Next();
+    uint64_t key = rnd.Next();
     uint64_t value;
-    bool find = clevel.Get(i, value);
-    assert(!find);
+    uint64_t right_value;
+    bool res;
+    switch (op % 4) {
+      case 0: // PUT
+        value = rnd.Next();
+        if (right_kv.count(key)) {
+          res = db->Insert(key, value);
+          assert(!res);
+        } else {
+          right_kv.emplace(key, value);
+          res = db->Insert(key, value);
+          assert(res);
+        }
+        break;
+      case 1: // GET
+        if (right_kv.count(key)) {
+          right_value = right_kv.at(key);
+          res = db->Get(key, value);
+          assert(res && right_value == value);
+        } else {
+          res = db->Get(key, value);
+          assert(!res);
+        }
+        break;
+      case 2: // DELETE
+        // if (right_kv.count(key)) {
+        //   right_kv.erase(key);
+        //   res = db->Delete(key);
+        //   assert(res);
+        // } else {
+        //   res = db->Delete(key);
+        //   assert(!res);
+        // }
+        // break;
+      case 3: // UPDATE
+        break;
+    }
   }
-
-  for (uint64_t i = 1200; i < 120000; ++i) {
-    uint64_t value;
-    bool find = clevel.Get(i, value);
-    assert(find && value == i);
-  }
-
-  uint64_t i = 1200;
-  for (Iterator* iter = clevel.begin(); !iter->End(); iter->Next()) {
-    uint64_t key = iter->key();
-    uint64_t value = iter->value();
-    assert(key == i && value == i);
-    i++;
-  }
-  assert(i == 120000);
-
-  Iterator* iter = clevel.end();
-  do {
-    i--;
-    uint64_t key = iter->key();
-    uint64_t value = iter->value();
-    assert(key == i && value == i);
-    iter->Prev();
-  } while (!iter->Begin());
-  assert(i == 1200);
 
   return 0;
 }

@@ -29,6 +29,8 @@ target_link_libraries(blevel_test pmemobj)
 add_executable(alevel_test tests/alevel_test.cc src/alevel.cc src/blevel.cc src/clevel.cc)
 target_link_libraries(alevel_test pmemobj)
 
+add_executable(generate_workload tests/generate_workload.cc)
+
 # pmemkv test
 add_executable(pmemkv_test tests/pmemkv_test.cc src/pmemkv.cc)
 target_link_libraries(pmemkv_test pmemkv)

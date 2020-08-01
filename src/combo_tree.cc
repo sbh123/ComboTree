@@ -64,16 +64,17 @@ bool ComboTree::Insert(uint64_t key, uint64_t value) {
         if (status_.compare_exchange_strong(tmp, Status::PMEMKV_TO_COMBO_TREE)) {
           // wait until no ref to pmemkv
           // get will not ref, so get still work during migration
+          // FIXME: have race conditions! maybe one writer thread haven't ref yet.
           while (!pmemkv_->NoWriteRef()) ;
           ChangeToComboTree_();
         }
       }
       break;
     } else if (status_.load() == Status::PMEMKV_TO_COMBO_TREE) {
-      for (volatile int i = 0; i < 10000; ++i) ;
+      std::this_thread::sleep_for(std::chrono::microseconds(5));
       continue;
     } else if (status_.load() == Status::USING_COMBO_TREE) {
-      InsertToComboTree_(key, value);
+      res = InsertToComboTree_(key, value);
       break;
     }
   }

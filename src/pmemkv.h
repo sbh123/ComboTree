@@ -36,7 +36,14 @@ class PmemKV {
     int2char(key, key_buf);
     int2char(value, value_buf);
 
-    auto s = db_->put(string_view(key_buf, sizeof(uint64_t)),
+    // FIXME: remove exist test?
+    auto s = db_->exists(string_view(key_buf, sizeof(uint64_t)));
+    if (s == status::OK) {
+      WriteUnRef_();
+      return false;
+    }
+
+    s = db_->put(string_view(key_buf, sizeof(uint64_t)),
                       string_view(value_buf, sizeof(uint64_t)));
     WriteUnRef_();
     return s == status::OK;
@@ -62,7 +69,7 @@ class PmemKV {
 
     auto s = db_->get(string_view(key_buf, sizeof(uint64_t)),
         [&](string_view value_str){ value = *(uint64_t*)value_str.data(); });
-    WriteUnRef_();
+    ReadUnRef_();
     return s == status::OK;
   }
 
