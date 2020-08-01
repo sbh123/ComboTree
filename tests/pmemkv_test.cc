@@ -1,11 +1,13 @@
+#include <filesystem>
 #include <cassert>
 #include "pmemkv.h"
 
 using namespace combotree;
 
-#define PMEMKV_PATH "/mnt/pmem0/pmemkv"
+#define PMEMKV_PATH "/mnt/pmem0/persistent"
 
 int main(void) {
+  std::filesystem::remove(PMEMKV_PATH);
   PmemKV* db;
   db = new PmemKV(PMEMKV_PATH);
 

@@ -3,6 +3,7 @@
 #include <libpmemobj++/make_persistent_array.hpp>
 #include <libpmemobj++/make_persistent_array_atomic.hpp>
 #include <libpmemobj++/make_persistent_atomic.hpp>
+#include <iostream>
 #include "iterator.h"
 #include "blevel.h"
 #include "debug.h"
@@ -10,6 +11,32 @@
 namespace combotree {
 
 BLevel::BLevel(pmem::obj::pool_base& pop, Iterator* iter, uint64_t size)
+    : pop_(pop)
+{
+  pmem::obj::pool<Root> pool(pop);
+  CLevel::SetPoolBase(pop);
+  root_ = pool.root();
+  root_->nr_entry_ = iter->key() == 0 ? size : size + 1;
+  root_->size_ = size;
+  pmem::obj::make_persistent_atomic<Entry[]>(pop_, root_->entry_, root_->nr_entry_);
+  int pos = 0;
+  if (iter->key() != 0) {
+    Entry* ent = GetEntry_(pos++);
+    ent->key = 0;
+    ent->type = Entry::Type::ENTRY_NONE;
+  }
+  for (size_t i = 0; i < size; ++i) {
+    Entry* ent = GetEntry_(pos);
+    ent->key = iter->key();
+    ent->value = iter->value();
+    ent->type = Entry::Type::ENTRY_VALUE;
+    iter->Next();
+    pos++;
+  }
+  locks_ = new std::shared_mutex[root_->nr_entry_];
+}
+
+BLevel::BLevel(pmem::obj::pool_base& pop, BLevel::Iter* iter, uint64_t size)
     : pop_(pop)
 {
   pmem::obj::pool<Root> pool(pop);
@@ -29,6 +56,7 @@ BLevel::BLevel(pmem::obj::pool_base& pop, Iterator* iter, uint64_t size)
     iter->Next();
     pos++;
   }
+  locks_ = new std::shared_mutex[root_->nr_entry_];
 }
 
 BLevel::BLevel(pmem::obj::pool_base& pop)
@@ -36,9 +64,16 @@ BLevel::BLevel(pmem::obj::pool_base& pop)
 {
   pmem::obj::pool<Root> pool(pop);
   root_ = pool.root();
+  locks_ = new std::shared_mutex[root_->nr_entry_];
 }
 
-bool BLevel::Entry::Get(uint64_t pkey, uint64_t& pvalue) const {
+BLevel::~BLevel() {
+  if (locks_)
+    delete locks_;
+}
+
+bool BLevel::Entry::Get(std::shared_mutex* mutex, uint64_t pkey, uint64_t& pvalue) const {
+  std::shared_lock<std::shared_mutex> lock(*mutex);
   if (type == Type::ENTRY_VALUE) {
     if (pkey == key) {
       pvalue = value;
@@ -54,18 +89,23 @@ bool BLevel::Entry::Get(uint64_t pkey, uint64_t& pvalue) const {
   return false;
 }
 
-bool BLevel::Entry::Insert(pmem::obj::pool_base& pop, uint64_t pkey, uint64_t pvalue) {
+bool BLevel::Entry::Insert(std::shared_mutex* mutex, pmem::obj::pool_base& pop, uint64_t pkey, uint64_t pvalue) {
+  // TODO: lock scope too large. https://stackoverflow.com/a/34995051/7640227
+  std::lock_guard<std::shared_mutex> lock(*mutex);
   if (type == Type::ENTRY_VALUE) {
     if (pkey == key) {
       return false;
     }
     uint64_t old_val = value;
-    pmem::obj::make_persistent_atomic<CLevel>(pop, clevel);
+    pmem::obj::persistent_ptr<CLevel> new_clevel = nullptr;
+    pmem::obj::make_persistent_atomic<CLevel>(pop, new_clevel);
+
     bool res = false;
-    res = clevel->Insert(key, old_val);
+    res = new_clevel->Insert(key, old_val);
     assert(res == true);
-    res = clevel->Insert(pkey, pvalue);
+    res = new_clevel->Insert(pkey, pvalue);
     assert(res == true);
+    clevel = new_clevel;
     type = Type::ENTRY_CLVEL;
     return true;
   } else if (type == Type::ENTRY_CLVEL) {
@@ -87,7 +127,8 @@ bool BLevel::Entry::Insert(pmem::obj::pool_base& pop, uint64_t pkey, uint64_t pv
   return false;
 }
 
-bool BLevel::Entry::Update(uint64_t pkey, uint64_t pvalue) {
+bool BLevel::Entry::Update(std::shared_mutex* mutex, uint64_t pkey, uint64_t pvalue) {
+  std::lock_guard<std::shared_mutex> lock(*mutex);
   if (type == Type::ENTRY_VALUE) {
     if (pkey == key) {
       value = pvalue;
@@ -103,7 +144,8 @@ bool BLevel::Entry::Update(uint64_t pkey, uint64_t pvalue) {
   return false;
 }
 
-bool BLevel::Entry::Delete(uint64_t pkey) {
+bool BLevel::Entry::Delete(std::shared_mutex* mutex, uint64_t pkey) {
+  std::lock_guard<std::shared_mutex> lock(*mutex);
   if (type == Type::ENTRY_VALUE) {
     if (pkey == key) {
       type = Type::ENTRY_NONE;
@@ -127,10 +169,10 @@ uint64_t BLevel::Find_(uint64_t key, uint64_t begin, uint64_t end) const {
   // binary search
   while (left <= right) {
     int middle = (left + right) / 2;
-    Entry* entry = GetEntry_(middle);
-    if (entry->key == key) {
+    uint64_t mid_key = GetEntry_(middle)->key;
+    if (mid_key == key) {
       return middle;
-    } else if (entry->key < key) {
+    } else if (mid_key < key) {
       left = middle + 1;
     } else {
       right = middle - 1;

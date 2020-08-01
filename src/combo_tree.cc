@@ -1,7 +1,4 @@
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <unistd.h>
-#include <cassert>
+#include <filesystem>
 #include <thread>
 #include <libpmemobj++/persistent_ptr.hpp>
 #include <libpmemobj++/make_persistent_atomic.hpp>
@@ -35,8 +32,7 @@ size_t ComboTree::Size() const {
 void ComboTree::ChangeToComboTree_() {
   LOG(Debug::INFO, "start to migrate data from pmemkv to combotree...");
   std::thread change_thread([&](){
-    std::string rm_cmd = "rm -f " + manifest_->ComboTreePath();
-    system(rm_cmd.c_str());
+    std::filesystem::remove(manifest_->ComboTreePath());
     pop_ = pmem::obj::pool_base::create(manifest_->ComboTreePath(),
         POOL_LAYOUT, pool_size_, 0666);
     Iterator* iter = pmemkv_->begin();
@@ -46,7 +42,7 @@ void ComboTree::ChangeToComboTree_() {
     manifest_->SetIsComboTree(true);
     Status tmp = Status::PMEMKV_TO_COMBO_TREE;
     // must change status before wating no ref
-    bool exchanged = status_.compare_exchange_weak(tmp, Status::USING_COMBO_TREE);
+    bool exchanged = status_.compare_exchange_strong(tmp, Status::USING_COMBO_TREE);
     assert(exchanged);
     delete iter;
     while (!pmemkv_->NoReadRef()) ;
@@ -65,7 +61,7 @@ bool ComboTree::Insert(uint64_t key, uint64_t value) {
       if (Size() >= PMEMKV_THRESHOLD) {
         Status tmp = Status::USING_PMEMKV;
         // must change status first
-        if (status_.compare_exchange_weak(tmp, Status::PMEMKV_TO_COMBO_TREE)) {
+        if (status_.compare_exchange_strong(tmp, Status::PMEMKV_TO_COMBO_TREE)) {
           // wait until no ref to pmemkv
           // get will not ref, so get still work during migration
           while (!pmemkv_->NoWriteRef()) ;
@@ -132,11 +128,8 @@ namespace {
 
 // https://stackoverflow.com/a/18101042/7640227
 bool dir_exists(const std::string& name) {
-  struct stat info;
-  if (stat(name.c_str(), &info) == 0 &&
-     (info.st_mode & S_IFDIR))
-    return true;
-  return false;
+  return std::filesystem::exists(name) &&
+         std::filesystem::is_directory(name);
 }
 
 } // anonymous namespace

@@ -1,6 +1,6 @@
 #include <iostream>
 #include <map>
-#include <unistd.h>
+#include <filesystem>
 #include "blevel.h"
 #include "iterator.h"
 #include "std_map_iterator.h"
@@ -9,10 +9,10 @@ using namespace combotree;
 
 #define POOL_PATH   "/mnt/pmem0/persistent"
 #define POOL_LAYOUT "Combo Tree"
-#define POOL_SIZE   (1UL << 30) /* 1G */
+#define POOL_SIZE   (PMEMOBJ_MIN_POOL * 400)
 
 int main(void) {
-  system("rm " POOL_PATH);
+  std::filesystem::remove(POOL_PATH);
   auto pop = pmem::obj::pool_base::create(POOL_PATH, POOL_LAYOUT, POOL_SIZE, 0666);
 
   std::map<uint64_t, uint64_t> kv;
@@ -29,7 +29,7 @@ int main(void) {
     assert(res);
   }
 
-  for (int i = 0; i < 200; ++i) {
+  for (int i = 0; i < 2000; ++i) {
     bool find;
     uint64_t value;
     find = blevel->Get(i, value);

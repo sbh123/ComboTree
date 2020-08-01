@@ -1,14 +1,14 @@
-#include <unistd.h>
+#include <filesystem>
 #include "iterator.h"
 #include "clevel.h"
 
 using combotree::CLevel;
 using combotree::Iterator;
 
-#define PATH  "/mnt/pmem0/clevel_test"
+#define PATH  "/mnt/pmem0/persistent"
 
 int main(void) {
-  system("rm -f " PATH);
+  std::filesystem::remove(PATH);
   auto pop = pmem::obj::pool_base::create(PATH, "CLevel Test",
                                           PMEMOBJ_MIN_POOL * 128, 0666);
   CLevel::SetPoolBase(pop);

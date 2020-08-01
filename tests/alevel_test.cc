@@ -1,6 +1,6 @@
 #include <iostream>
+#include <filesystem>
 #include <map>
-#include <unistd.h>
 #include "alevel.h"
 #include "iterator.h"
 #include "std_map_iterator.h"
@@ -12,7 +12,7 @@ using namespace combotree;
 #define POOL_SIZE   (1UL << 30) /* 1G */
 
 int main(void) {
-  system("rm " POOL_PATH);
+  std::filesystem::remove(POOL_PATH);
   auto pop = pmem::obj::pool_base::create(POOL_PATH, POOL_LAYOUT, POOL_SIZE, 0666);
 
   std::map<uint64_t, uint64_t> kv;

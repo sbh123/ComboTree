@@ -1,6 +1,6 @@
 #include <cassert>
+#include <filesystem>
 #include <libpmemkv.hpp>
-#include <unistd.h>
 #include "pmemkv.h"
 
 namespace combotree {
@@ -13,8 +13,7 @@ PmemKV::PmemKV(std::string path, size_t size,
                std::string engine, bool force_create)
     : db_(new db()), write_ref_(0), read_ref_(0)
 {
-  std::string rm_cmd = "rm " + path;
-  system(rm_cmd.c_str());
+  std::filesystem::remove(path);
   config cfg;
   auto s = cfg.put_string("path", path);
   assert(s == status::OK);

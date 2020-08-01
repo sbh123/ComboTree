@@ -31,6 +31,7 @@ class ComboTree {
     USING_PMEMKV,
     PMEMKV_TO_COMBO_TREE,
     USING_COMBO_TREE,
+    COMBO_TREE_EXPAND,
   };
 
   // pool_dir_ end with '/'

@@ -1,6 +1,6 @@
+#include <filesystem>
 #include <libpmemobj++/persistent_ptr.hpp>
 #include <libpmemobj++/make_persistent_atomic.hpp>
-#include <unistd.h>
 
 namespace combotree {
 
@@ -18,9 +18,8 @@ class Manifest {
   {
     if (create) {
       std::string manifest_path = dir_ + "Manifest";
-      std::string rm_cmd = "rm " + manifest_path;
-      system(rm_cmd.c_str());
-      pop_ = pmem::obj::pool<Root>::create(dir_ + "Manifest",
+      std::filesystem::remove(manifest_path);
+      pop_ = pmem::obj::pool<Root>::create(manifest_path,
           "Combo Tree Manifest", size, 0666);
       root_ = pop_.root();
       pmem::obj::make_persistent_atomic<std::string>(
