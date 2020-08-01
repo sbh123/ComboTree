@@ -20,7 +20,7 @@ class Manifest {
       std::string manifest_path = dir_ + "Manifest";
       std::filesystem::remove(manifest_path);
       pop_ = pmem::obj::pool<Root>::create(manifest_path,
-          "Combo Tree Manifest", size, 0666);
+          "Combo Tree Manifest", size_, 0666);
       root_ = pop_.root();
       pmem::obj::make_persistent_atomic<std::string>(
           pop_, root_->pmemkv_path, dir_ + DEFAULT_PMEMKV_PATH);
@@ -51,8 +51,8 @@ class Manifest {
   }
 
  private:
-  std::string dir_;
-  size_t size_;
+  std::string dir_; // combotree directory
+  size_t size_;     // manifest file size
 
   struct Root {
     pmem::obj::persistent_ptr<std::string> pmemkv_path;

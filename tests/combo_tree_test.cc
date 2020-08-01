@@ -12,14 +12,17 @@ int main(void) {
   db = new ComboTree(COMBO_TREE_DIR, PMEMOBJ_MIN_POOL * 128);
 
   bool res;
-  for (uint64_t i = 0; i < 1100; ++i) {
+  for (uint64_t i = 1; i < 110000; ++i) {
     res = db->Insert(i, i);
     assert(res);
   }
 
-  for (uint64_t i = 0; i < 1100; ++i) {
+  for (uint64_t i = 0; i < 110000; ++i) {
     uint64_t value;
     res = db->Get(i, value);
-    assert(res && value == i);
+    if (i == 0)
+      assert(!res);
+    else
+      assert(res && value == i);
   }
 }

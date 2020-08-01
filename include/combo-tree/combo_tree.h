@@ -43,6 +43,8 @@ class ComboTree {
   PmemKV* pmemkv_;
   Manifest* manifest_;
   std::atomic<Status> status_;
+  // max key finish expanding or in expanding
+  std::atomic<uint64_t> expand_max_key_;
 
   bool ValidPoolDir_();
 

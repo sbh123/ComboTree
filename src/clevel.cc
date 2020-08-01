@@ -55,7 +55,7 @@ bool CLevel::Delete(uint64_t key) {
     return index_root_()->Delete(key, root_);
 }
 
-// find entry index which is less or equal to key
+// find sorted index which is less or equal to key
 int CLevel::LeafNode::Find_(uint64_t key, bool& find) const {
   int left = 0;
   int right = nr_entry - 1;
@@ -138,6 +138,9 @@ bool CLevel::LeafNode::Insert(uint64_t key, uint64_t value, persistent_ptr_base&
   int entry_idx = (next_entry != LEAF_ENTRYS) ? next_entry
                                                           : GetFreeIndex_();
 
+  // free mask is free index in sorted_array
+  // after mask is the index which is bigger than sorted_index
+  // before mask is the index which is less than sorted_index
   uint64_t free_mask =
       next_entry == (nr_entry + 1) ? 0 : (~0x00UL) >> ((nr_entry + 1) * 4);
   uint64_t free_index = sorted_array & free_mask;

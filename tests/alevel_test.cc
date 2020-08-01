@@ -16,7 +16,7 @@ int main(void) {
   auto pop = pmem::obj::pool_base::create(POOL_PATH, POOL_LAYOUT, POOL_SIZE, 0666);
 
   std::map<uint64_t, uint64_t> kv;
-  for (int i = 0; i < 20000; i += 2) {
+  for (int i = 10; i < 20000; i += 2) {
     kv.emplace(i, i);
   }
 
@@ -25,7 +25,7 @@ int main(void) {
   BLevel* blevel = new BLevel(pop, iter, kv.size());
   ALevel* alevel = new ALevel(blevel);
 
-  for (int i = 1; i < 20000; i += 2) {
+  for (int i = 11; i < 20000; i += 2) {
     bool res = alevel->Insert(i, i);
     assert(res);
   }
@@ -34,7 +34,10 @@ int main(void) {
     bool find;
     uint64_t value;
     find = alevel->Get(i, value);
-    assert(find && value == (uint64_t)i);
+    if (i < 10)
+      assert(!find);
+    else
+      assert(find && value == (uint64_t)i);
   }
 
   pop.close();

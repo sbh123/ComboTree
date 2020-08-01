@@ -16,8 +16,7 @@ ALevel::ALevel(BLevel* blevel, int span)
 
   entry_[0].key = min_key_;
   entry_[0].offset = 1;
-  uint64_t blevel_size = blevel_->Size();
-  for (uint64_t offset = 2; offset < blevel_size; ++offset) {
+  for (uint64_t offset = 2; offset < blevel_->EntrySize(); ++offset) {
     // calculate cdf and index for every key
     uint64_t cur_key = blevel_->GetEntry_(offset)->key;
     int index = CDFIndex_(cur_key);
@@ -52,6 +51,7 @@ void ALevel::GetBLevelRange_(uint64_t key, uint64_t& begin, uint64_t& end) const
   } else {
     begin = entry_[cdf_index - 1].offset;
     end = entry_[cdf_index].offset;
+    assert(begin != end);
     if (begin == end) begin--;
   }
 }

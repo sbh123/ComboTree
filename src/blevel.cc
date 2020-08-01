@@ -115,7 +115,9 @@ bool BLevel::Entry::Insert(std::shared_mutex* mutex, pmem::obj::pool_base& pop, 
       return true;
     } else {
       pmem::obj::persistent_ptr<CLevel> new_clevel;
-      pmem::obj::make_persistent_atomic<CLevel>(pop, clevel);
+      pmem::obj::make_persistent_atomic<CLevel>(pop, new_clevel);
+      new_clevel->InitLeaf();
+
       bool res;
       res = new_clevel->Insert(pkey, pvalue);
       assert(res == true);

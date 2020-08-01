@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <shared_mutex>
+#include <atomic>
 #include <libpmemobj++/persistent_ptr.hpp>
 #include "iterator.h"
 #include "clevel.h"
@@ -91,7 +92,7 @@ class BLevel {
   struct Root {
     pmem::obj::persistent_ptr<Entry[]> entry_;
     uint64_t nr_entry_;
-    uint64_t size_;
+    std::atomic<uint64_t> size_;
   };
 
   pmem::obj::persistent_ptr<Root> root_;
