@@ -1,9 +1,6 @@
 #include <libpmemobj++/persistent_ptr.hpp>
-#include <libpmemobj++/make_persistent.hpp>
-#include <libpmemobj++/make_persistent_array.hpp>
-#include <libpmemobj++/make_persistent_array_atomic.hpp>
 #include <libpmemobj++/make_persistent_atomic.hpp>
-#include <iostream>
+#include <libpmemobj++/make_persistent_array_atomic.hpp>
 #include "iterator.h"
 #include "blevel.h"
 #include "debug.h"
@@ -98,7 +95,8 @@ bool BLevel::Entry::Insert(std::shared_mutex* mutex, pmem::obj::pool_base& pop, 
     }
     uint64_t old_val = value;
     pmem::obj::persistent_ptr<CLevel> new_clevel = nullptr;
-    pmem::obj::make_persistent_atomic<CLevel>(pop, new_clevel);
+    pmem::obj::make_persistent_atomic<CLevel>(pop, std::ref(new_clevel));
+    new_clevel->InitLeaf();
 
     bool res = false;
     res = new_clevel->Insert(key, old_val);
@@ -116,11 +114,13 @@ bool BLevel::Entry::Insert(std::shared_mutex* mutex, pmem::obj::pool_base& pop, 
       type = Type::ENTRY_VALUE;
       return true;
     } else {
+      pmem::obj::persistent_ptr<CLevel> new_clevel;
       pmem::obj::make_persistent_atomic<CLevel>(pop, clevel);
       bool res;
-      res = clevel->Insert(pkey, pvalue);
+      res = new_clevel->Insert(pkey, pvalue);
       assert(res == true);
       type = Type::ENTRY_CLVEL;
+      clevel = new_clevel;
       return true;
     }
   }

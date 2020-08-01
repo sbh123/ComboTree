@@ -13,9 +13,8 @@ using pmem::obj::make_persistent_atomic;
 
 pmem::obj::pool_base CLevel::pop_;
 
-CLevel::CLevel()
-    : type_(NodeType::LEAF)
-{
+void CLevel::InitLeaf() {
+  type_ = NodeType::LEAF;
   make_persistent_atomic<LeafNode>(GetPoolBase(), head_);
   head_->prev = head_;
   head_->next = head_;

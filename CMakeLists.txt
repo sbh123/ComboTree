@@ -13,6 +13,10 @@ enable_testing()
 
 add_executable(experiment tests/experiment.cc)
 
+# alloc test
+add_executable(alloc_test tests/alloc_test.cc src/clevel.cc)
+target_link_libraries(alloc_test pmemobj)
+
 # clevel test
 add_executable(clevel_test tests/clevel_test.cc src/clevel.cc)
 target_link_libraries(clevel_test pmemobj)

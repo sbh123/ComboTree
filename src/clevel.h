@@ -13,7 +13,8 @@ namespace combotree {
 
 class CLevel {
  public:
-  CLevel();
+
+  void InitLeaf();
 
   bool Insert(uint64_t key, uint64_t value);
   bool Update(uint64_t key, uint64_t value);
