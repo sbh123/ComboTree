@@ -8,6 +8,19 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -g")
 include_directories(include)
 include_directories(src)
 
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_SOURCE_DIR}/cmake)
+find_package(PkgConfig QUIET)
+
+# find libpmemobj++
+# include(libpmemobj++)
+
+# find libpmemobj
+# if(PKG_CONFIG_FOUND)
+#   pkg_check_modules(LIBPMEMOBJ REQUIRED libpmemobj)
+# else()
+#   find_package(LIBPMEMOBJ REQUIRED)
+# endif()
+
 ## Test
 enable_testing()
 
@@ -16,6 +29,10 @@ add_executable(experiment tests/experiment.cc)
 # alloc test
 add_executable(alloc_test tests/alloc_test.cc src/clevel.cc)
 target_link_libraries(alloc_test pmemobj)
+
+# pmemkv_vs_clevel test
+add_executable(pmemkv_vs_clevel tests/pmemkv_vs_clevel.cc src/clevel.cc src/pmemkv.cc)
+target_link_libraries(pmemkv_vs_clevel pmemobj pmemkv)
 
 # clevel test
 add_executable(clevel_test tests/clevel_test.cc src/clevel.cc)
