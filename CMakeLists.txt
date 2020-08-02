@@ -34,6 +34,10 @@ target_link_libraries(alloc_test pmemobj)
 add_executable(pmemkv_vs_clevel tests/pmemkv_vs_clevel.cc src/clevel.cc src/pmemkv.cc)
 target_link_libraries(pmemkv_vs_clevel pmemobj pmemkv)
 
+# pmemkv_vs_clevel test
+add_executable(pmem_vs_pmemobj tests/pmem_vs_pmemobj.cc)
+target_link_libraries(pmem_vs_pmemobj pmemobj pmem)
+
 # clevel test
 add_executable(clevel_test tests/clevel_test.cc src/clevel.cc)
 target_link_libraries(clevel_test pmemobj)
@@ -63,6 +67,11 @@ set(COMBO_TREE_SRC
 # combotree test
 add_executable(combotree_test tests/combo_tree_test.cc ${COMBO_TREE_SRC})
 target_link_libraries(combotree_test pmemkv pmemobj pthread)
+
+# kvbench test
+include_directories(/home/qyzhang/Projects/kvbench/include)
+add_executable(kvbench_combo_tree_v2 tests/kvbench_combo_tree.cc ${COMBO_TREE_SRC})
+target_link_libraries(kvbench_combo_tree_v2 pmemkv pmemobj protobuf pthread)
 
 add_test(alevel_test alevel_test)
 add_test(blevel_test blevel_test)

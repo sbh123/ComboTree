@@ -14,6 +14,8 @@ using namespace std;
 #define TEST_SIZE   500
 
 int main(void) {
+  fstream out("/home/qyzhang/Projects/ComboTree/build/output.txt", ios::out | ios::trunc);
+  out << "begin" << endl;
   std::filesystem::remove(PATH);
   auto pop = pmem::obj::pool_base::create(PATH, "CLevel Test",
                                           PMEMOBJ_MIN_POOL * 128, 0666);
@@ -33,7 +35,7 @@ int main(void) {
     f >> key;
     uint64_t value = key;
     bool res = db->Insert(key, value);
-    assert(res);
+    // assert(res);
   }
 
   f.seekg(0);
@@ -42,16 +44,19 @@ int main(void) {
     f >> key;
     uint64_t value;
     bool res = db->Get(key, value);
-    assert(res && value == key);
+    // assert(res && value == key);
   }
 
-  for (int i = 0; i < 70000 - TEST_SIZE; ++i) {
-    uint64_t key;
-    f >> key;
-    uint64_t value;
-    bool res = db->Get(key, value);
-    assert(!res);
-  }
+  // for (int i = 0; i < 70000 - TEST_SIZE; ++i) {
+  //   uint64_t key;
+  //   f >> key;
+  //   uint64_t value;
+  //   bool res = db->Get(key, value);
+  //   // assert(!res);
+  // }
+
+  pop.close();
+  out << "finish" << endl;
 
   // for (int i = 0; i < TEST_SIZE; ++i) {
   //   int op = rnd.Next();
