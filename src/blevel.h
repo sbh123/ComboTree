@@ -16,9 +16,8 @@ class BLevel {
  public:
   class Iter;
 
-  BLevel(pmem::obj::pool_base& pop, Iterator* iter, uint64_t size);
-  BLevel(pmem::obj::pool_base& pop, BLevel::Iter* iter, uint64_t size);
-  BLevel(pmem::obj::pool_base& pop);
+  BLevel(pmem::obj::pool_base pop, Iterator* iter, uint64_t size);
+  BLevel(pmem::obj::pool_base pop);
   ~BLevel();
 
   bool Get(uint64_t key, uint64_t& value, uint64_t begin = 0, uint64_t end = UINT64_MAX) const {
@@ -87,7 +86,7 @@ class BLevel {
     bool Delete(std::shared_mutex* mutex, uint64_t pkey);
   };
 
-  pmem::obj::pool_base& pop_;
+  pmem::obj::pool_base pop_;
 
   struct Root {
     pmem::obj::persistent_ptr<Entry[]> entry_;
@@ -125,13 +124,15 @@ class BLevel::Iter : public Iterator {
   }
 
   bool End() const {
-    if (entry_index_ < blevel_->EntrySize() - 1) {
+    if (entry_index_ >= blevel_->EntrySize()) {
+      return true;
+    } else if (entry_index_ < blevel_->EntrySize() - 1) {
       return false;
     } else {
       if (entry_type_ == BLevel::Entry::Type::ENTRY_CLVEL)
         return clevel_iter_->End();
       else
-        return true;
+        return false;
     }
   }
 
@@ -176,11 +177,15 @@ class BLevel::Iter : public Iterator {
     }
     Unlock_();
     entry_index_++;
+    if (End())
+      return;
     Lock_();
     while (blevel_->GetEntry_(entry_index_)->type ==
            BLevel::Entry::Type::ENTRY_NONE) {
       Unlock_();
       entry_index_++;
+      if (End())
+        return;
       Lock_();
     }
     entry_type_ = blevel_->GetEntry_(entry_index_)->type;

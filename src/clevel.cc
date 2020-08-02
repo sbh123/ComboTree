@@ -181,24 +181,32 @@ bool CLevel::LeafNode::Delete(uint64_t key, persistent_ptr_base& base) {
     return false;
   }
 
-  int entry_index = GetSortedEntry_(sorted_index);
+  uint64_t entry_index = GetSortedEntry_(sorted_index);
 
-  uint64_t free_mask = next_entry == nr_entry ? 0 : ~((~0x00UL) << ((next_entry - nr_entry) * 4));
+  // free mask is free index in sorted_array
+  // after mask is the index which is bigger than sorted_index
+  // before mask is the index which is less than sorted_index
+  uint64_t free_mask = 0;
+  int nr_free = next_entry - nr_entry;
+  for (int i = 0; i < nr_free; ++i)
+    free_mask = (free_mask << 4) | 0x0FUL;
   uint64_t free_index = sorted_array & free_mask;
 
-  uint64_t after_mask = 0x0FUL;
-  for (int i = 0; i < nr_entry - sorted_index - 2; ++i)
+  uint64_t after_mask = 0;
+  for (int i = 0; i < nr_entry - sorted_index - 1; ++i)
     after_mask = (after_mask << 4) | 0x0FUL;
-  after_mask = sorted_index == (nr_entry - 1) ? 0 :
-      after_mask << ((LEAF_ENTRYS - nr_entry) * 4);
+  after_mask = after_mask << ((LEAF_ENTRYS - nr_entry) * 4);
   uint64_t after_index = (sorted_array & after_mask) << 4;
 
-  uint64_t before_mask = sorted_index == 0 ? 0 : ~((~0x00UL) >> (sorted_index * 4));
+  uint64_t before_mask = 0;
+  for (int i = 0; i < sorted_index; ++i)
+    before_mask = (before_mask >> 4) | 0xF000000000000000UL;
   uint64_t before_index = sorted_array & before_mask;
+
   uint64_t new_sorted_array =
       before_index |
       after_index |
-      ((uint64_t)entry_index << ((next_entry - nr_entry) * 4)) |
+      (entry_index << ((next_entry - nr_entry) * 4)) |
       free_index;
 
   sorted_array = new_sorted_array;

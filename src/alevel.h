@@ -37,6 +37,10 @@ class ALevel {
     return blevel_->Delete(key, begin, end);
   }
 
+  size_t Size() const {
+    return blevel_->Size();
+  }
+
  private:
   struct Entry {
     Entry() : key(0), offset(0) {}

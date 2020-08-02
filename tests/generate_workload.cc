@@ -13,13 +13,13 @@ int main(void) {
   set<uint64_t> key_set;
   for (int i = 0; i < WORKLOAD_SIZE; ++i) {
     uint64_t key = rnd.Next();
-    // if (key_set.count(key)) {
-    //   i--;
-    //   continue;
-    // } else {
+    if (key_set.count(key)) {
+      i--;
+      continue;
+    } else {
       key_set.emplace(key);
       f << key << endl;
-    // }
+    }
   }
   f.close();
   return 0;

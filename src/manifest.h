@@ -27,9 +27,10 @@ class Manifest {
       pmem::obj::make_persistent_atomic<std::string>(
           pop_, root_->combo_tree_path, dir_ + DEFAULT_COMBO_TREE_PATH);
       root_->is_combo_tree = 0;
+      root_->combo_tree_seq = 0;
       root_.persist();
     } else {
-
+      assert(0);
     }
   }
 
@@ -38,7 +39,13 @@ class Manifest {
   }
 
   const std::string ComboTreePath() const {
-    return *root_->combo_tree_path;
+    return *root_->combo_tree_path + std::string("-") +
+           std::to_string(root_->combo_tree_seq);
+  }
+
+  const std::string NewComboTreePath() const {
+    root_->combo_tree_seq++;
+    return ComboTreePath();
   }
 
   bool IsComboTree() const {
@@ -57,6 +64,7 @@ class Manifest {
   struct Root {
     pmem::obj::persistent_ptr<std::string> pmemkv_path;
     pmem::obj::persistent_ptr<std::string> combo_tree_path;
+    int combo_tree_seq;
     int is_combo_tree;
   };
 

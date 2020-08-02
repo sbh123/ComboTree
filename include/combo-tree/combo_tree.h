@@ -31,7 +31,7 @@ class ComboTree {
     USING_PMEMKV,
     PMEMKV_TO_COMBO_TREE,
     USING_COMBO_TREE,
-    COMBO_TREE_EXPAND,
+    COMBO_TREE_EXPANDING,
   };
 
   // pool_dir_ end with '/'
@@ -49,6 +49,7 @@ class ComboTree {
   bool ValidPoolDir_();
 
   void ChangeToComboTree_();
+  void ExpandComboTree_();
 
   bool InsertToComboTree_(uint64_t key, uint64_t value);
   bool UpdateToComboTree_(uint64_t key, uint64_t value);

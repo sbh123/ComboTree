@@ -7,15 +7,17 @@
 
 namespace combotree {
 
-BLevel::BLevel(pmem::obj::pool_base& pop, Iterator* iter, uint64_t size)
+BLevel::BLevel(pmem::obj::pool_base pop, Iterator* iter, uint64_t size)
     : pop_(pop)
 {
-  pmem::obj::pool<Root> pool(pop);
-  CLevel::SetPoolBase(pop);
+  pmem::obj::pool<Root> pool(pop_);
+  // FIXME: bug! when combotree expanding, both old and new pool can be inserted.
+  CLevel::SetPoolBase(pop_);
   root_ = pool.root();
   root_->nr_entry_ = iter->key() == 0 ? size : size + 1;
   root_->size_ = size;
   pmem::obj::make_persistent_atomic<Entry[]>(pop_, root_->entry_, root_->nr_entry_);
+  locks_ = new std::shared_mutex[root_->nr_entry_];
   int pos = 0;
   if (iter->key() != 0) {
     Entry* ent = GetEntry_(pos++);
@@ -23,6 +25,7 @@ BLevel::BLevel(pmem::obj::pool_base& pop, Iterator* iter, uint64_t size)
     ent->type = Entry::Type::ENTRY_NONE;
   }
   for (size_t i = 0; i < size; ++i) {
+    std::lock_guard<std::shared_mutex> lock(locks_[pos]);
     Entry* ent = GetEntry_(pos);
     ent->key = iter->key();
     ent->value = iter->value();
@@ -30,36 +33,12 @@ BLevel::BLevel(pmem::obj::pool_base& pop, Iterator* iter, uint64_t size)
     iter->Next();
     pos++;
   }
-  locks_ = new std::shared_mutex[root_->nr_entry_];
 }
 
-BLevel::BLevel(pmem::obj::pool_base& pop, BLevel::Iter* iter, uint64_t size)
+BLevel::BLevel(pmem::obj::pool_base pop)
     : pop_(pop)
 {
-  pmem::obj::pool<Root> pool(pop);
-  CLevel::SetPoolBase(pop);
-  root_ = pool.root();
-  root_->nr_entry_ = iter->key() == 0 ? size : size + 1;
-  root_->size_ = size;
-  pmem::obj::make_persistent_atomic<Entry[]>(pop_, root_->entry_, size);
-  int pos = 0;
-  if (iter->key() != 0)
-    GetEntry_(pos++)->key = 0;
-  for (size_t i = 0; i < size; ++i) {
-    Entry* ent = GetEntry_(pos);
-    ent->key = iter->key();
-    ent->value = iter->value();
-    ent->type = Entry::Type::ENTRY_VALUE;
-    iter->Next();
-    pos++;
-  }
-  locks_ = new std::shared_mutex[root_->nr_entry_];
-}
-
-BLevel::BLevel(pmem::obj::pool_base& pop)
-    : pop_(pop)
-{
-  pmem::obj::pool<Root> pool(pop);
+  pmem::obj::pool<Root> pool(pop_);
   root_ = pool.root();
   locks_ = new std::shared_mutex[root_->nr_entry_];
 }
@@ -95,7 +74,7 @@ bool BLevel::Entry::Insert(std::shared_mutex* mutex, pmem::obj::pool_base& pop, 
     }
     uint64_t old_val = value;
     pmem::obj::persistent_ptr<CLevel> new_clevel = nullptr;
-    pmem::obj::make_persistent_atomic<CLevel>(pop, std::ref(new_clevel));
+    pmem::obj::make_persistent_atomic<CLevel>(pop, new_clevel);
     new_clevel->InitLeaf();
 
     bool res = false;
@@ -224,13 +203,13 @@ uint64_t BLevel::MaxEntryKey() const {
   return GetEntry_(EntrySize() - 1)->key;
 }
 
-inline Iterator* BLevel::begin() {
+Iterator* BLevel::begin() {
   Iterator* iter = new Iter(this);
   iter->SeekToFirst();
   return iter;
 }
 
-inline Iterator* BLevel::end() {
+Iterator* BLevel::end() {
   Iterator* iter = new Iter(this);
   iter->SeekToLast();
   return iter;

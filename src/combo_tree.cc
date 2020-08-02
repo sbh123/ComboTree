@@ -22,8 +22,10 @@ ComboTree::ComboTree(std::string pool_dir, size_t pool_size, bool create)
 }
 
 size_t ComboTree::Size() const {
-  if (status_.load() == Status::USING_COMBO_TREE) {
-    return blevel_->Size();
+  if (status_.load() == Status::USING_COMBO_TREE ||
+      status_.load() == Status::COMBO_TREE_EXPANDING) {
+    // FIXME: size when expanding?
+    return alevel_->Size();
   } else {
     return pmemkv_->Size();
   }
@@ -47,9 +49,51 @@ void ComboTree::ChangeToComboTree_() {
     delete iter;
     while (!pmemkv_->NoReadRef()) ;
     delete pmemkv_;
+    std::filesystem::remove(manifest_->PmemKVPath());
   });
   change_thread.detach();
   LOG(Debug::INFO, "finish migrating data from pmemkv to combotree");
+}
+
+void ComboTree::ExpandComboTree_() {
+  LOG(Debug::INFO, "start to expand combotree. current size is %ld", Size());
+  Status tmp = Status::USING_COMBO_TREE;
+  if (!status_.compare_exchange_strong(tmp, Status::COMBO_TREE_EXPANDING)) {
+    LOG(Debug::WARNING, "another thread is expanding combotree! exit.");
+    return;
+  }
+
+  BLevel* old_blevel = blevel_;
+  ALevel* old_alevel = alevel_;
+  std::string old_pool_path = manifest_->ComboTreePath();
+  std::string new_pool_path = manifest_->NewComboTreePath();
+
+  pmem::obj::pool_base new_pool = pmem::obj::pool_base::create(new_pool_path,
+      POOL_LAYOUT, pool_size_, 0666);
+  Iterator* iter = old_blevel->begin();
+  blevel_ = new BLevel(new_pool, iter, Size());
+  delete iter;
+
+  ALevel* new_alevel = new ALevel(blevel_);
+  alevel_ = new_alevel;
+
+  // change status
+  tmp = Status::COMBO_TREE_EXPANDING;
+  if (!status_.compare_exchange_strong(tmp, Status::USING_COMBO_TREE)) {
+    LOG(Debug::ERROR,
+        "can not change state from COMBO_TREE_EXPANDING to USING_COMBO_TREE!");
+  }
+
+  // TODO: delete immediately?
+  delete old_alevel;
+  delete old_blevel;
+
+  // remove old pool
+  pop_.close();
+  std::filesystem::remove(old_pool_path);
+  pop_ = new_pool;
+
+  LOG(Debug::INFO, "finish expanding combotree. current size is %ld", Size());
 }
 
 bool ComboTree::Insert(uint64_t key, uint64_t value) {
@@ -75,7 +119,12 @@ bool ComboTree::Insert(uint64_t key, uint64_t value) {
       continue;
     } else if (status_.load() == Status::USING_COMBO_TREE) {
       res = InsertToComboTree_(key, value);
+      if (Size() >= 4 * blevel_->EntrySize()) {
+        ExpandComboTree_();
+      }
       break;
+    } else if (status_.load() == Status::COMBO_TREE_EXPANDING) {
+      assert(0);
     }
   }
   return res;
