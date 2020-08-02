@@ -109,45 +109,48 @@ class BLevel::Iter : public Iterator {
   explicit Iter(BLevel* blevel) : blevel_(blevel), entry_index_(0) {}
   ~Iter() {};
 
-  bool Begin() const {
-    if (entry_index_ > begin_entry_index_) {
+  bool Valid() const {
+    if (entry_index_ < 0 || entry_index_ >= blevel_->EntrySize())
       return false;
-    } else if (entry_index_ == begin_entry_index_) {
+    if (EntryType_() == BLevel::Entry::Type::ENTRY_NONE)
+      return false;
+    else if (EntryType_() == BLevel::Entry::Type::ENTRY_CLVEL)
+      return clevel_iter_ == nullptr || clevel_iter_->Valid();
+    else if (EntryType_() == BLevel::Entry::Type::ENTRY_VALUE)
+      return true;
+  }
+
+  bool Begin() const {
+    if (entry_index_ == 0) {
       if (entry_type_ == BLevel::Entry::Type::ENTRY_CLVEL)
         return clevel_iter_->Begin();
       else
         return true;
-    } else {
-      assert(0);
-      return true;
     }
+    return false;
   }
 
   bool End() const {
     if (entry_index_ >= blevel_->EntrySize()) {
       return true;
-    } else if (entry_index_ < blevel_->EntrySize() - 1) {
-      return false;
-    } else {
-      if (entry_type_ == BLevel::Entry::Type::ENTRY_CLVEL)
-        return clevel_iter_->End();
-      else
-        return false;
+    } else if (entry_index_ == blevel_->EntrySize() - 1) {
+      if (EntryType_() == BLevel::Entry::Type::ENTRY_CLVEL)
+        return clevel_iter_ && clevel_iter_->End();
     }
+    return false;
   }
 
   void SeekToFirst() {
     entry_index_ = 0;
     Lock_();
-    while (blevel_->GetEntry_(entry_index_)->type ==
-           BLevel::Entry::Type::ENTRY_NONE) {
-      Unlock_();
-      entry_index_++;
-      Lock_();
-    }
     entry_type_ = blevel_->GetEntry_(entry_index_)->type;
     if (entry_type_ == BLevel::Entry::Type::ENTRY_CLVEL) {
       clevel_iter_ = blevel_->GetEntry_(entry_index_)->clevel->begin();
+      return;
+    } else if (entry_type_ == BLevel::Entry::Type::ENTRY_VALUE) {
+      return;
+    } else if (entry_type_ == BLevel::Entry::Type::ENTRY_NONE) {
+      Next();
     }
   }
 
@@ -175,23 +178,7 @@ class BLevel::Iter : public Iterator {
       if (!clevel_iter_->End())
         return;
     }
-    Unlock_();
-    entry_index_++;
-    if (End())
-      return;
-    Lock_();
-    while (blevel_->GetEntry_(entry_index_)->type ==
-           BLevel::Entry::Type::ENTRY_NONE) {
-      Unlock_();
-      entry_index_++;
-      if (End())
-        return;
-      Lock_();
-    }
-    entry_type_ = blevel_->GetEntry_(entry_index_)->type;
-    if (entry_type_ == BLevel::Entry::Type::ENTRY_CLVEL) {
-      clevel_iter_ = blevel_->GetEntry_(entry_index_)->clevel->begin();
-    }
+    NextEntry_();
   }
 
   void Prev() { assert(0); }
@@ -239,6 +226,27 @@ class BLevel::Iter : public Iterator {
 
   void Unlock_() {
     blevel_->locks_[entry_index_].unlock();
+  }
+
+  BLevel::Entry::Type EntryType_() const {
+    return blevel_->GetEntry_(entry_index_)->type;
+  }
+
+  void NextEntry_() {
+    Unlock_();
+    if (clevel_iter_)
+      delete clevel_iter_;
+    clevel_iter_ = nullptr;
+    entry_index_++;
+    while (!End() && !Valid())
+      entry_index_++;
+    if (End())
+      return;
+    Lock_();
+    entry_type_ = blevel_->GetEntry_(entry_index_)->type;
+    if (entry_type_ == BLevel::Entry::Type::ENTRY_CLVEL) {
+      clevel_iter_ = blevel_->GetEntry_(entry_index_)->clevel->begin();
+    }
   }
 
 };

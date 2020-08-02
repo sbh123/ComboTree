@@ -136,7 +136,7 @@ class PmemKV::Iter : public Iterator {
 
   bool Begin() const { return index_ == 0; }
 
-  bool End() const { return (size_t)index_ == size_ - 1; }
+  bool End() const { return (size_t)index_ >= size_; }
 
   void SeekToFirst() { index_ = 0; }
 

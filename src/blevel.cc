@@ -33,6 +33,7 @@ BLevel::BLevel(pmem::obj::pool_base pop, Iterator* iter, uint64_t size)
     iter->Next();
     pos++;
   }
+  assert(iter->End());
 }
 
 BLevel::BLevel(pmem::obj::pool_base pop)
