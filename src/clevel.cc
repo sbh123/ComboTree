@@ -85,7 +85,7 @@ void CLevel::LeafNode::PrintSortedArray() const {
 }
 
 bool CLevel::LeafNode::Split_(persistent_ptr_base& root) {
-  debug_assert(nr_entry == LEAF_ENTRYS);
+  assert(nr_entry == LEAF_ENTRYS);
 
   if (parent == nullptr) {
     make_persistent_atomic<IndexNode>(CLevel::GetPoolBase(), parent);
@@ -281,7 +281,7 @@ void CLevel::IndexNode::AdoptChild_() {
 }
 
 bool CLevel::IndexNode::Split_(persistent_ptr_base& root) {
-  debug_assert(nr_entry == INDEX_ENTRYS + 1);
+  assert(nr_entry == INDEX_ENTRYS + 1);
 
   if (parent == nullptr) {
     make_persistent_atomic<IndexNode>(CLevel::GetPoolBase(), parent);

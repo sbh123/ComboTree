@@ -152,8 +152,8 @@ bool BLevel::Entry::Delete(std::shared_mutex* mutex, uint64_t pkey) {
 }
 
 uint64_t BLevel::Find_(uint64_t key, uint64_t begin, uint64_t end) const {
-  debug_assert(begin >= 0 && begin < EntrySize());
-  debug_assert(end >= 0 && end < EntrySize());
+  assert(begin >= 0 && begin < EntrySize());
+  assert(end >= 0 && end < EntrySize());
   int_fast32_t left = begin;
   int_fast32_t right = end;
   // binary search

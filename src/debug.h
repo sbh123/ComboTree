@@ -42,13 +42,9 @@ inline const char* level_string__(Debug level) {
   printf("%s " ANSI_COLOR_GREEN "%s: " ANSI_COLOR_RESET format "\n", \
          level_string__(level), __FUNCTION__, ##__VA_ARGS__)
 
-#define debug_assert(...) assert(__VA_ARGS__)
-
 #elif defined(NDEBUG)
 
 #define LOG(level, format, ...)
-
-#define debug_assert(...)
 
 #endif  // NDEBUG
 
