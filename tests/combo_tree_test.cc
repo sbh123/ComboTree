@@ -8,7 +8,7 @@
 using namespace std;
 
 #define COMBO_TREE_DIR  "/mnt/pmem0/combotree/"
-#define TEST_SIZE       100000
+#define TEST_SIZE       10000000
 
 int main(void) {
   std::filesystem::remove_all(COMBO_TREE_DIR);

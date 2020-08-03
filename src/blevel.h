@@ -31,7 +31,7 @@ class BLevel {
     uint64_t idx = Find_(key, begin, end);
     bool res = GetEntry_(idx)->Insert(&locks_[idx], pop_, key, value);
     if (res) {
-      root_->size_++;
+      root_->size++;
     }
     return res;
   }
@@ -47,7 +47,7 @@ class BLevel {
     uint64_t idx = Find_(key, begin, end);
     bool res = GetEntry_(idx)->Delete(&locks_[idx], key);
     if (res) {
-      root_->size_--;
+      root_->size--;
     }
     return res;
   }
@@ -58,8 +58,8 @@ class BLevel {
   uint64_t MinEntryKey() const;
   uint64_t MaxEntryKey() const;
 
-  uint64_t Size() const { return root_->size_; }
-  uint64_t EntrySize() const { return root_->nr_entry_; }
+  uint64_t Size() const { return root_->size; }
+  uint64_t EntrySize() const { return root_->nr_entry; }
 
   Iterator* begin();
   Iterator* end();
@@ -89,16 +89,17 @@ class BLevel {
   pmem::obj::pool_base pop_;
 
   struct Root {
-    pmem::obj::persistent_ptr<Entry[]> entry_;
-    uint64_t nr_entry_;
-    std::atomic<uint64_t> size_;
+    pmem::obj::persistent_ptr<Entry[]> entry;
+    uint64_t nr_entry;
+    std::atomic<uint64_t> size;
   };
 
   pmem::obj::persistent_ptr<Root> root_;
+  Entry** in_mem_entry_;
   std::shared_mutex* locks_;
 
-  Entry* GetEntry_(int index) const {
-    return &root_->entry_[index];
+  __attribute__((always_inline)) Entry* GetEntry_(int index) const {
+    return in_mem_entry_[index];
   }
 
   uint64_t Find_(uint64_t key, uint64_t begin, uint64_t end) const;

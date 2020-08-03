@@ -14,10 +14,13 @@ BLevel::BLevel(pmem::obj::pool_base pop, Iterator* iter, uint64_t size)
   // FIXME: bug! when combotree expanding, both old and new pool can be inserted.
   CLevel::SetPoolBase(pop_);
   root_ = pool.root();
-  root_->nr_entry_ = iter->key() == 0 ? size : size + 1;
-  root_->size_ = size;
-  pmem::obj::make_persistent_atomic<Entry[]>(pop_, root_->entry_, root_->nr_entry_);
-  locks_ = new std::shared_mutex[root_->nr_entry_];
+  root_->nr_entry = iter->key() == 0 ? size : size + 1;
+  root_->size = size;
+  pmem::obj::make_persistent_atomic<Entry[]>(pop_, root_->entry, root_->nr_entry);
+  in_mem_entry_ = new Entry*[root_->nr_entry];
+  for (int i = 0; i < root_->nr_entry; ++i)
+    in_mem_entry_[i] = &root_->entry[i];
+  locks_ = new std::shared_mutex[root_->nr_entry];
   int pos = 0;
   if (iter->key() != 0) {
     Entry* ent = GetEntry_(pos++);
@@ -41,7 +44,7 @@ BLevel::BLevel(pmem::obj::pool_base pop)
 {
   pmem::obj::pool<Root> pool(pop_);
   root_ = pool.root();
-  locks_ = new std::shared_mutex[root_->nr_entry_];
+  locks_ = new std::shared_mutex[root_->nr_entry];
 }
 
 BLevel::~BLevel() {
@@ -50,7 +53,7 @@ BLevel::~BLevel() {
 }
 
 bool BLevel::Entry::Get(std::shared_mutex* mutex, uint64_t pkey, uint64_t& pvalue) const {
-  std::shared_lock<std::shared_mutex> lock(*mutex);
+  // std::shared_lock<std::shared_mutex> lock(*mutex);
   if (type == Type::ENTRY_VALUE) {
     if (pkey == key) {
       pvalue = value;
@@ -68,7 +71,7 @@ bool BLevel::Entry::Get(std::shared_mutex* mutex, uint64_t pkey, uint64_t& pvalu
 
 bool BLevel::Entry::Insert(std::shared_mutex* mutex, pmem::obj::pool_base& pop, uint64_t pkey, uint64_t pvalue) {
   // TODO: lock scope too large. https://stackoverflow.com/a/34995051/7640227
-  std::lock_guard<std::shared_mutex> lock(*mutex);
+  // std::lock_guard<std::shared_mutex> lock(*mutex);
   if (type == Type::ENTRY_VALUE) {
     if (pkey == key) {
       return false;
@@ -110,7 +113,7 @@ bool BLevel::Entry::Insert(std::shared_mutex* mutex, pmem::obj::pool_base& pop, 
 }
 
 bool BLevel::Entry::Update(std::shared_mutex* mutex, uint64_t pkey, uint64_t pvalue) {
-  std::lock_guard<std::shared_mutex> lock(*mutex);
+  // std::lock_guard<std::shared_mutex> lock(*mutex);
   if (type == Type::ENTRY_VALUE) {
     if (pkey == key) {
       value = pvalue;
@@ -127,7 +130,7 @@ bool BLevel::Entry::Update(std::shared_mutex* mutex, uint64_t pkey, uint64_t pva
 }
 
 bool BLevel::Entry::Delete(std::shared_mutex* mutex, uint64_t pkey) {
-  std::lock_guard<std::shared_mutex> lock(*mutex);
+  // std::lock_guard<std::shared_mutex> lock(*mutex);
   if (type == Type::ENTRY_VALUE) {
     if (pkey == key) {
       type = Type::ENTRY_NONE;
