@@ -48,7 +48,7 @@ inline const char* level_string__(Debug level) {
 
 #define LOG(level, format, ...)
 
-#define debug_assert()
+#define debug_assert(...)
 
 #endif  // NDEBUG
 

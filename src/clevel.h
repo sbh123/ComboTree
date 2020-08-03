@@ -77,9 +77,9 @@ struct CLevel::LeafNode {
   pmem::obj::persistent_ptr<LeafNode> next;
   pmem::obj::persistent_ptr<IndexNode> parent;
   uint64_t sorted_array;  // used as an array of uint4_t
+  int nr_entry;
+  int next_entry;
   Entry entry[LEAF_ENTRYS];
-  uint8_t nr_entry;
-  uint8_t next_entry;
 
   bool Insert(uint64_t key, uint64_t value, pmem::obj::persistent_ptr_base& root);
   bool Update(uint64_t key, uint64_t value, pmem::obj::persistent_ptr_base& root);
@@ -130,9 +130,9 @@ struct CLevel::IndexNode {
   uint64_t keys[INDEX_ENTRYS + 1];
   pmem::obj::persistent_ptr_base child[INDEX_ENTRYS + 2];
   NodeType child_type;
+  int nr_entry;
+  int next_entry;
   uint8_t sorted_array[INDEX_ENTRYS + 1];
-  uint8_t nr_entry;
-  uint8_t next_entry;
 
   bool Insert(uint64_t key, uint64_t value, pmem::obj::persistent_ptr_base& root);
   bool Update(uint64_t key, uint64_t value, pmem::obj::persistent_ptr_base& root);

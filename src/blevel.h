@@ -96,6 +96,7 @@ class BLevel {
 
   pmem::obj::persistent_ptr<Root> root_;
   Entry** in_mem_entry_;
+  uint64_t* in_mem_key_;
   std::shared_mutex* locks_;
 
   __attribute__((always_inline)) Entry* GetEntry_(int index) const {

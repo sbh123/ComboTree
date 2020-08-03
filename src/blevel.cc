@@ -16,11 +16,12 @@ BLevel::BLevel(pmem::obj::pool_base pop, Iterator* iter, uint64_t size)
   root_ = pool.root();
   root_->nr_entry = iter->key() == 0 ? size : size + 1;
   root_->size = size;
-  pmem::obj::make_persistent_atomic<Entry[]>(pop_, root_->entry, root_->nr_entry);
   in_mem_entry_ = new Entry*[root_->nr_entry];
-  for (int i = 0; i < root_->nr_entry; ++i)
-    in_mem_entry_[i] = &root_->entry[i];
+  pmem::obj::make_persistent_atomic<Entry[]>(pop_, root_->entry, root_->nr_entry);
   locks_ = new std::shared_mutex[root_->nr_entry];
+  for (int i = 0; i < root_->nr_entry; ++i) {
+    in_mem_entry_[i] = &root_->entry[i];
+  }
   int pos = 0;
   if (iter->key() != 0) {
     Entry* ent = GetEntry_(pos++);
@@ -37,6 +38,10 @@ BLevel::BLevel(pmem::obj::pool_base pop, Iterator* iter, uint64_t size)
     pos++;
   }
   assert(iter->End());
+  in_mem_key_ = new uint64_t[root_->nr_entry];
+  for (int i = 0; i < root_->nr_entry; ++i) {
+    in_mem_key_[i] = in_mem_entry_[i]->key;
+  }
 }
 
 BLevel::BLevel(pmem::obj::pool_base pop)
@@ -149,12 +154,13 @@ bool BLevel::Entry::Delete(std::shared_mutex* mutex, uint64_t pkey) {
 uint64_t BLevel::Find_(uint64_t key, uint64_t begin, uint64_t end) const {
   debug_assert(begin >= 0 && begin < EntrySize());
   debug_assert(end >= 0 && end < EntrySize());
-  int left = begin;
-  int right = end;
+  int_fast32_t left = begin;
+  int_fast32_t right = end;
   // binary search
   while (left <= right) {
     int middle = (left + right) / 2;
-    uint64_t mid_key = GetEntry_(middle)->key;
+    // uint64_t mid_key = GetEntry_(middle)->key;
+    uint64_t mid_key = in_mem_key_[middle];
     if (mid_key == key) {
       return middle;
     } else if (mid_key < key) {
