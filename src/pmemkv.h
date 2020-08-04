@@ -7,7 +7,7 @@
 #include <atomic>
 #include <mutex>
 #include <algorithm>
-#include "iterator.h"
+#include "combotree/iterator.h"
 
 namespace combotree {
 

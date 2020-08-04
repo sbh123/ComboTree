@@ -1,7 +1,6 @@
 #include <libpmemobj++/persistent_ptr.hpp>
 #include <libpmemobj++/make_persistent_atomic.hpp>
 #include <libpmemobj++/make_persistent_array_atomic.hpp>
-#include "iterator.h"
 #include "blevel.h"
 #include "debug.h"
 

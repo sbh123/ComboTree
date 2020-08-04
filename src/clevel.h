@@ -3,7 +3,7 @@
 #include <cstdint>
 #include <libpmemobj++/persistent_ptr.hpp>
 #include <libpmemobj.h>
-#include "iterator.h"
+#include "combotree/iterator.h"
 #include "debug.h"
 
 namespace combotree {
@@ -165,32 +165,34 @@ struct CLevel::IndexNode {
 class CLevel::Iter : public Iterator {
  public:
   Iter(CLevel* clevel)
-      : clevel_(clevel), leaf_(clevel_->head_), sorted_index_(0)  {}
+      : clevel_(clevel), leaf_(clevel_->head_), sorted_index_(0),
+        first_leaf_(clevel_->head_.raw()),
+        last_leaf_(clevel_->head_->prev.raw()),
+        is_first_leaf_(true), is_last_leaf_(false)  {}
   ~Iter() {};
 
   bool Begin() const {
-    return OID_EQUALS(leaf_.raw(), clevel_->head_.raw()) &&
-           sorted_index_ == 0;
+    return is_first_leaf_ && sorted_index_ == 0;
   }
 
   // leaf_ point to the last, sorted_index_ equals nr_entry
   bool End() const {
-    return OID_EQUALS(leaf_.raw(), clevel_->head_->prev.raw()) &&
-           sorted_index_ == leaf_->nr_entry;
+    return is_last_leaf_ && sorted_index_ == nr_entry_;
   }
 
   void SeekToFirst() {
     leaf_ = clevel_->head_;
-    while (!OID_EQUALS(leaf_.raw(), clevel_->head_->prev.raw()) &&
+    while (!OID_EQUALS(leaf_.raw(), last_leaf_) &&
            leaf_->nr_entry == 0) {
       leaf_ = leaf_->next;
     }
+    UpdateLeaf_();
     sorted_index_ = 0;
   }
 
   void SeekToLast() {
     leaf_ = clevel_->head_->prev;
-    while (!OID_EQUALS(leaf_.raw(), clevel_->head_.raw()) &&
+    while (!OID_EQUALS(leaf_.raw(), first_leaf_) &&
            leaf_->nr_entry == 0) {
       leaf_ = leaf_->prev;
     }
@@ -204,13 +206,14 @@ class CLevel::Iter : public Iterator {
   void Next() {
     if (sorted_index_ < leaf_->nr_entry - 1) {
       sorted_index_++;
-    } else if (OID_EQUALS(leaf_.raw(), clevel_->head_->prev.raw())) {
+    } else if (is_last_leaf_) {
       sorted_index_ = leaf_->nr_entry;
     } else {
       do {
         leaf_ = leaf_->next;
-      } while (!OID_EQUALS(leaf_.raw(), clevel_->head_->prev.raw()) &&
+      } while (!OID_EQUALS(leaf_.raw(), last_leaf_) &&
                leaf_->nr_entry == 0);
+      UpdateLeaf_();
       sorted_index_ = 0;
     }
   }
@@ -218,31 +221,61 @@ class CLevel::Iter : public Iterator {
   void Prev() {
     if (sorted_index_ > 0) {
       sorted_index_--;
-    } else if (OID_EQUALS(leaf_.raw(), clevel_->head_.raw())) {
+    } else if (is_first_leaf_) {
       sorted_index_ = 0;
     } else {
       do {
         leaf_ = leaf_->prev;
-      } while (!OID_EQUALS(leaf_.raw(), clevel_->head_.raw()) &&
+      } while (!OID_EQUALS(leaf_.raw(), first_leaf_) &&
                leaf_->nr_entry == 0);
+      UpdateLeaf_();
       sorted_index_ = std::max(0, leaf_->nr_entry - 1);
     }
   }
 
   uint64_t key() const {
-    int entry_idx = leaf_->GetSortedEntry_(sorted_index_);
-    return leaf_->entry[entry_idx].key;
+    int entry_idx = GetSortedEntry_();
+    return entry_[entry_idx].key;
   }
 
   uint64_t value() const {
-    int entry_idx = leaf_->GetSortedEntry_(sorted_index_);
-    return leaf_->entry[entry_idx].value;
+    int entry_idx = GetSortedEntry_();
+    return entry_[entry_idx].value;
   }
 
  private:
   CLevel* clevel_;
   pmem::obj::persistent_ptr<LeafNode> leaf_;
   int sorted_index_;
+  // cache these information in RAM
+  const PMEMoid& first_leaf_;
+  const PMEMoid& last_leaf_;
+  uint64_t sorted_array_;
+  CLevel::Entry* entry_;
+  bool is_last_leaf_;
+  bool is_first_leaf_;
+  int nr_entry_;
+
+  void UpdateLeaf_() {
+    is_first_leaf_ = OID_EQUALS(leaf_.raw(), first_leaf_);
+    is_last_leaf_ = OID_EQUALS(leaf_.raw(), last_leaf_);
+    nr_entry_ = leaf_->nr_entry;
+    sorted_array_ = leaf_->sorted_array;
+    entry_ = leaf_->entry;
+  }
+
+  uint64_t GetSortedArrayMask_(int index) const {
+    return (uint64_t)0x0FUL << ((LEAF_ENTRYS - 1 - index) * 4);
+  }
+
+  /*
+   * get entry index in sorted array
+   */
+  int GetSortedEntry_() const {
+    uint64_t mask = (uint64_t)0x0FUL << ((LEAF_ENTRYS - 1 - sorted_index_) * 4);
+    return (sorted_array_ & mask) >> ((LEAF_ENTRYS - 1 - sorted_index_) * 4);
+  }
+
 };
 
 } // namespace combotree

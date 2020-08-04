@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <atomic>
 #include <libpmemobj++/persistent_ptr.hpp>
+#include "combotree/iterator.h"
 
 namespace combotree {
 
@@ -23,6 +24,9 @@ class ComboTree {
   size_t Size() const;
 
   const size_t PMEMKV_THRESHOLD = 1024;
+
+  class Iter : public Iterator {
+  };
 
  private:
   const std::string POOL_LAYOUT = "Combo Tree";

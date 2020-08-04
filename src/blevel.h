@@ -4,7 +4,7 @@
 #include <shared_mutex>
 #include <atomic>
 #include <libpmemobj++/persistent_ptr.hpp>
-#include "iterator.h"
+#include "combotree/iterator.h"
 #include "clevel.h"
 #include "debug.h"
 

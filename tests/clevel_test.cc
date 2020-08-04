@@ -3,7 +3,7 @@
 #include <fstream>
 #include <iostream>
 #include <vector>
-#include "iterator.h"
+#include "combotree/iterator.h"
 #include "clevel.h"
 #include "random.h"
 

@@ -1,7 +1,7 @@
 #include <iostream>
 #include <filesystem>
 #include "kvbench/kvbench.h"
-#include "combo-tree/combo_tree.h"
+#include "combotree/combotree.h"
 
 using namespace combotree;
 

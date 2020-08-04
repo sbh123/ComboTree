@@ -2,8 +2,7 @@
 #include <thread>
 #include <libpmemobj++/persistent_ptr.hpp>
 #include <libpmemobj++/make_persistent_atomic.hpp>
-#include "combo-tree/combo_tree.h"
-#include "iterator.h"
+#include "combotree/combotree.h"
 #include "alevel.h"
 #include "blevel.h"
 #include "manifest.h"

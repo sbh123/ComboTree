@@ -2,7 +2,7 @@
 
 #include <cstdint>
 #include <cassert>
-#include "iterator.h"
+#include "combotree/iterator.h"
 #include "blevel.h"
 
 namespace combotree {

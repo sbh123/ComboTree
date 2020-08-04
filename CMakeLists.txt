@@ -63,7 +63,7 @@ set(COMBO_TREE_SRC
       src/alevel.cc
       src/blevel.cc
       src/clevel.cc
-      src/combo_tree.cc
+      src/combotree.cc
 )
 
 # combotree test

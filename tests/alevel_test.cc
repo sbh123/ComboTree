@@ -3,7 +3,7 @@
 #include <fstream>
 #include <map>
 #include "alevel.h"
-#include "iterator.h"
+#include "combotree/iterator.h"
 #include "std_map_iterator.h"
 #include "random.h"
 

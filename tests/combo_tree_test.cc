@@ -2,7 +2,7 @@
 #include <filesystem>
 #include <fstream>
 #include <map>
-#include "combo-tree/combo_tree.h"
+#include "combotree/combotree.h"
 #include "random.h"
 
 using namespace std;

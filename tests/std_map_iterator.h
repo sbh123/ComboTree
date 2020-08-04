@@ -1,7 +1,7 @@
 #pragma once
 
 #include <map>
-#include "iterator.h"
+#include "combotree/iterator.h"
 
 namespace combotree {
 
