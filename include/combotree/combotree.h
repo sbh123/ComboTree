@@ -23,13 +23,15 @@ class ComboTree {
 
   size_t Size() const;
 
-  const size_t PMEMKV_THRESHOLD = 1024;
+  Iterator* begin();
+  Iterator* end();
 
-  class Iter : public Iterator {
-  };
+  const size_t PMEMKV_THRESHOLD = 1024;
 
  private:
   const std::string POOL_LAYOUT = "Combo Tree";
+
+  class Iter;
 
   enum class Status {
     USING_PMEMKV,

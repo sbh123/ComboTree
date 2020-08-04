@@ -108,8 +108,11 @@ class BLevel {
 
 class BLevel::Iter : public Iterator {
  public:
-  explicit Iter(BLevel* blevel) : blevel_(blevel), entry_index_(0) {}
-  ~Iter() {};
+  explicit Iter(BLevel* blevel)
+      : blevel_(blevel), entry_index_(0), clevel_iter_(nullptr), locked_(false) {}
+  ~Iter() {
+    if (locked_) Unlock_();
+  }
 
   bool Valid() const {
     if (entry_index_ < 0 || entry_index_ >= blevel_->EntrySize())
@@ -229,13 +232,16 @@ class BLevel::Iter : public Iterator {
   uint64_t begin_entry_index_;
   mutable Iterator* clevel_iter_;
   BLevel::Entry::Type entry_type_;
+  bool locked_;
 
   void Lock_() {
-    blevel_->locks_[entry_index_].lock();
+    // blevel_->locks_[entry_index_].lock();
+    // locked_ = true;
   }
 
   void Unlock_() {
-    blevel_->locks_[entry_index_].unlock();
+    // blevel_->locks_[entry_index_].unlock();
+    // locked_ = false;
   }
 
   BLevel::Entry::Type EntryType_() const {

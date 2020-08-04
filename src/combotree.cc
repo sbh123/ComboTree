@@ -211,4 +211,73 @@ bool ComboTree::ValidPoolDir_() {
   return true;
 }
 
+class ComboTree::Iter : public Iterator {
+ public:
+  Iter(ComboTree* tree)
+      : tree_(tree)
+  {
+    if (tree_->status_.load() == ComboTree::Status::USING_PMEMKV) {
+      iter_ = tree_->pmemkv_->begin();
+    } else if (tree_->status_.load() == ComboTree::Status::USING_COMBO_TREE) {
+      iter_ = tree_->blevel_->begin();
+    }
+  }
+
+  bool Valid() const {
+    return iter_->Valid();
+  }
+
+  bool Begin() const {
+    return iter_->Begin();
+  }
+
+  bool End() const {
+    return iter_->End();
+  }
+
+  void SeekToFirst() {
+    return iter_->SeekToFirst();
+  }
+
+  void SeekToLast() {
+    return iter_->SeekToLast();
+  }
+
+  void Seek(uint64_t target) {
+    return iter_->Seek(target);
+  }
+
+  void Next() {
+    return iter_->Next();
+  }
+
+  void Prev() {
+    return iter_->Prev();
+  }
+
+  uint64_t key() const {
+    return iter_->key();
+  }
+
+  uint64_t value() const {
+    return iter_->value();
+  }
+
+ private:
+  ComboTree* tree_;
+  Iterator* iter_;
+};
+
+Iterator* ComboTree::begin() {
+  Iterator* iter = new Iter(this);
+  iter->SeekToFirst();
+  return iter;
+}
+
+Iterator* ComboTree::end() {
+  Iterator* iter = new Iter(this);
+  iter->SeekToLast();
+  return iter;
+}
+
 } // namespace combotree

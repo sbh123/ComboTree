@@ -2,6 +2,7 @@
 #include <filesystem>
 #include <fstream>
 #include <map>
+#include <vector>
 #include "combotree/combotree.h"
 #include "random.h"
 
@@ -72,11 +73,25 @@ int main(void) {
     uint64_t key;
     uint64_t value;
     uint64_t right_value;
-    // f_op >> op;
-    // f >> key;
-    key = rnd.Next();
-    op = rnd.Next();
+    f_op >> op;
+    f >> key;
+    // key = rnd.Next();
+    // op = rnd.Next();
     bool res;
+    if (op % 100 == 0) {
+      // SCAN
+      auto right_iter = right_kv.begin();
+      auto iter = db->begin();
+      while (right_iter != right_kv.end()) {
+        assert(right_iter->first == iter->key());
+        assert(right_iter->second == iter->value());
+        right_iter++;
+        iter->Next();
+      }
+      assert(iter->End());
+      delete iter;
+      continue;
+    }
     switch (op % 3) {
       case 0: // PUT
         value = rnd.Next();
@@ -109,8 +124,6 @@ int main(void) {
           assert(!res);
         }
         break;
-      // case 3: // UPDATE
-        // break;
     }
   }
 }

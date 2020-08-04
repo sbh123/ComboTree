@@ -67,7 +67,7 @@ set(COMBO_TREE_SRC
 )
 
 # combotree test
-add_executable(combotree_test tests/combo_tree_test.cc ${COMBO_TREE_SRC})
+add_executable(combotree_test tests/combotree_test.cc ${COMBO_TREE_SRC})
 target_link_libraries(combotree_test pmemkv pmemobj pthread)
 
 # kvbench test
