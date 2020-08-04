@@ -26,15 +26,15 @@ int main(void) {
   uint64_t key, value, right_value;
   int op;
 
-  for (int i = 0; i < TEST_SIZE; ++i) {
-    key = rnd.Next();
-    db->Insert(key, key);
-  }
+  // for (int i = 0; i < TEST_SIZE; ++i) {
+  //   key = rnd.Next();
+  //   db->Insert(key, key);
+  // }
 
-  for (int i = 0; i < TEST_SIZE; ++i) {
-    key = rnd.Next();
-    db->Get(key, value);
-  }
+  // for (int i = 0; i < TEST_SIZE; ++i) {
+  //   key = rnd.Next();
+  //   db->Get(key, value);
+  // }
 
   // for (int i = 0; i < TEST_SIZE; ++i) {
   //   f_op >> op;
@@ -67,48 +67,46 @@ int main(void) {
   //   }
   // }
 
-  // for (int i = 0; i < TEST_SIZE; ++i) {
-  //   int op = rnd.Next();
-  //   uint64_t key = rnd.Next();
-  //   uint64_t value;
-  //   uint64_t right_value;
-  //   bool res;
-  //   switch (op % 4) {
-  //     case 0: // PUT
-  //     case 1:
-  //       value = rnd.Next();
-  //       if (right_kv.count(key)) {
-  //         res = db->Insert(key, value);
-  //         assert(!res);
-  //       } else {
-  //         right_kv.emplace(key, value);
-  //         res = db->Insert(key, value);
-  //         assert(res);
-  //       }
-  //       break;
-  //     case 2: // GET
-  //     case 3:
-  //       if (right_kv.count(key)) {
-  //         right_value = right_kv.at(key);
-  //         res = db->Get(key, value);
-  //         assert(res && right_value == value);
-  //       } else {
-  //         res = db->Get(key, value);
-  //         assert(!res);
-  //       }
-  //       break;
-  //     // case 2: // DELETE
-  //       // if (right_kv.count(key)) {
-  //       //   right_kv.erase(key);
-  //       //   res = db->Delete(key);
-  //       //   assert(res);
-  //       // } else {
-  //       //   res = db->Delete(key);
-  //       //   assert(!res);
-  //       // }
-  //       // break;
-  //     // case 3: // UPDATE
-  //       // break;
-  //   }
-  // }
+  for (int i = 0; i < TEST_SIZE; ++i) {
+    int op = rnd.Next();
+    uint64_t key = rnd.Next();
+    uint64_t value;
+    uint64_t right_value;
+    bool res;
+    switch (op % 3) {
+      case 0: // PUT
+        value = rnd.Next();
+        if (right_kv.count(key)) {
+          res = db->Insert(key, value);
+          assert(!res);
+        } else {
+          right_kv.emplace(key, value);
+          res = db->Insert(key, value);
+          assert(res);
+        }
+        break;
+      case 1: // GET
+        if (right_kv.count(key)) {
+          right_value = right_kv.at(key);
+          res = db->Get(key, value);
+          assert(res && right_value == value);
+        } else {
+          res = db->Get(key, value);
+          assert(!res);
+        }
+        break;
+      case 2: // DELETE
+        if (right_kv.count(key)) {
+          right_kv.erase(key);
+          res = db->Delete(key);
+          assert(res);
+        } else {
+          res = db->Delete(key);
+          assert(!res);
+        }
+        break;
+      // case 3: // UPDATE
+        // break;
+    }
+  }
 }

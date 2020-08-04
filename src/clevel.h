@@ -93,6 +93,8 @@ struct CLevel::LeafNode {
  private:
   bool Split_(pmem::obj::persistent_ptr_base& root);
 
+  void Valid_();
+
   /*
    * find entry index which is equal or bigger than key
    *

@@ -4,6 +4,7 @@
 #include <libpmemobj.h>
 #include "clevel.h"
 #include "debug.h"
+#include <set>
 
 namespace combotree {
 
@@ -12,6 +13,20 @@ using pmem::obj::persistent_ptr_base;
 using pmem::obj::make_persistent_atomic;
 
 pmem::obj::pool_base CLevel::pop_;
+
+void CLevel::LeafNode::Valid_() {
+  std::set<int> idx;
+  for (int i = 0; i < nr_entry; ++i) {
+    int index = GetSortedEntry_(i);
+    assert(idx.count(index) == 0);
+    idx.emplace(index);
+  }
+  for (int i = 0; i < next_entry - nr_entry; ++i) {
+    int index = GetSortedEntry_(15 - i);
+    assert(idx.count(index) == 0);
+    idx.emplace(index);
+  }
+}
 
 void CLevel::InitLeaf() {
   type_ = NodeType::LEAF;
@@ -142,7 +157,8 @@ bool CLevel::LeafNode::Insert(uint64_t key, uint64_t value, persistent_ptr_base&
   // after mask is the index which is bigger than sorted_index
   // before mask is the index which is less than sorted_index
   uint64_t free_mask = 0;
-  int nr_free = next_entry - (nr_entry + 1);
+  int nr_free = (next_entry != LEAF_ENTRYS) ? (next_entry - nr_entry)
+                                            : (next_entry - nr_entry - 1);
   for (int i = 0; i < nr_free; ++i)
     free_mask = (free_mask << 4) | 0x0FUL;
   uint64_t free_index = sorted_array & free_mask;
@@ -169,6 +185,7 @@ bool CLevel::LeafNode::Insert(uint64_t key, uint64_t value, persistent_ptr_base&
   if (entry_idx == next_entry) next_entry++;
   sorted_array = new_sorted_array;
 
+  // Valid_();
   // PrintSortedArray();
   return true;
 }
@@ -212,6 +229,7 @@ bool CLevel::LeafNode::Delete(uint64_t key, persistent_ptr_base& base) {
   sorted_array = new_sorted_array;
   nr_entry--;
 
+  // Valid_();
   // PrintSortedArray();
   return true;
 }
