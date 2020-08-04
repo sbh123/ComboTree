@@ -18,7 +18,8 @@ BLevel::BLevel(pmem::obj::pool_base pop, Iterator* iter, uint64_t size)
   root_->size = size;
   in_mem_entry_ = new Entry*[root_->nr_entry];
   pmem::obj::make_persistent_atomic<Entry[]>(pop_, root_->entry, root_->nr_entry);
-  locks_ = new std::shared_mutex[root_->nr_entry];
+  // add one extra lock to make blevel iter's logic simple
+  locks_ = new std::shared_mutex[root_->nr_entry + 1];
   for (int i = 0; i < root_->nr_entry; ++i) {
     in_mem_entry_[i] = &root_->entry[i];
   }

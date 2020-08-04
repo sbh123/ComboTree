@@ -153,7 +153,21 @@ bool ComboTree::Get(uint64_t key, uint64_t& value) const {
 }
 
 bool ComboTree::Delete(uint64_t key) {
-  return true;
+  bool res;
+  while (true) {
+    // the order of comparison should not be changed
+    if (status_.load() == Status::USING_PMEMKV) {
+      res = pmemkv_->Delete(key);
+      break;
+    } else if (status_.load() == Status::PMEMKV_TO_COMBO_TREE) {
+      std::this_thread::sleep_for(std::chrono::microseconds(5));
+      continue;
+    } else if (status_.load() == Status::USING_COMBO_TREE) {
+      res = DeleteToComboTree_(key);
+      break;
+    }
+  }
+  return res;
 }
 
 bool ComboTree::InsertToComboTree_(uint64_t key, uint64_t value) {
@@ -171,7 +185,8 @@ bool ComboTree::GetFromComboTree_(uint64_t key, uint64_t& value) const {
 }
 
 bool ComboTree::DeleteToComboTree_(uint64_t key) {
-  return true;
+  bool res = alevel_->Delete(key);
+  return res;
 }
 
 namespace {

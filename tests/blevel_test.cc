@@ -9,7 +9,7 @@
 
 using namespace std;
 
-#define TEST_SIZE 400000
+#define TEST_SIZE 4000000
 
 #define POOL_PATH   "/mnt/pmem0/persistent"
 #define POOL_LAYOUT "Combo Tree"
@@ -63,7 +63,7 @@ int main(void) {
     uint64_t value;
     uint64_t right_value;
     bool res;
-    switch (op % 4) {
+    switch (op % 3) {
       case 0: // PUT
         value = rnd.Next();
         if (right_kv.count(key)) {
@@ -86,18 +86,19 @@ int main(void) {
         }
         break;
       case 2: // DELETE
-        // if (right_kv.count(key)) {
-        //   right_kv.erase(key);
-        //   res = db->Delete(key);
-        //   assert(res);
-        // } else {
-        //   res = db->Delete(key);
-        //   assert(!res);
-        // }
-        // break;
-      case 3: // UPDATE
+        if (right_kv.count(key)) {
+          right_kv.erase(key);
+          res = db->Delete(key);
+          assert(res);
+        } else {
+          res = db->Delete(key);
+          assert(!res);
+        }
         break;
+      // case 3: // UPDATE
+      //   break;
     }
+    assert(db->Size() == right_kv.size());
   }
 
   pop.close();

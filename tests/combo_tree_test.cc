@@ -68,10 +68,14 @@ int main(void) {
   // }
 
   for (int i = 0; i < TEST_SIZE; ++i) {
-    int op = rnd.Next();
-    uint64_t key = rnd.Next();
+    int op;
+    uint64_t key;
     uint64_t value;
     uint64_t right_value;
+    // f_op >> op;
+    // f >> key;
+    key = rnd.Next();
+    op = rnd.Next();
     bool res;
     switch (op % 3) {
       case 0: // PUT

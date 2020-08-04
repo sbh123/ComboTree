@@ -116,8 +116,11 @@ class BLevel::Iter : public Iterator {
       return false;
     if (EntryType_() == BLevel::Entry::Type::ENTRY_NONE)
       return false;
-    else if (EntryType_() == BLevel::Entry::Type::ENTRY_CLVEL)
-      return clevel_iter_ == nullptr || clevel_iter_->Valid();
+    else if (EntryType_() == BLevel::Entry::Type::ENTRY_CLVEL) {
+      if (clevel_iter_ == nullptr)
+        clevel_iter_ = blevel_->GetEntry_(entry_index_)->clevel->begin();
+      return clevel_iter_->Valid() && !clevel_iter_->End();
+    }
     else if (EntryType_() == BLevel::Entry::Type::ENTRY_VALUE)
       return true;
   }
@@ -136,8 +139,11 @@ class BLevel::Iter : public Iterator {
     if (entry_index_ >= blevel_->EntrySize()) {
       return true;
     } else if (entry_index_ == blevel_->EntrySize() - 1) {
-      if (EntryType_() == BLevel::Entry::Type::ENTRY_CLVEL)
-        return clevel_iter_ && clevel_iter_->End();
+      if (EntryType_() == BLevel::Entry::Type::ENTRY_CLVEL) {
+        if (clevel_iter_ == nullptr)
+          clevel_iter_ = blevel_->GetEntry_(entry_index_)->clevel->begin();
+        return clevel_iter_->End();
+      }
     }
     return false;
   }
@@ -148,6 +154,8 @@ class BLevel::Iter : public Iterator {
     entry_type_ = blevel_->GetEntry_(entry_index_)->type;
     if (entry_type_ == BLevel::Entry::Type::ENTRY_CLVEL) {
       clevel_iter_ = blevel_->GetEntry_(entry_index_)->clevel->begin();
+      if (clevel_iter_->End())
+        Next();
       return;
     } else if (entry_type_ == BLevel::Entry::Type::ENTRY_VALUE) {
       return;
@@ -219,7 +227,7 @@ class BLevel::Iter : public Iterator {
   BLevel* blevel_;
   uint64_t entry_index_;
   uint64_t begin_entry_index_;
-  Iterator* clevel_iter_;
+  mutable Iterator* clevel_iter_;
   BLevel::Entry::Type entry_type_;
 
   void Lock_() {
@@ -240,15 +248,18 @@ class BLevel::Iter : public Iterator {
       delete clevel_iter_;
     clevel_iter_ = nullptr;
     entry_index_++;
-    while (!End() && !Valid())
+    Lock_();
+    while (!End() && !Valid()) {
+      Unlock_();
+      if (clevel_iter_)
+        delete clevel_iter_;
+      clevel_iter_ = nullptr;
       entry_index_++;
+      Lock_();
+    }
     if (End())
       return;
-    Lock_();
     entry_type_ = blevel_->GetEntry_(entry_index_)->type;
-    if (entry_type_ == BLevel::Entry::Type::ENTRY_CLVEL) {
-      clevel_iter_ = blevel_->GetEntry_(entry_index_)->clevel->begin();
-    }
   }
 
 };
