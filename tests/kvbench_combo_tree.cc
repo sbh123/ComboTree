@@ -44,7 +44,15 @@ class ComboTreeV2<uint64_t, uint64_t> : public kvbench::DB<uint64_t, uint64_t> {
   }
 
   int Scan(uint64_t min_key, std::vector<uint64_t>* values) {
-    return 0;
+    Iterator* iter = db_->begin();
+    iter->Seek(min_key);
+    int cnt = 0;
+    while (cnt < scan_size_ && !iter->End()) {
+      values->push_back(iter->value());
+      iter->Next();
+      cnt++;
+    }
+    return cnt;
   }
 
   int GetThreadNumber() const {
@@ -58,6 +66,7 @@ class ComboTreeV2<uint64_t, uint64_t> : public kvbench::DB<uint64_t, uint64_t> {
  private:
   ComboTree* db_;
   int nr_thread_ = 1;
+  int scan_size_ = 100;
 };
 
 int main(int argc, char** argv) {

@@ -252,6 +252,7 @@ class ComboTree::Iter : public Iterator {
     return iter_->Next();
   }
 
+  // TODO: test Prev(), SeekToLast()
   void Prev() {
     return iter_->Prev();
   }

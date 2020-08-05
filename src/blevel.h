@@ -182,7 +182,25 @@ class BLevel::Iter : public Iterator {
     }
   }
 
+  void Seek(uint64_t target, uint64_t begin, uint64_t end) {
+    entry_index_ = blevel_->Find_(target, begin, end);
+    Lock_();
+    entry_type_ = EntryType_();
+    if (entry_type_ == BLevel::Entry::Type::ENTRY_VALUE) {
+      if (blevel_->GetEntry_(entry_index_)->key < target)
+        Next();
+    } else if (entry_type_ == BLevel::Entry::Type::ENTRY_CLVEL) {
+      clevel_iter_ = blevel_->GetEntry_(entry_index_)->clevel->begin();
+      clevel_iter_->Seek(target);
+      if (clevel_iter_->End())
+        Next();
+    } else if (entry_type_ == BLevel::Entry::Type::ENTRY_NONE) {
+      Next();
+    }
+  }
+
   void Seek(uint64_t target) {
+    Seek(target, 0, blevel_->EntrySize() - 1);
   }
 
   void Next() {

@@ -143,7 +143,21 @@ class PmemKV::Iter : public Iterator {
   void SeekToLast() { index_ = size_ - 1; }
 
   void Seek(uint64_t target) {
-    assert(0);
+    int left = 0;
+    int right = size_ - 1;
+    while (left <= right) {
+      int middle = (left + right) / 2;
+      uint64_t mid_key = kv_pair_[middle].first;
+      if (mid_key == target) {
+        index_ = middle;
+        break;
+      } else if (mid_key < target) {
+        left = middle + 1;
+      } else {
+        right = middle - 1;
+      }
+    }
+    index_ = left;
   }
 
   void Next() { index_++; }

@@ -31,66 +31,6 @@ int main(void) {
   fstream f("/home/qyzhang/Projects/ComboTree/build/workload.txt", ios::in);
   fstream f_op("/home/qyzhang/Projects/ComboTree/build/workload1.txt", ios::in);
 
-  // for (int i = 0; i < TEST_SIZE; ++i) {
-  //   uint64_t key;
-  //   f >> key;
-  //   uint64_t value = key;
-  //   bool res = db->Insert(key, value);
-  //   assert(res);
-  // }
-
-  // f.seekg(0);
-  // for (int i = 0; i < TEST_SIZE; ++i) {
-  //   uint64_t key;
-  //   f >> key;
-  //   uint64_t value;
-  //   bool res = db->Get(key, value);
-  //   // assert(res && value == key);
-  // }
-
-  // for (int i = 0; i < 70000 - TEST_SIZE; ++i) {
-  //   uint64_t key;
-  //   f >> key;
-  //   uint64_t value;
-  //   bool res = db->Get(key, value);
-  //   // assert(!res);
-  // }
-
-  // vector<uint64_t> keys;
-  // for (int i = 0; i < LEAF_ENTRYS; ++i) {
-  //   uint64_t key = rnd.Next();
-  //   bool res = db->Insert(key, key);
-  //   if (!res) {
-  //     cout << "!" << endl;
-  //     i--;
-  //   } else {
-  //     keys.emplace_back(key);
-  //   }
-  // }
-
-  // for (int i = 10; i < LEAF_ENTRYS; ++i) {
-  //   bool res = db->Delete(keys[i]);
-  //   assert(res);
-  // }
-  // keys.resize(10);
-
-  // for (int i = 10; i < LEAF_ENTRYS; ++i) {
-  //   uint64_t key = rnd.Next();
-  //   bool res = db->Insert(key, key);
-  //   if (!res) {
-  //     cout << "!" << endl;
-  //     i--;
-  //   } else {
-  //     keys.emplace_back(key);
-  //   }
-  // }
-
-  // for (int i = 0; i < LEAF_ENTRYS; ++i) {
-  //   uint64_t value;
-  //   bool res = db->Get(keys[i], value);
-  //   assert(res && value == keys[i]);
-  // }
-
   for (int i = 0; i < TEST_SIZE; ++i) {
     uint64_t key;
     int op;
@@ -113,6 +53,7 @@ int main(void) {
         iter->Next();
       }
       assert(iter->End());
+      delete iter;
     }
     switch (op % 3) {
       case 0: // PUT
@@ -145,8 +86,6 @@ int main(void) {
           res = db->Delete(key);
           assert(!res);
         }
-        break;
-      case 3: // UPDATE
         break;
     }
   }
