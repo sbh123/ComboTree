@@ -5,6 +5,7 @@ a.out
 
 ## CMake
 build/
+src/combotree_config.h
 CMakeLists.txt.user
 CMakeCache.txt
 CMakeFiles
