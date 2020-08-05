@@ -70,7 +70,7 @@ bool CLevel::Delete(uint64_t key) {
     return index_root_()->Delete(key, root_);
 }
 
-// find sorted index which is less or equal to key
+// find sorted index which is bigger or equal to key
 int CLevel::LeafNode::Find_(uint64_t key, bool& find) const {
   int left = 0;
   int right = nr_entry - 1;

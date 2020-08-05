@@ -146,6 +146,8 @@ struct CLevel::IndexNode {
   bool InsertChild(uint64_t child_key, pmem::obj::persistent_ptr_base child,
                    pmem::obj::persistent_ptr_base& root);
 
+  friend Iter;
+
  private:
   bool Split_(pmem::obj::persistent_ptr_base& root);
 
@@ -202,7 +204,21 @@ class CLevel::Iter : public Iterator {
   }
 
   void Seek(uint64_t target) {
-    assert(0);
+    if (clevel_->type_ == CLevel::NodeType::LEAF) {
+      leaf_ = clevel_->leaf_root_();
+    } else {
+      leaf_ = clevel_->index_root_()->FindLeafNode_(target);
+    }
+    bool find;
+    sorted_index_ = leaf_->Find_(target, find);
+    if (sorted_index_ == leaf_->nr_entry) {
+      do {
+        leaf_ = leaf_->next;
+      } while (!OID_EQUALS(leaf_.raw(), last_leaf_) &&
+               leaf_->nr_entry == 0);
+      sorted_index_ = 0;
+    }
+    UpdateLeaf_();
   }
 
   void Next() {
