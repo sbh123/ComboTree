@@ -10,7 +10,7 @@
 namespace combotree {
 
 #define LEAF_ENTRYS   CLEVEL_LEAF_ENTRY
-#define INDEX_ENTRYS  8   // must be even
+#define INDEX_ENTRYS  CLEVEL_INDEX_ENTRY
 
 class CLevel {
  public:
