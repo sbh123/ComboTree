@@ -94,10 +94,10 @@ int main(void) {
   for (int i = 0; i < TEST_SIZE; ++i) {
     uint64_t key;
     int op;
-    // f >> key;
-    // f_op >> op;
-    key = rnd.Next();
-    op = rnd.Next();
+    f >> key;
+    f_op >> op;
+    // key = rnd.Next();
+    // op = rnd.Next();
     uint64_t value;
     uint64_t right_value;
     bool res;

@@ -119,6 +119,7 @@ struct CLevel::LeafNode {
   int GetFreeIndex_() const {
     assert(next_entry == LEAF_ENTRYS);
     int nr_free = next_entry - nr_entry;
+    assert(nr_free > 0);
     uint64_t mask = (uint64_t)0x0FUL << ((nr_free - 1) * 4);
     return (sorted_array & mask) >> ((nr_free - 1) * 4);
   }

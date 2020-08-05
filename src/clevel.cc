@@ -125,9 +125,23 @@ bool CLevel::LeafNode::Split_(persistent_ptr_base& root) {
   new_node->parent = parent;
   new_node->nr_entry = LEAF_ENTRYS / 2;
   new_node->next_entry = LEAF_ENTRYS / 2;
-  new_node->sorted_array = new_sorted_array << ((16 - LEAF_ENTRYS / 2) * 4);
+  new_node->sorted_array = new_sorted_array << ((16 - new_node->nr_entry) * 4);
   new_node.persist();
 
+#if LEAF_ENTRYS != 16
+  // add free entry
+  uint64_t free_mask = 0;
+  for (int i = 0; i < LEAF_ENTRYS - LEAF_ENTRYS / 2; ++i)
+    free_mask = (free_mask << 4) | 0x0FUL;
+  free_mask <<= (16 - LEAF_ENTRYS) * 4;
+  uint64_t free_index = (sorted_array & free_mask) >> ((16 - LEAF_ENTRYS) * 4);
+
+  uint64_t before_mask = 0;
+  for (int i = 0; i < LEAF_ENTRYS / 2; ++i)
+    before_mask = (before_mask >> 4) | 0xF000000000000000UL;
+  uint64_t before_index = sorted_array & before_mask;
+  sorted_array = before_index | free_index;
+#endif
   nr_entry = LEAF_ENTRYS - LEAF_ENTRYS / 2;
   parent->InsertChild(new_node->entry[new_node->GetSortedEntry_(0)].key, new_node, root);
   return true;
