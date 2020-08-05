@@ -26,8 +26,6 @@ class ComboTree {
   Iterator* begin();
   Iterator* end();
 
-  const size_t PMEMKV_THRESHOLD = 1024;
-
  private:
   const std::string POOL_LAYOUT = "Combo Tree";
 

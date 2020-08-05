@@ -1,5 +1,8 @@
 a.out
 
+## kvbench
+*.proto.dat
+
 ## CMake
 build/
 CMakeLists.txt.user

@@ -3,6 +3,7 @@
 #include <libpmemobj++/persistent_ptr.hpp>
 #include <libpmemobj++/make_persistent_atomic.hpp>
 #include "combotree/combotree.h"
+#include "combotree_config.h"
 #include "alevel.h"
 #include "blevel.h"
 #include "manifest.h"
@@ -118,7 +119,7 @@ bool ComboTree::Insert(uint64_t key, uint64_t value) {
       continue;
     } else if (status_.load() == Status::USING_COMBO_TREE) {
       res = InsertToComboTree_(key, value);
-      if (Size() >= 4 * blevel_->EntrySize()) {
+      if (Size() >= EXPANSION_FACTOR * blevel_->EntrySize()) {
         ExpandComboTree_();
       }
       break;

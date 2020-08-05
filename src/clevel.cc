@@ -125,8 +125,7 @@ bool CLevel::LeafNode::Split_(persistent_ptr_base& root) {
   new_node->parent = parent;
   new_node->nr_entry = LEAF_ENTRYS / 2;
   new_node->next_entry = LEAF_ENTRYS / 2;
-  new_node->sorted_array = new_sorted_array <<
-      ((LEAF_ENTRYS - LEAF_ENTRYS / 2) * 4);
+  new_node->sorted_array = new_sorted_array << ((16 - LEAF_ENTRYS / 2) * 4);
   new_node.persist();
 
   nr_entry = LEAF_ENTRYS - LEAF_ENTRYS / 2;
@@ -166,7 +165,7 @@ bool CLevel::LeafNode::Insert(uint64_t key, uint64_t value, persistent_ptr_base&
   uint64_t after_mask = 0;
   for (int i = 0; i < nr_entry - sorted_index; ++i)
     after_mask = (after_mask << 4) | 0x0FUL;
-  after_mask = after_mask << ((LEAF_ENTRYS - nr_entry) * 4);
+  after_mask = after_mask << ((16 - nr_entry) * 4);
   uint64_t after_index = (sorted_array & after_mask) >> 4;
 
   uint64_t before_mask = 0;
@@ -175,7 +174,7 @@ bool CLevel::LeafNode::Insert(uint64_t key, uint64_t value, persistent_ptr_base&
   uint64_t before_index = sorted_array & before_mask;
   new_sorted_array =
       before_index |
-      (entry_idx << ((LEAF_ENTRYS - 1 - sorted_index) * 4)) |
+      (entry_idx << ((15 - sorted_index) * 4)) |
       after_index |
       free_index;
 
@@ -212,7 +211,7 @@ bool CLevel::LeafNode::Delete(uint64_t key, persistent_ptr_base& base) {
   uint64_t after_mask = 0;
   for (int i = 0; i < nr_entry - sorted_index - 1; ++i)
     after_mask = (after_mask << 4) | 0x0FUL;
-  after_mask = after_mask << ((LEAF_ENTRYS - nr_entry) * 4);
+  after_mask = after_mask << ((16 - nr_entry) * 4);
   uint64_t after_index = (sorted_array & after_mask) << 4;
 
   uint64_t before_mask = 0;

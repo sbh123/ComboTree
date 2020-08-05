@@ -4,11 +4,12 @@
 #include <libpmemobj++/persistent_ptr.hpp>
 #include <libpmemobj.h>
 #include "combotree/iterator.h"
+#include "combotree_config.h"
 #include "debug.h"
 
 namespace combotree {
 
-#define LEAF_ENTRYS   16
+#define LEAF_ENTRYS   CLEVEL_LEAF_ENTRY
 #define INDEX_ENTRYS  8   // must be even
 
 class CLevel {
@@ -104,7 +105,7 @@ struct CLevel::LeafNode {
   int Find_(uint64_t key, bool& find) const;
 
   uint64_t GetSortedArrayMask_(int index) const {
-    return (uint64_t)0x0FUL << ((LEAF_ENTRYS - 1 - index) * 4);
+    return (uint64_t)0x0FUL << ((15 - index) * 4);
   }
 
   /*
@@ -112,7 +113,7 @@ struct CLevel::LeafNode {
    */
   int GetSortedEntry_(int sorted_index) const {
     uint64_t mask = GetSortedArrayMask_(sorted_index);
-    return (sorted_array & mask) >> ((LEAF_ENTRYS - 1 - sorted_index) * 4);
+    return (sorted_array & mask) >> ((15 - sorted_index) * 4);
   }
 
   int GetFreeIndex_() const {
@@ -265,15 +266,15 @@ class CLevel::Iter : public Iterator {
   }
 
   uint64_t GetSortedArrayMask_(int index) const {
-    return (uint64_t)0x0FUL << ((LEAF_ENTRYS - 1 - index) * 4);
+    return (uint64_t)0x0FUL << ((15 - index) * 4);
   }
 
   /*
    * get entry index in sorted array
    */
   int GetSortedEntry_() const {
-    uint64_t mask = (uint64_t)0x0FUL << ((LEAF_ENTRYS - 1 - sorted_index_) * 4);
-    return (sorted_array_ & mask) >> ((LEAF_ENTRYS - 1 - sorted_index_) * 4);
+    uint64_t mask = (uint64_t)0x0FUL << ((15 - sorted_index_) * 4);
+    return (sorted_array_ & mask) >> ((15 - sorted_index_) * 4);
   }
 
 };

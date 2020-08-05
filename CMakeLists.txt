@@ -1,11 +1,32 @@
 cmake_minimum_required(VERSION 3.3)
 project(ComboTree)
 
+## Combo Tree Configuration
+set(DEFAULT_SPAN      2)
+set(PMEMKV_THRESHOLD  1024)
+set(CLEVEL_LEAF_ENTRY 8)    # must be even
+set(EXPANSION_FACTOR  2)
+
+configure_file(
+  "${PROJECT_SOURCE_DIR}/src/combotree_config.h.in"
+  "${PROJECT_SOURCE_DIR}/src/combotree_config.h"
+)
+
 set(CMAKE_CXX_STANDARD_REQUIRED on)
 set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -g")
 
-# add_definitions(-DNDEBUG)
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall")
+
+## Debug or Release
+# use command `cmake -DCMAKE_BUILD_TYPE=Release ..` to make a release build
+if(CMAKE_BUILD_TYPE MATCHES Release)
+  message(STATUS "Release build.")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3")
+  add_definitions(-DNDEBUG)
+else()
+  message(STATUS "Debug build.")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g")
+endif()
 
 include_directories(include)
 include_directories(src)

@@ -1,6 +1,7 @@
 #include <libpmemobj++/persistent_ptr.hpp>
 #include <libpmemobj++/make_persistent_atomic.hpp>
 #include <libpmemobj++/make_persistent_array_atomic.hpp>
+#include <iostream>
 #include "blevel.h"
 #include "debug.h"
 
@@ -154,6 +155,8 @@ bool BLevel::Entry::Delete(std::shared_mutex* mutex, uint64_t pkey) {
 uint64_t BLevel::Find_(uint64_t key, uint64_t begin, uint64_t end) const {
   assert(begin >= 0 && begin < EntrySize());
   assert(end >= 0 && end < EntrySize());
+  // if (end - begin > 10)
+  //   std::cout << end - begin << std::endl;
   int_fast32_t left = begin;
   int_fast32_t right = end;
   // binary search

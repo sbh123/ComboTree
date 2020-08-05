@@ -32,6 +32,8 @@ ALevel::ALevel(BLevel* blevel, int span)
   }
   entry_[nr_entry_ - 1].key = max_key_;
   entry_[nr_entry_ - 1].offset = nr_blevel_entry_;
+  // for (int i = 0; i < nr_entry_; ++i)
+  //   std::cout << entry_[i].key << std::endl;
 }
 
 void ALevel::GetBLevelRange_(uint64_t key, uint64_t& begin, uint64_t& end) const {

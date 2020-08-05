@@ -3,15 +3,14 @@
 #include <cstdint>
 #include <cassert>
 #include "combotree/iterator.h"
+#include "combotree_config.h"
 #include "blevel.h"
 
 namespace combotree {
 
-#define DEFAULT_COMBO_TREE_SPAN 2
-
 class ALevel {
  public:
-  ALevel(BLevel* blevel, int span = DEFAULT_COMBO_TREE_SPAN);
+  ALevel(BLevel* blevel, int span = DEFAULT_SPAN);
 
   bool Insert(uint64_t key, uint64_t value) {
     uint64_t begin, end;

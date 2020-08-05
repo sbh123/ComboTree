@@ -39,6 +39,7 @@ class ComboTreeV2<uint64_t, uint64_t> : public kvbench::DB<uint64_t, uint64_t> {
   }
 
   int Delete(uint64_t key) {
+    db_->Delete(key);
     return 0;
   }
 
