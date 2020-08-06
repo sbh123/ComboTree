@@ -39,7 +39,7 @@ BLevel::BLevel(pmem::obj::pool_base pop, Iterator* iter, uint64_t size)
   }
   assert(iter->End());
   in_mem_key_ = new uint64_t[root_->nr_entry];
-  for (int i = 0; i < root_->nr_entry; ++i) {
+  for (uint64_t i = 0; i < root_->nr_entry; ++i) {
     in_mem_key_[i] = in_mem_entry_[i].key;
   }
 }
@@ -86,7 +86,7 @@ bool BLevel::Entry::Insert(std::shared_mutex* mutex, uint64_t base_addr, pmem::o
     pmem::obj::make_persistent_atomic<CLevel>(pop, new_clevel);
     new_clevel->InitLeaf();
 
-    bool res = false;
+    [[maybe_unused]] bool res = false;
     res = new_clevel->Insert(key, old_val);
     assert(res == true);
     res = new_clevel->Insert(pkey, pvalue);
@@ -106,7 +106,7 @@ bool BLevel::Entry::Insert(std::shared_mutex* mutex, uint64_t base_addr, pmem::o
       pmem::obj::make_persistent_atomic<CLevel>(pop, new_clevel);
       new_clevel->InitLeaf();
 
-      bool res;
+      [[maybe_unused]] bool res;
       res = new_clevel->Insert(pkey, pvalue);
       assert(res == true);
       SetTypeClevel();
@@ -186,6 +186,7 @@ uint64_t BLevel::MinKey() const {
     return ent->key;
   }
   assert(0);
+  return 0;
 }
 
 uint64_t BLevel::MaxKey() const {
@@ -201,6 +202,7 @@ uint64_t BLevel::MaxKey() const {
     return ent->key;
   }
   assert(0);
+  return 0;
 }
 
 uint64_t BLevel::MinEntryKey() const {

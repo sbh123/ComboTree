@@ -273,8 +273,8 @@ class CLevel::Iter : public Iterator {
   const PMEMoid& last_leaf_;
   uint64_t sorted_array_;
   CLevel::Entry* entry_;
-  bool is_last_leaf_;
   bool is_first_leaf_;
+  bool is_last_leaf_;
   int nr_entry_;
 
   void UpdateLeaf_() {

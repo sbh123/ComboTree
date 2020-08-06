@@ -94,12 +94,12 @@ class BLevel {
     const static uint64_t type_mask_  = 0xC000000000000000UL;
     const static uint64_t value_mask_ = 0x3FFFFFFFFFFFFFFFUL;
 
-    uint64_t SetValue(uint64_t new_value) {
+    void SetValue(uint64_t new_value) {
       assert((new_value & value_mask_) == new_value);
       value = GetType() | (new_value & value_mask_);
     }
 
-    uint64_t SetClevel(CLevel* new_clevel, uint64_t base_addr) {
+    void SetClevel(CLevel* new_clevel, uint64_t base_addr) {
       uint64_t offset = (uint64_t)new_clevel - base_addr;
       assert((offset & value_mask_) == offset);
       clevel = GetType() | (offset & value_mask_);
@@ -129,15 +129,15 @@ class BLevel {
       return GetType() == Type::ENTRY_CLEVEL;
     }
 
-    bool SetTypeNone() {
+    void SetTypeNone() {
       type = GetValue() | Type::ENTRY_NONE;
     }
 
-    bool SetTypeValue() {
+    void SetTypeValue() {
       type = GetValue() | Type::ENTRY_VALUE;
     }
 
-    bool SetTypeClevel() {
+    void SetTypeClevel() {
       type = GetValue() | Type::ENTRY_CLEVEL;
     }
   };
@@ -183,6 +183,8 @@ class BLevel::Iter : public Iterator {
     }
     else if (EntryType_() == BLevel::Entry::Type::ENTRY_VALUE)
       return true;
+    assert(0);
+    return false;
   }
 
   bool Begin() const {
@@ -281,7 +283,7 @@ class BLevel::Iter : public Iterator {
         return blevel_->GetKey(entry_index_);
       default:
         assert(0);
-        break;
+        return 0;
     }
   }
 
@@ -296,7 +298,7 @@ class BLevel::Iter : public Iterator {
         return blevel_->GetEntry_(entry_index_)->GetValue();
       default:
         assert(0);
-        break;
+        return 0;
     }
   }
 
