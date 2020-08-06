@@ -4,6 +4,7 @@
 #include <cassert>
 #include "combotree/iterator.h"
 #include "combotree_config.h"
+#include "status.h"
 #include "blevel.h"
 
 namespace combotree {
@@ -12,25 +13,25 @@ class ALevel {
  public:
   ALevel(BLevel* blevel, int span = DEFAULT_SPAN);
 
-  bool Insert(uint64_t key, uint64_t value) {
+  Status Insert(uint64_t key, uint64_t value) {
     uint64_t begin, end;
     GetBLevelRange_(key, begin, end);
     return blevel_->Insert(key, value, begin, end);
   }
 
-  bool Update(uint64_t key, uint64_t value) {
+  Status Update(uint64_t key, uint64_t value) {
     uint64_t begin, end;
     GetBLevelRange_(key, begin, end);
     return blevel_->Update(key, value, begin, end);
   }
 
-  bool Get(uint64_t key, uint64_t& value) const {
+  Status Get(uint64_t key, uint64_t& value) const {
     uint64_t begin, end;
     GetBLevelRange_(key, begin, end);
     return blevel_->Get(key, value, begin, end);
   }
 
-  bool Delete(uint64_t key) {
+  Status Delete(uint64_t key) {
     uint64_t begin, end;
     GetBLevelRange_(key, begin, end);
     return blevel_->Delete(key, begin, end);

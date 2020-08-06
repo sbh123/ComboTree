@@ -31,7 +31,7 @@ class ComboTree {
 
   class Iter;
 
-  enum class Status {
+  enum class State {
     USING_PMEMKV,
     PMEMKV_TO_COMBO_TREE,
     USING_COMBO_TREE,
@@ -46,19 +46,14 @@ class ComboTree {
   BLevel* blevel_;
   PmemKV* pmemkv_;
   Manifest* manifest_;
-  std::atomic<Status> status_;
+  std::atomic<State> status_;
   // max key finish expanding or in expanding
+  std::atomic<uint64_t> expand_min_key_;
   std::atomic<uint64_t> expand_max_key_;
 
   bool ValidPoolDir_();
-
   void ChangeToComboTree_();
   void ExpandComboTree_();
-
-  bool InsertToComboTree_(uint64_t key, uint64_t value);
-  bool UpdateToComboTree_(uint64_t key, uint64_t value);
-  bool GetFromComboTree_(uint64_t key, uint64_t& value) const;
-  bool DeleteToComboTree_(uint64_t key);
 };
 
 } // namespace combotree

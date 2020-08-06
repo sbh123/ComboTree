@@ -18,12 +18,12 @@ ComboTree::ComboTree(std::string pool_dir, size_t pool_size, bool create)
   ValidPoolDir_();
   manifest_ = new Manifest(pool_dir_);
   pmemkv_ = new PmemKV(manifest_->PmemKVPath());
-  status_ = Status::USING_PMEMKV;
+  status_ = State::USING_PMEMKV;
 }
 
 size_t ComboTree::Size() const {
-  if (status_.load() == Status::USING_COMBO_TREE ||
-      status_.load() == Status::COMBO_TREE_EXPANDING) {
+  if (status_.load() == State::USING_COMBO_TREE ||
+      status_.load() == State::COMBO_TREE_EXPANDING) {
     // FIXME: size when expanding?
     return alevel_->Size();
   } else {
@@ -42,26 +42,21 @@ void ComboTree::ChangeToComboTree_() {
     alevel_ = new ALevel(blevel_);
     // change manifest first
     manifest_->SetIsComboTree(true);
-    Status tmp = Status::PMEMKV_TO_COMBO_TREE;
+    State tmp = State::PMEMKV_TO_COMBO_TREE;
     // must change status before wating no ref
-    bool exchanged = status_.compare_exchange_strong(tmp, Status::USING_COMBO_TREE);
+    bool exchanged = status_.compare_exchange_strong(tmp, State::USING_COMBO_TREE);
     assert(exchanged);
     delete iter;
     while (!pmemkv_->NoReadRef()) ;
     delete pmemkv_;
     std::filesystem::remove(manifest_->PmemKVPath());
+    LOG(Debug::INFO, "finish migrating data from pmemkv to combotree");
   });
   change_thread.detach();
-  LOG(Debug::INFO, "finish migrating data from pmemkv to combotree");
 }
 
 void ComboTree::ExpandComboTree_() {
   LOG(Debug::INFO, "start to expand combotree. current size is %ld", Size());
-  Status tmp = Status::USING_COMBO_TREE;
-  if (!status_.compare_exchange_strong(tmp, Status::COMBO_TREE_EXPANDING)) {
-    LOG(Debug::WARNING, "another thread is expanding combotree! exit.");
-    return;
-  }
 
   BLevel* old_blevel = blevel_;
   ALevel* old_alevel = alevel_;
@@ -70,42 +65,54 @@ void ComboTree::ExpandComboTree_() {
 
   pmem::obj::pool_base new_pool = pmem::obj::pool_base::create(new_pool_path,
       POOL_LAYOUT, pool_size_, 0666);
-  Iterator* iter = old_blevel->begin();
-  blevel_ = new BLevel(new_pool, iter, Size());
-  delete iter;
-
-  ALevel* new_alevel = new ALevel(blevel_);
-  alevel_ = new_alevel;
+  blevel_ = new BLevel(new_pool, old_blevel);
+  expand_min_key_.store(0);
+  expand_max_key_.store(0);
 
   // change status
-  tmp = Status::COMBO_TREE_EXPANDING;
-  if (!status_.compare_exchange_strong(tmp, Status::USING_COMBO_TREE)) {
-    LOG(Debug::ERROR,
-        "can not change state from COMBO_TREE_EXPANDING to USING_COMBO_TREE!");
+  State tmp = State::USING_COMBO_TREE;
+  if (!status_.compare_exchange_strong(tmp, State::COMBO_TREE_EXPANDING)) {
+    LOG(Debug::WARNING, "another thread is expanding combotree! exit.");
+    return;
   }
 
-  // TODO: delete immediately?
-  delete old_alevel;
-  delete old_blevel;
+  std::thread expandion_thread([&,new_pool,old_pool_path,old_alevel,old_blevel](){
+    blevel_->Expansion(old_blevel, expand_min_key_, expand_max_key_);
 
-  // remove old pool
-  pop_.close();
-  std::filesystem::remove(old_pool_path);
-  pop_ = new_pool;
+    ALevel* new_alevel = new ALevel(blevel_);
+    alevel_ = new_alevel;
 
-  LOG(Debug::INFO, "finish expanding combotree. current size is %ld", Size());
+    // change status
+    State tmp = State::COMBO_TREE_EXPANDING;
+    if (!status_.compare_exchange_strong(tmp, State::USING_COMBO_TREE)) {
+      LOG(Debug::ERROR,
+          "can not change state from COMBO_TREE_EXPANDING to USING_COMBO_TREE!");
+    }
+
+    LOG(Debug::INFO, "finish expanding combotree. current size is %ld", Size());
+
+    // remove old pool
+    pop_.close();
+    std::filesystem::remove(old_pool_path);
+    pop_ = new_pool;
+
+    // TODO: delete immediately?
+    delete old_alevel;
+    delete old_blevel;
+  });
+  expandion_thread.detach();
 }
 
 bool ComboTree::Insert(uint64_t key, uint64_t value) {
-  bool res;
+  Status s;
   while (true) {
     // the order of comparison should not be changed
-    if (status_.load() == Status::USING_PMEMKV) {
-      res = pmemkv_->Insert(key, value);
+    if (status_.load() == State::USING_PMEMKV) {
+      s = pmemkv_->Insert(key, value);
       if (Size() >= PMEMKV_THRESHOLD) {
-        Status tmp = Status::USING_PMEMKV;
+        State tmp = State::USING_PMEMKV;
         // must change status first
-        if (status_.compare_exchange_strong(tmp, Status::PMEMKV_TO_COMBO_TREE)) {
+        if (status_.compare_exchange_strong(tmp, State::PMEMKV_TO_COMBO_TREE)) {
           // wait until no ref to pmemkv
           // get will not ref, so get still work during migration
           // FIXME: have race conditions! maybe one writer thread haven't ref yet.
@@ -114,79 +121,108 @@ bool ComboTree::Insert(uint64_t key, uint64_t value) {
         }
       }
       break;
-    } else if (status_.load() == Status::PMEMKV_TO_COMBO_TREE) {
+    } else if (status_.load() == State::PMEMKV_TO_COMBO_TREE) {
       std::this_thread::sleep_for(std::chrono::microseconds(5));
       continue;
-    } else if (status_.load() == Status::USING_COMBO_TREE) {
-      res = InsertToComboTree_(key, value);
+    } else if (status_.load() == State::USING_COMBO_TREE) {
+      s = alevel_->Insert(key, value);
       if (Size() >= EXPANSION_FACTOR * blevel_->EntrySize()) {
         ExpandComboTree_();
       }
       break;
-    } else if (status_.load() == Status::COMBO_TREE_EXPANDING) {
-      assert(0);
+    } else if (status_.load() == State::COMBO_TREE_EXPANDING) {
+      while (true) {
+        if (key < expand_min_key_) {
+          s = blevel_->Insert(key, value);
+          break;
+        } else if (key > expand_max_key_) {
+          s = alevel_->Insert(key, value);
+          if (s == Status::UNVALID) {
+            assert(key < expand_min_key_);
+            s = blevel_->Insert(key, value);
+          }
+          break;
+        } else {
+          std::this_thread::sleep_for(std::chrono::microseconds(5));
+        }
+      }
+      break;
     }
   }
-  return res;
+  return s == Status::OK;
 }
 
 bool ComboTree::Update(uint64_t key, uint64_t value) {
+  assert(0);
   return true;
 }
 
 bool ComboTree::Get(uint64_t key, uint64_t& value) const {
-  bool res;
+  Status s;
   while (true) {
     // the order of comparison should not be changed
-    if (status_.load() == Status::USING_PMEMKV) {
-      res = pmemkv_->Get(key, value);
+    if (status_.load() == State::USING_PMEMKV) {
+      s = pmemkv_->Get(key, value);
       break;
-    } else if (status_.load() == Status::PMEMKV_TO_COMBO_TREE) {
-      res = pmemkv_->Get(key, value);
+    } else if (status_.load() == State::PMEMKV_TO_COMBO_TREE) {
+      s = pmemkv_->Get(key, value);
       break;
-    } else if (status_.load() == Status::USING_COMBO_TREE) {
-      res = GetFromComboTree_(key, value);
+    } else if (status_.load() == State::USING_COMBO_TREE) {
+      s = alevel_->Get(key, value);
       break;
+    } else if (status_.load() == State::COMBO_TREE_EXPANDING) {
+      while (true) {
+        if (key < expand_min_key_) {
+          s = blevel_->Get(key, value);
+          break;
+        } else if (key > expand_max_key_) {
+          s = alevel_->Get(key, value);
+          if (s == Status::UNVALID) {
+            assert(key < expand_min_key_);
+            s = blevel_->Get(key, value);
+          }
+          break;
+        } else {
+          std::this_thread::sleep_for(std::chrono::microseconds(5));
+        }
+      }
     }
   }
-  return res;
+  return s == Status::OK;
 }
 
 bool ComboTree::Delete(uint64_t key) {
-  bool res;
+  Status s;
   while (true) {
     // the order of comparison should not be changed
-    if (status_.load() == Status::USING_PMEMKV) {
-      res = pmemkv_->Delete(key);
+    if (status_.load() == State::USING_PMEMKV) {
+      s = pmemkv_->Delete(key);
       break;
-    } else if (status_.load() == Status::PMEMKV_TO_COMBO_TREE) {
+    } else if (status_.load() == State::PMEMKV_TO_COMBO_TREE) {
       std::this_thread::sleep_for(std::chrono::microseconds(5));
       continue;
-    } else if (status_.load() == Status::USING_COMBO_TREE) {
-      res = DeleteToComboTree_(key);
+    } else if (status_.load() == State::USING_COMBO_TREE) {
+      s = alevel_->Delete(key);
       break;
+    } else if (status_.load() == State::COMBO_TREE_EXPANDING) {
+      while (true) {
+        if (key < expand_min_key_) {
+          s = blevel_->Delete(key);
+          break;
+        } else if (key > expand_max_key_) {
+          s = alevel_->Delete(key);
+          if (s == Status::UNVALID) {
+            assert(key < expand_min_key_);
+            s = blevel_->Delete(key);
+          }
+          break;
+        } else {
+          std::this_thread::sleep_for(std::chrono::microseconds(5));
+        }
+      }
     }
   }
-  return res;
-}
-
-bool ComboTree::InsertToComboTree_(uint64_t key, uint64_t value) {
-  bool res = alevel_->Insert(key, value);
-  return res;
-}
-
-bool ComboTree::UpdateToComboTree_(uint64_t key, uint64_t value) {
-  return true;
-}
-
-bool ComboTree::GetFromComboTree_(uint64_t key, uint64_t& value) const {
-  bool res = alevel_->Get(key, value);
-  return res;
-}
-
-bool ComboTree::DeleteToComboTree_(uint64_t key) {
-  bool res = alevel_->Delete(key);
-  return res;
+  return s == Status::OK;
 }
 
 namespace {
@@ -217,9 +253,9 @@ class ComboTree::Iter : public Iterator {
   Iter(ComboTree* tree)
       : tree_(tree)
   {
-    if (tree_->status_.load() == ComboTree::Status::USING_PMEMKV) {
+    if (tree_->status_.load() == ComboTree::State::USING_PMEMKV) {
       iter_ = tree_->pmemkv_->begin();
-    } else if (tree_->status_.load() == ComboTree::Status::USING_COMBO_TREE) {
+    } else if (tree_->status_.load() == ComboTree::State::USING_COMBO_TREE) {
       iter_ = tree_->blevel_->begin();
     }
   }

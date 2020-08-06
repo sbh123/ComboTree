@@ -8,11 +8,10 @@
 namespace combotree {
 
 BLevel::BLevel(pmem::obj::pool_base pop, Iterator* iter, uint64_t size)
-    : pop_(pop)
+    : pop_(pop), in_mem_entry_(nullptr), in_mem_key_(nullptr),
+      is_expanding_(false)
 {
   pmem::obj::pool<Root> pool(pop_);
-  // FIXME: bug! when combotree expanding, both old and new pool can be inserted.
-  CLevel::SetPoolBase(pop_);
   root_ = pool.root();
   root_->nr_entry = iter->key() == 0 ? size : size + 1;
   root_->size = size;
@@ -44,8 +43,132 @@ BLevel::BLevel(pmem::obj::pool_base pop, Iterator* iter, uint64_t size)
   }
 }
 
+BLevel::BLevel(pmem::obj::pool_base pop, BLevel* old_blevel)
+    : pop_(pop), in_mem_entry_(nullptr), in_mem_key_(nullptr),
+      is_expanding_(true)
+{
+  pmem::obj::pool<Root> pool(pop_);
+  root_ = pool.root();
+  root_->nr_entry = old_blevel->Size() * 1.01;  // reserve some entry for insertion
+  root_->size = 0;
+  base_addr_ = (uint64_t)root_.get() - root_.raw().off;
+  pmem::obj::make_persistent_atomic<Entry[]>(pop_, root_->entry, EntrySize());
+  // add one extra lock to make blevel iter's logic simple
+  locks_ = new std::shared_mutex[EntrySize() + 1];
+  in_mem_entry_ = root_->entry.get();
+  in_mem_key_ = new uint64_t[root_->nr_entry];
+  assert(GetEntry_(1) == &root_->entry[1]);
+}
+
+void BLevel::ExpandAddEntry_(uint64_t& index, uint64_t key, uint64_t value) {
+  if (index < EntrySize()) {
+    std::lock_guard<std::shared_mutex> lock(locks_[index]);
+    Entry* ent = GetEntry_(index);
+    ent->SetTypeValue();
+    ent->SetKey(key);
+    in_mem_key_[index] = key;
+    ent->SetValue(value);
+    index++;
+    root_->size++;
+  } else {
+    std::lock_guard<std::shared_mutex> lock(locks_[EntrySize() - 1]);
+    Entry* ent = GetEntry_(EntrySize() - 1);
+    if (ent->IsClevel()) {
+      ent->GetClevel(base_addr_)->Insert(pop_, key, value);
+    } else if (ent->IsValue()) {
+      pmem::obj::persistent_ptr<CLevel> new_clevel;
+      pmem::obj::make_persistent_atomic<CLevel>(pop_, new_clevel);
+      new_clevel->InitLeaf(pop_);
+      new_clevel->Insert(pop_, ent->GetKey(), ent->GetValue());
+      new_clevel->Insert(pop_, key, value);
+      ent->SetTypeClevel();
+      ent->SetClevel(new_clevel.get(), base_addr_);
+    } else if (ent->IsNone()) {
+      ent->SetTypeValue();
+      ent->SetKey(key);
+      in_mem_key_[index] = key;
+      ent->SetValue(value);
+    } else {
+      assert(0);
+    }
+    root_->size++;
+  }
+}
+
+void BLevel::Expansion(BLevel* old_blevel, std::atomic<uint64_t>& min_key,
+                        std::atomic<uint64_t>& max_key) {
+  uint64_t old_index = 0;
+  uint64_t new_index = 0;
+  // handle entry 0 explicit
+  old_blevel->locks_[0].lock();
+  locks_[0].lock();
+  min_key.store(0);
+  max_key.store(old_blevel->GetKey(1));
+  Entry* old_ent = old_blevel->GetEntry_(0);
+  Entry* new_ent = GetEntry_(0);
+  new_ent->SetKey(0);
+  in_mem_key_[0] = 0;
+  if (old_ent->IsValue()) {
+    new_ent->SetTypeValue();
+    new_ent->SetValue(old_ent->GetValue());
+    root_->size++;
+    old_ent->SetTypeUnValid();
+    old_index++;
+  } else if (old_ent->IsClevel()) {
+    Iterator* clevel_iter = old_ent->GetClevel(old_blevel->base_addr_)->begin();
+    if (!clevel_iter->End() && clevel_iter->key() == 0) {
+      new_ent->SetTypeValue();
+      new_ent->SetValue(clevel_iter->value());
+      root_->size++;
+      delete clevel_iter;
+      old_ent->GetClevel(old_blevel->base_addr_)->Delete(0);
+    } else {
+      delete clevel_iter;
+    }
+  } else if (old_ent->IsNone()) {
+    new_ent->SetTypeNone();
+    old_ent->SetTypeUnValid();
+    old_index++;
+  } else if (old_ent->IsUnValid()) {
+    assert(0);
+  }
+  new_index++;
+  locks_[0].unlock();
+  old_blevel->locks_[0].unlock();
+
+  // handle entry [1, EntrySize()]
+  while (old_index < old_blevel->EntrySize()) {
+    std::lock_guard<std::shared_mutex> old_ent_lock(old_blevel->locks_[old_index]);
+    max_key.store(old_index + 1 == old_blevel->EntrySize() ? UINT64_MAX
+                                  : old_blevel->GetKey(old_index + 1));
+    Entry* old_ent = old_blevel->GetEntry_(old_index);
+    if (old_ent->IsValue()) {
+      ExpandAddEntry_(new_index, old_ent->GetKey(), old_ent->GetValue());
+    } else if (old_ent->IsClevel()) {
+      Iterator* clevel_iter = old_ent->GetClevel(old_blevel->base_addr_)->begin();
+      while (!clevel_iter->End()) {
+        ExpandAddEntry_(new_index, clevel_iter->key(), clevel_iter->value());
+        clevel_iter->Next();
+      }
+      delete clevel_iter;
+    } else if (old_ent->IsNone()) {
+      ;
+    } else if (old_ent->IsUnValid()) {
+      assert(0);
+    }
+    old_ent->SetTypeUnValid();
+    old_index++;
+    min_key.store(old_index == old_blevel->EntrySize() ? UINT64_MAX
+                                  : old_blevel->GetKey(old_index));
+  }
+
+  root_->nr_entry = new_index;
+  is_expanding_.store(false);
+}
+
 BLevel::BLevel(pmem::obj::pool_base pop)
-    : pop_(pop)
+    : pop_(pop), in_mem_entry_(nullptr), in_mem_key_(nullptr),
+      is_expanding_(false)
 {
   pmem::obj::pool<Root> pool(pop_);
   root_ = pool.root();
@@ -55,100 +178,95 @@ BLevel::BLevel(pmem::obj::pool_base pop)
 BLevel::~BLevel() {
   if (locks_)
     delete locks_;
+  if (in_mem_key_)
+    delete in_mem_key_;
 }
 
-bool BLevel::Entry::Get(std::shared_mutex* mutex, uint64_t base_addr, uint64_t pkey, uint64_t& pvalue) const {
-  // std::shared_lock<std::shared_mutex> lock(*mutex);
-  if (IsValue()) {
+Status BLevel::Entry::Get(std::shared_mutex* mutex, uint64_t base_addr, uint64_t pkey, uint64_t& pvalue) const {
+  std::shared_lock<std::shared_mutex> lock(*mutex);
+  if (IsUnValid()) {
+    return Status::UNVALID;
+  } else if (IsValue()) {
     if (pkey == key) {
       pvalue = GetValue();
-      return true;
+      return Status::OK;
     } else {
-      return false;
+      return Status::DOES_NOT_EXIST;
     }
   } else if (IsClevel()) {
     return GetClevel(base_addr)->Get(pkey, pvalue);
   } else if (IsNone()) {
-    return false;
+    return Status::DOES_NOT_EXIST;
   }
-  return false;
+  return Status::UNVALID;
 }
 
-bool BLevel::Entry::Insert(std::shared_mutex* mutex, uint64_t base_addr, pmem::obj::pool_base& pop, uint64_t pkey, uint64_t pvalue) {
+Status BLevel::Entry::Insert(std::shared_mutex* mutex, uint64_t base_addr, pmem::obj::pool_base& pop, uint64_t pkey, uint64_t pvalue) {
   // TODO: lock scope too large. https://stackoverflow.com/a/34995051/7640227
-  // std::lock_guard<std::shared_mutex> lock(*mutex);
-  if (IsValue()) {
+  std::lock_guard<std::shared_mutex> lock(*mutex);
+  if (IsUnValid()) {
+    return Status::UNVALID;
+  } else if (IsValue()) {
     if (pkey == key) {
-      return false;
+      return Status::ALREADY_EXISTS;
     }
     uint64_t old_val = GetValue();
     pmem::obj::persistent_ptr<CLevel> new_clevel = nullptr;
     pmem::obj::make_persistent_atomic<CLevel>(pop, new_clevel);
-    new_clevel->InitLeaf();
+    new_clevel->InitLeaf(pop);
 
-    [[maybe_unused]] bool res = false;
-    res = new_clevel->Insert(key, old_val);
-    assert(res == true);
-    res = new_clevel->Insert(pkey, pvalue);
-    assert(res == true);
+    [[maybe_unused]] Status s;
+    s = new_clevel->Insert(pop, key, old_val);
+    assert(s == Status::OK);
+    s = new_clevel->Insert(pop, pkey, pvalue);
+    assert(s == Status::OK);
     SetTypeClevel();
     SetClevel(new_clevel.get(), base_addr);
-    return true;
+    return Status::OK;
   } else if (IsClevel()) {
-    return GetClevel(base_addr)->Insert(pkey, pvalue);
+    return GetClevel(base_addr)->Insert(pop, pkey, pvalue);
   } else if (IsNone()) {
     if (pkey == key) {
       SetValue(pvalue);
       SetTypeValue();
-      return true;
+      return Status::OK;
     } else {
       pmem::obj::persistent_ptr<CLevel> new_clevel;
       pmem::obj::make_persistent_atomic<CLevel>(pop, new_clevel);
-      new_clevel->InitLeaf();
+      new_clevel->InitLeaf(pop);
 
-      [[maybe_unused]] bool res;
-      res = new_clevel->Insert(pkey, pvalue);
-      assert(res == true);
+      [[maybe_unused]] Status s;
+      s = new_clevel->Insert(pop, pkey, pvalue);
+      assert(s == Status::OK);
       SetTypeClevel();
       SetClevel(new_clevel.get(), base_addr);
-      return true;
+      return Status::OK;
     }
   }
-  return false;
+  return Status::UNVALID;
 }
 
-bool BLevel::Entry::Update(std::shared_mutex* mutex, uint64_t base_addr, uint64_t pkey, uint64_t pvalue) {
-  // std::lock_guard<std::shared_mutex> lock(*mutex);
-  if (IsValue()) {
-    if (pkey == key) {
-      value = GetValue();
-      return true;
-    } else {
-      return false;
-    }
-  } else if (IsClevel()) {
-    return GetClevel(base_addr)->Update(pkey, pvalue);
-  } else if (IsNone()) {
-    return false;
-  }
-  return false;
+Status BLevel::Entry::Update(std::shared_mutex* mutex, uint64_t base_addr, uint64_t pkey, uint64_t pvalue) {
+  assert(0);
 }
 
-bool BLevel::Entry::Delete(std::shared_mutex* mutex, uint64_t base_addr, uint64_t pkey) {
-  // std::lock_guard<std::shared_mutex> lock(*mutex);
-  if (IsValue()) {
+Status BLevel::Entry::Delete(std::shared_mutex* mutex, uint64_t base_addr, uint64_t pkey) {
+  std::lock_guard<std::shared_mutex> lock(*mutex);
+  if (IsUnValid()) {
+    return Status::UNVALID;
+  } else if (IsValue()) {
     if (pkey == key) {
       SetTypeNone();
-      return true;
+      return Status::OK;
     } else {
-      return false;
+      return Status::DOES_NOT_EXIST;
     }
   } else if (IsClevel()) {
     return GetClevel(base_addr)->Delete(pkey);
   } else if (IsNone()) {
-    return false;
+    return Status::DOES_NOT_EXIST;
   }
-  return false;
+  return Status::UNVALID;
 }
 
 uint64_t BLevel::Find_(uint64_t key, uint64_t begin, uint64_t end) const {

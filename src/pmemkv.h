@@ -8,6 +8,7 @@
 #include <mutex>
 #include <algorithm>
 #include "combotree/iterator.h"
+#include "status.h"
 
 namespace combotree {
 
@@ -29,7 +30,7 @@ class PmemKV {
   explicit PmemKV(std::string path, size_t size = SIZE,
                   std::string engine = "cmap", bool force_create = true);
 
-  bool Insert(uint64_t key, uint64_t value) {
+  Status Insert(uint64_t key, uint64_t value) {
     WriteRef_();
     char key_buf[sizeof(uint64_t)];
     char value_buf[sizeof(uint64_t)];
@@ -40,29 +41,25 @@ class PmemKV {
     auto s = db_->exists(string_view(key_buf, sizeof(uint64_t)));
     if (s == status::OK) {
       WriteUnRef_();
-      return false;
+      return Status::ALREADY_EXISTS;
     }
+    if (s != status::NOT_FOUND)
+      return Status::UNVALID;
 
     s = db_->put(string_view(key_buf, sizeof(uint64_t)),
                       string_view(value_buf, sizeof(uint64_t)));
     WriteUnRef_();
-    return s == status::OK;
+    if (s == status::OK)
+      return Status::OK;
+    else
+      return Status::UNVALID;
   }
 
-  bool Update(uint64_t key, uint64_t value) {
-    WriteRef_();
-    char key_buf[sizeof(uint64_t)];
-    char value_buf[sizeof(uint64_t)];
-    int2char(key, key_buf);
-    int2char(value, value_buf);
-
-    auto s = db_->put(string_view(key_buf, sizeof(uint64_t)),
-                      string_view(value_buf, sizeof(uint64_t)));
-    WriteUnRef_();
-    return s == status::OK;
+  Status Update(uint64_t key, uint64_t value) {
+    assert(0);
   }
 
-  bool Get(uint64_t key, uint64_t& value) const {
+  Status Get(uint64_t key, uint64_t& value) const {
     ReadRef_();
     char key_buf[sizeof(uint64_t)];
     int2char(key, key_buf);
@@ -70,16 +67,26 @@ class PmemKV {
     auto s = db_->get(string_view(key_buf, sizeof(uint64_t)),
         [&](string_view value_str){ value = *(uint64_t*)value_str.data(); });
     ReadUnRef_();
-    return s == status::OK;
+    if (s == status::OK)
+      return Status::OK;
+    else if (s == status::NOT_FOUND)
+      return Status::DOES_NOT_EXIST;
+    else
+      return Status::UNVALID;
   }
 
-  bool Delete(uint64_t key) {
+  Status Delete(uint64_t key) {
     WriteRef_();
     char key_buf[sizeof(uint64_t)];
     int2char(key, key_buf);
     auto s = db_->remove(string_view(key_buf, sizeof(uint64_t)));
     WriteUnRef_();
-    return s == status::OK;
+    if (s == status::OK)
+      return Status::OK;
+    else if (s == status::NOT_FOUND)
+      return Status::DOES_NOT_EXIST;
+    else
+      return Status::UNVALID;
   }
 
   size_t Size() const {

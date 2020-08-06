@@ -11,8 +11,7 @@ namespace combotree {
 using pmem::obj::persistent_ptr;
 using pmem::obj::persistent_ptr_base;
 using pmem::obj::make_persistent_atomic;
-
-pmem::obj::pool_base CLevel::pop_;
+using pmem::obj::pool_base;
 
 void CLevel::LeafNode::Valid_() {
   std::set<int> idx;
@@ -28,42 +27,42 @@ void CLevel::LeafNode::Valid_() {
   }
 }
 
-void CLevel::InitLeaf() {
+void CLevel::InitLeaf(pool_base& pop) {
   type_ = NodeType::LEAF;
-  make_persistent_atomic<LeafNode>(GetPoolBase(), head_);
+  make_persistent_atomic<LeafNode>(pop, head_);
   head_->prev = head_;
   head_->next = head_;
   root_ = head_;
 }
 
-bool CLevel::Insert(uint64_t key, uint64_t value) {
+Status CLevel::Insert(pool_base& pop, uint64_t key, uint64_t value) {
   if (type_ == NodeType::LEAF) {
     persistent_ptr_base root = root_;
-    bool res = leaf_root_()->Insert(key, value, root);
+    Status s = leaf_root_()->Insert(pop, key, value, root);
     if (!OID_EQUALS(root.raw(), root_.raw())) {
       type_ = NodeType::INDEX;
       root_ = root;
     }
-    return res;
+    return s;
   } else
-    return index_root_()->Insert(key, value, root_);
+    return index_root_()->Insert(pop, key, value, root_);
 }
 
-bool CLevel::Update(uint64_t key, uint64_t value) {
+Status CLevel::Update(uint64_t key, uint64_t value) {
   if (type_ == NodeType::LEAF)
     return leaf_root_()->Update(key, value, root_);
   else
     return index_root_()->Update(key, value, root_);
 }
 
-bool CLevel::Get(uint64_t key, uint64_t& value) const {
+Status CLevel::Get(uint64_t key, uint64_t& value) const {
   if (type_ == NodeType::LEAF)
     return leaf_root_()->Get(key, value);
   else
     return index_root_()->Get(key, value);
 }
 
-bool CLevel::Delete(uint64_t key) {
+Status CLevel::Delete(uint64_t key) {
   if (type_ == NodeType::LEAF)
     return leaf_root_()->Delete(key, root_);
   else
@@ -99,18 +98,18 @@ void CLevel::LeafNode::PrintSortedArray() const {
   }
 }
 
-bool CLevel::LeafNode::Split_(persistent_ptr_base& root) {
+bool CLevel::LeafNode::Split_(pool_base& pop, persistent_ptr_base& root) {
   assert(nr_entry == LEAF_ENTRYS);
 
   if (parent == nullptr) {
-    make_persistent_atomic<IndexNode>(CLevel::GetPoolBase(), parent);
+    make_persistent_atomic<IndexNode>(pop, parent);
     parent->child_type = NodeType::LEAF;
     parent->child[0] = static_cast<persistent_ptr<LeafNode>>(this);
     root = parent;
   }
 
   persistent_ptr<LeafNode> new_node;
-  make_persistent_atomic<LeafNode>(CLevel::GetPoolBase(), new_node);
+  make_persistent_atomic<LeafNode>(pop, new_node);
   uint64_t new_sorted_array = 0;
   // copy bigger half to new node
   for (int i = 0; i < LEAF_ENTRYS / 2; ++i) {
@@ -143,23 +142,24 @@ bool CLevel::LeafNode::Split_(persistent_ptr_base& root) {
   sorted_array = before_index | free_index;
 #endif
   nr_entry = LEAF_ENTRYS - LEAF_ENTRYS / 2;
-  parent->InsertChild(new_node->entry[new_node->GetSortedEntry_(0)].key, new_node, root);
+  parent->InsertChild(pop, new_node->entry[new_node->GetSortedEntry_(0)].key, new_node, root);
   return true;
 }
 
-bool CLevel::LeafNode::Insert(uint64_t key, uint64_t value, persistent_ptr_base& root) {
+Status CLevel::LeafNode::Insert(pool_base& pop, uint64_t key, uint64_t value,
+                                persistent_ptr_base& root) {
   bool find;
   int sorted_index = Find_(key, find);
   // already exist
-  if (find) return false;
+  if (find) return Status::ALREADY_EXISTS;
 
   // if not find, insert key in index
   if (nr_entry == LEAF_ENTRYS) {
     // full, split
-    Split_(root);
+    Split_(pop, root);
     // key should insert to the newly split node
     if (key >= next->entry[next->GetSortedEntry_(0)].key)
-      return next->Insert(key, value, root);
+      return next->Insert(pop, key, value, root);
   }
 
   uint64_t new_sorted_array;
@@ -200,15 +200,15 @@ bool CLevel::LeafNode::Insert(uint64_t key, uint64_t value, persistent_ptr_base&
 
   // Valid_();
   // PrintSortedArray();
-  return true;
+  return Status::OK;
 }
 
-bool CLevel::LeafNode::Delete(uint64_t key, persistent_ptr_base& base) {
+Status CLevel::LeafNode::Delete(uint64_t key, persistent_ptr_base& base) {
   bool find;
   int sorted_index = Find_(key, find);
   if (!find) {
     // key not exist
-    return false;
+    return Status::DOES_NOT_EXIST;
   }
 
   uint64_t entry_index = GetSortedEntry_(sorted_index);
@@ -244,33 +244,24 @@ bool CLevel::LeafNode::Delete(uint64_t key, persistent_ptr_base& base) {
 
   // Valid_();
   // PrintSortedArray();
-  return true;
+  return Status::OK;
 }
 
-bool CLevel::LeafNode::Update(uint64_t key, uint64_t value, persistent_ptr_base& root) {
+Status CLevel::LeafNode::Update(uint64_t key, uint64_t value, persistent_ptr_base& root) {
+  assert(0);
+}
+
+Status CLevel::LeafNode::Get(uint64_t key, uint64_t& value) const {
   bool find;
   int sorted_index = Find_(key, find);
   if (!find) {
     // key not exist
-    return false;
-  }
-
-  int entry_index = GetSortedEntry_(sorted_index);
-  entry[entry_index].value = value;
-  return true;
-}
-
-bool CLevel::LeafNode::Get(uint64_t key, uint64_t& value) const {
-  bool find;
-  int sorted_index = Find_(key, find);
-  if (!find) {
-    // key not exist
-    return false;
+    return Status::DOES_NOT_EXIST;
   }
 
   int entry_index = GetSortedEntry_(sorted_index);
   value = entry[entry_index].value;
-  return true;
+  return Status::OK;
 }
 
 persistent_ptr<CLevel::LeafNode> CLevel::IndexNode::FindLeafNode_(uint64_t key) const {
@@ -311,18 +302,18 @@ void CLevel::IndexNode::AdoptChild_() {
   }
 }
 
-bool CLevel::IndexNode::Split_(persistent_ptr_base& root) {
+bool CLevel::IndexNode::Split_(pool_base& pop, persistent_ptr_base& root) {
   assert(nr_entry == INDEX_ENTRYS + 1);
 
   if (parent == nullptr) {
-    make_persistent_atomic<IndexNode>(CLevel::GetPoolBase(), parent);
+    make_persistent_atomic<IndexNode>(pop, parent);
     parent->child_type = NodeType::INDEX;
     parent->child[0] = static_cast<persistent_ptr<IndexNode>>(this);
     root = parent;
   }
 
   persistent_ptr<IndexNode> new_node;
-  make_persistent_atomic<IndexNode>(CLevel::GetPoolBase(), new_node);
+  make_persistent_atomic<IndexNode>(pop, new_node);
   uint8_t new_sorted_array[INDEX_ENTRYS];
   new_node->child_type = child_type;
   // copy bigger half to new node
@@ -340,11 +331,12 @@ bool CLevel::IndexNode::Split_(persistent_ptr_base& root) {
   new_node->AdoptChild_();
 
   nr_entry = INDEX_ENTRYS / 2;
-  parent->InsertChild(keys[sorted_array[INDEX_ENTRYS / 2]], new_node, root);
+  parent->InsertChild(pop, keys[sorted_array[INDEX_ENTRYS / 2]], new_node, root);
   return true;
 }
 
-bool CLevel::IndexNode::InsertChild(uint64_t child_key, persistent_ptr_base new_child,
+bool CLevel::IndexNode::InsertChild(pool_base& pop, uint64_t child_key,
+                                    persistent_ptr_base new_child,
                                     persistent_ptr_base& root) {
   int left = 0;
   int right = nr_entry - 1;
@@ -382,29 +374,29 @@ bool CLevel::IndexNode::InsertChild(uint64_t child_key, persistent_ptr_base new_
 
   if (nr_entry == INDEX_ENTRYS + 1) {
     // full, split first
-    Split_(root);
+    Split_(pop, root);
   }
 
   return true;
 }
 
-bool CLevel::IndexNode::Insert(uint64_t key, uint64_t value, persistent_ptr_base& root) {
+Status CLevel::IndexNode::Insert(pool_base& pop, uint64_t key,
+                               uint64_t value, persistent_ptr_base& root) {
   auto leaf = FindLeafNode_(key);
-  return leaf->Insert(key, value, root);
-  return true;
+  return leaf->Insert(pop, key, value, root);
 }
 
-bool CLevel::IndexNode::Update(uint64_t key, uint64_t value, persistent_ptr_base& root) {
+Status CLevel::IndexNode::Update(uint64_t key, uint64_t value, persistent_ptr_base& root) {
   auto leaf = FindLeafNode_(key);
   return leaf->Update(key, value, root);
 }
 
-bool CLevel::IndexNode::Get(uint64_t key, uint64_t& value) const {
+Status CLevel::IndexNode::Get(uint64_t key, uint64_t& value) const {
   auto leaf = FindLeafNode_(key);
   return leaf->Get(key, value);
 }
 
-bool CLevel::IndexNode::Delete(uint64_t key, persistent_ptr_base& root) {
+Status CLevel::IndexNode::Delete(uint64_t key, persistent_ptr_base& root) {
   auto leaf = FindLeafNode_(key);
   return leaf->Delete(key, root);
 }

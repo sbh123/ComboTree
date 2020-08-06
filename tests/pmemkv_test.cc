@@ -21,19 +21,19 @@ int main(void) {
 
   for (int i = 0; i < 100; ++i) {
     uint64_t value;
-    bool res = db->Get(i, value);
-    assert(res && value == (uint64_t)i);
+    Status s = db->Get(i, value);
+    assert(s == Status::OK && value == (uint64_t)i);
   }
 
   for (int i = 100; i < 200; ++i) {
     uint64_t value;
-    bool res = db->Get(i, value);
-    assert(!res);
+    Status s = db->Get(i, value);
+    assert(s == Status::DOES_NOT_EXIST);
   }
 
   for (int i = 0; i < 100; ++i) {
-    bool res = db->Delete(i);
-    assert(res);
+    Status s = db->Delete(i);
+    assert(s == Status::OK);
   }
 
   return 0;

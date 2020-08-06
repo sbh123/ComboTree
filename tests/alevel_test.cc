@@ -8,6 +8,7 @@
 #include "random.h"
 
 using namespace std;
+using combotree::Status;
 
 #define TEST_SIZE 200000
 
@@ -63,27 +64,27 @@ int main(void) {
     uint64_t key = rnd.Next();
     uint64_t value;
     uint64_t right_value;
-    bool res;
+    Status s;
     switch (op % 4) {
       case 0: // PUT
         value = rnd.Next();
         if (right_kv.count(key)) {
-          res = db->Insert(key, value);
-          assert(!res);
+          s = db->Insert(key, value);
+          assert(s == Status::ALREADY_EXISTS);
         } else {
           right_kv.emplace(key, value);
-          res = db->Insert(key, value);
-          assert(res);
+          s = db->Insert(key, value);
+          assert(s == Status::OK);
         }
         break;
       case 1: // GET
         if (right_kv.count(key)) {
           right_value = right_kv.at(key);
-          res = db->Get(key, value);
-          assert(res && right_value == value);
+          s = db->Get(key, value);
+          assert(s == Status::OK && right_value == value);
         } else {
-          res = db->Get(key, value);
-          assert(!res);
+          s = db->Get(key, value);
+          assert(s == Status::DOES_NOT_EXIST);
         }
         break;
       case 2: // DELETE

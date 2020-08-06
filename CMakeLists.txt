@@ -54,10 +54,6 @@ add_executable(experiment tests/experiment.cc)
 add_executable(persistentptr_vs_offset tests/persistentptr_vs_offset.cc)
 target_link_libraries(persistentptr_vs_offset pmemobj)
 
-# alloc test
-add_executable(alloc_test tests/alloc_test.cc src/clevel.cc)
-target_link_libraries(alloc_test pmemobj)
-
 # pmemkv_vs_clevel test
 add_executable(pmemkv_vs_clevel tests/pmemkv_vs_clevel.cc src/clevel.cc src/pmemkv.cc)
 target_link_libraries(pmemkv_vs_clevel pmemobj pmemkv)

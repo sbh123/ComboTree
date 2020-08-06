@@ -4,6 +4,7 @@
 #include <libpmemobj++/persistent_ptr.hpp>
 #include <libpmemobj.h>
 #include "combotree/iterator.h"
+#include "status.h"
 #include "combotree_config.h"
 #include "debug.h"
 
@@ -14,26 +15,17 @@ namespace combotree {
 
 class CLevel {
  public:
+  void InitLeaf(pmem::obj::pool_base& pop);
 
-  void InitLeaf();
-
-  bool Insert(uint64_t key, uint64_t value);
-  bool Update(uint64_t key, uint64_t value);
-  bool Get(uint64_t key, uint64_t& value) const;
-  bool Delete(uint64_t key);
+  Status Insert(pmem::obj::pool_base& pop, uint64_t key, uint64_t value);
+  Status Update(uint64_t key, uint64_t value);
+  Status Get(uint64_t key, uint64_t& value) const;
+  Status Delete(uint64_t key);
 
   class Iter;
 
   Iterator* begin();
   Iterator* end();
-
-  static void SetPoolBase(pmem::obj::pool_base pool_base) {
-    pop_ = pool_base;
-  }
-
-  static pmem::obj::pool_base& GetPoolBase() {
-    return pop_;
-  }
 
  private:
   struct Entry;
@@ -48,8 +40,6 @@ class CLevel {
   pmem::obj::persistent_ptr_base root_;
   pmem::obj::persistent_ptr<LeafNode> head_;
   NodeType type_;
-
-  static pmem::obj::pool_base pop_;
 
   pmem::obj::persistent_ptr<LeafNode> leaf_root_() const {
     return static_cast<pmem::obj::persistent_ptr<LeafNode>>(root_.raw());
@@ -82,17 +72,17 @@ struct CLevel::LeafNode {
   int next_entry;
   Entry entry[LEAF_ENTRYS];
 
-  bool Insert(uint64_t key, uint64_t value, pmem::obj::persistent_ptr_base& root);
-  bool Update(uint64_t key, uint64_t value, pmem::obj::persistent_ptr_base& root);
-  bool Get(uint64_t key, uint64_t& value) const;
-  bool Delete(uint64_t key, pmem::obj::persistent_ptr_base& root);
+  Status Insert(pmem::obj::pool_base& pop, uint64_t key, uint64_t value, pmem::obj::persistent_ptr_base& root);
+  Status Update(uint64_t key, uint64_t value, pmem::obj::persistent_ptr_base& root);
+  Status Get(uint64_t key, uint64_t& value) const;
+  Status Delete(uint64_t key, pmem::obj::persistent_ptr_base& root);
 
   void PrintSortedArray() const;
 
   friend Iter;
 
  private:
-  bool Split_(pmem::obj::persistent_ptr_base& root);
+  bool Split_(pmem::obj::pool_base& pop, pmem::obj::persistent_ptr_base& root);
 
   void Valid_();
 
@@ -138,18 +128,18 @@ struct CLevel::IndexNode {
   int next_entry;
   uint8_t sorted_array[INDEX_ENTRYS + 1];
 
-  bool Insert(uint64_t key, uint64_t value, pmem::obj::persistent_ptr_base& root);
-  bool Update(uint64_t key, uint64_t value, pmem::obj::persistent_ptr_base& root);
-  bool Get(uint64_t key, uint64_t& value) const;
-  bool Delete(uint64_t key, pmem::obj::persistent_ptr_base& root);
+  Status Insert(pmem::obj::pool_base& pop, uint64_t key, uint64_t value, pmem::obj::persistent_ptr_base& root);
+  Status Update(uint64_t key, uint64_t value, pmem::obj::persistent_ptr_base& root);
+  Status Get(uint64_t key, uint64_t& value) const;
+  Status Delete(uint64_t key, pmem::obj::persistent_ptr_base& root);
 
-  bool InsertChild(uint64_t child_key, pmem::obj::persistent_ptr_base child,
+  bool InsertChild(pmem::obj::pool_base& pop, uint64_t child_key, pmem::obj::persistent_ptr_base child,
                    pmem::obj::persistent_ptr_base& root);
 
   friend Iter;
 
  private:
-  bool Split_(pmem::obj::persistent_ptr_base& root);
+  bool Split_(pmem::obj::pool_base& pop, pmem::obj::persistent_ptr_base& root);
 
   void AdoptChild_();
 

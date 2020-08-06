@@ -9,6 +9,7 @@
 
 using combotree::CLevel;
 using combotree::Iterator;
+using combotree::Status;
 
 using namespace std;
 
@@ -19,11 +20,9 @@ int main(void) {
   std::filesystem::remove(PATH);
   auto pop = pmem::obj::pool_base::create(PATH, "CLevel Test",
                                           PMEMOBJ_MIN_POOL * 128, 0666);
-  CLevel::SetPoolBase(pop);
-
   CLevel* db;
   db = new CLevel();
-  db->InitLeaf();
+  db->InitLeaf(pop);
 
   combotree::RandomUniformUint64 rnd;
   std::map<uint64_t, uint64_t> right_kv;
@@ -40,7 +39,7 @@ int main(void) {
     op = rnd.Next();
     uint64_t value;
     uint64_t right_value;
-    bool res;
+    Status s;
     if (op % 100 == 0) {
       // SCAN
       auto right_iter = right_kv.lower_bound(key);
@@ -59,32 +58,32 @@ int main(void) {
       case 0: // PUT
         value = key;
         if (right_kv.count(key)) {
-          res = db->Insert(key, value);
-          assert(!res);
+          s = db->Insert(pop, key, value);
+          assert(s == Status::ALREADY_EXISTS);
         } else {
           right_kv.emplace(key, value);
-          res = db->Insert(key, value);
-          assert(res);
+          s = db->Insert(pop, key, value);
+          assert(s == Status::OK);
         }
         break;
       case 1: // GET
         if (right_kv.count(key)) {
           right_value = right_kv.at(key);
-          res = db->Get(key, value);
-          assert(res && right_value == value);
+          s = db->Get(key, value);
+          assert(s == Status::OK && right_value == value);
         } else {
-          res = db->Get(key, value);
-          assert(!res);
+          s = db->Get(key, value);
+          assert(s == Status::DOES_NOT_EXIST);
         }
         break;
       case 2: // DELETE
         if (right_kv.count(key)) {
           right_kv.erase(key);
-          res = db->Delete(key);
-          assert(res);
+          s = db->Delete(key);
+          assert(s == Status::OK);
         } else {
-          res = db->Delete(key);
-          assert(!res);
+          s = db->Delete(key);
+          assert(s == Status::DOES_NOT_EXIST);
         }
         break;
     }
