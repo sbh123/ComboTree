@@ -50,6 +50,10 @@ enable_testing()
 
 add_executable(experiment tests/experiment.cc)
 
+# persistentptr_vs_offset test
+add_executable(persistentptr_vs_offset tests/persistentptr_vs_offset.cc)
+target_link_libraries(persistentptr_vs_offset pmemobj)
+
 # alloc test
 add_executable(alloc_test tests/alloc_test.cc src/clevel.cc)
 target_link_libraries(alloc_test pmemobj)

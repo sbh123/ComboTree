@@ -23,13 +23,13 @@ class BLevel {
   bool Get(uint64_t key, uint64_t& value, uint64_t begin = 0, uint64_t end = UINT64_MAX) const {
     if (end == UINT64_MAX) end = EntrySize() - 1;
     uint64_t idx = Find_(key, begin, end);
-    return GetEntry_(idx)->Get(&locks_[idx], key, value);
+    return GetEntry_(idx)->Get(&locks_[idx], base_addr_, key, value);
   }
 
   bool Insert(uint64_t key, uint64_t value, uint64_t begin = 0, uint64_t end = UINT64_MAX) {
     if (end == UINT64_MAX) end = EntrySize() - 1;
     uint64_t idx = Find_(key, begin, end);
-    bool res = GetEntry_(idx)->Insert(&locks_[idx], pop_, key, value);
+    bool res = GetEntry_(idx)->Insert(&locks_[idx], base_addr_, pop_, key, value);
     if (res) {
       root_->size++;
     }
@@ -39,13 +39,13 @@ class BLevel {
   bool Update(uint64_t key, uint64_t value, uint64_t begin = 0, uint64_t end = UINT64_MAX) {
     if (end == UINT64_MAX) end = EntrySize() - 1;
     uint64_t idx = Find_(key, begin, end);
-    return GetEntry_(idx)->Update(&locks_[idx], key, value);
+    return GetEntry_(idx)->Update(&locks_[idx], base_addr_, key, value);
   }
 
   bool Delete(uint64_t key, uint64_t begin = 0, uint64_t end = UINT64_MAX) {
     if (end == UINT64_MAX) end = EntrySize() - 1;
     uint64_t idx = Find_(key, begin, end);
-    bool res = GetEntry_(idx)->Delete(&locks_[idx], key);
+    bool res = GetEntry_(idx)->Delete(&locks_[idx], base_addr_, key);
     if (res) {
       root_->size--;
     }
@@ -61,6 +61,10 @@ class BLevel {
   uint64_t Size() const { return root_->size; }
   uint64_t EntrySize() const { return root_->nr_entry; }
 
+  uint64_t GetKey(uint64_t index) const {
+    return in_mem_key_[index];
+  }
+
   Iterator* begin();
   Iterator* end();
 
@@ -68,25 +72,78 @@ class BLevel {
 
  private:
   struct Entry {
-    enum class Type {
-      ENTRY_NONE,
-      ENTRY_VALUE,
-      ENTRY_CLVEL,
-    } type;
     uint64_t key;
     union {
       uint64_t value;
-      pmem::obj::persistent_ptr<CLevel> clevel;
+      uint64_t clevel;
+      uint64_t type;
+    };
+
+    enum Type : uint64_t {
+      ENTRY_NONE   = 0x0000000000000000UL,
+      ENTRY_VALUE  = 0x4000000000000000UL,
+      ENTRY_CLEVEL = 0x8000000000000000UL,
     };
 
     Entry() : type(Type::ENTRY_NONE) {}
-    bool Get(std::shared_mutex* mutex, uint64_t pkey, uint64_t& pvalue) const;
-    bool Insert(std::shared_mutex* mutex, pmem::obj::pool_base& pop, uint64_t pkey, uint64_t pvalue);
-    bool Update(std::shared_mutex* mutex, uint64_t pkey, uint64_t pvalue);
-    bool Delete(std::shared_mutex* mutex, uint64_t pkey);
+    bool Get(std::shared_mutex* mutex, uint64_t base_addr, uint64_t pkey, uint64_t& pvalue) const;
+    bool Insert(std::shared_mutex* mutex, uint64_t base_addr, pmem::obj::pool_base& pop, uint64_t pkey, uint64_t pvalue);
+    bool Update(std::shared_mutex* mutex, uint64_t base_addr, uint64_t pkey, uint64_t pvalue);
+    bool Delete(std::shared_mutex* mutex, uint64_t base_addr, uint64_t pkey);
+
+    const static uint64_t type_mask_  = 0xC000000000000000UL;
+    const static uint64_t value_mask_ = 0x3FFFFFFFFFFFFFFFUL;
+
+    uint64_t SetValue(uint64_t new_value) {
+      assert((new_value & value_mask_) == new_value);
+      value = GetType() | (new_value & value_mask_);
+    }
+
+    uint64_t SetClevel(CLevel* new_clevel, uint64_t base_addr) {
+      uint64_t offset = (uint64_t)new_clevel - base_addr;
+      assert((offset & value_mask_) == offset);
+      clevel = GetType() | (offset & value_mask_);
+    }
+
+    CLevel* GetClevel(uint64_t base_addr) const {
+      return reinterpret_cast<CLevel*>((clevel & value_mask_) + base_addr);
+    }
+
+    uint64_t GetType() const {
+      return type & type_mask_;
+    }
+
+    uint64_t GetValue() const {
+      return value & value_mask_;
+    }
+
+    bool IsNone() const {
+      return GetType() == Type::ENTRY_NONE;
+    }
+
+    bool IsValue() const {
+      return GetType() == Type::ENTRY_VALUE;
+    }
+
+    bool IsClevel() const {
+      return GetType() == Type::ENTRY_CLEVEL;
+    }
+
+    bool SetTypeNone() {
+      type = GetValue() | Type::ENTRY_NONE;
+    }
+
+    bool SetTypeValue() {
+      type = GetValue() | Type::ENTRY_VALUE;
+    }
+
+    bool SetTypeClevel() {
+      type = GetValue() | Type::ENTRY_CLEVEL;
+    }
   };
 
   pmem::obj::pool_base pop_;
+  uint64_t base_addr_;
 
   struct Root {
     pmem::obj::persistent_ptr<Entry[]> entry;
@@ -95,12 +152,12 @@ class BLevel {
   };
 
   pmem::obj::persistent_ptr<Root> root_;
-  Entry** in_mem_entry_;
+  Entry* in_mem_entry_;
   uint64_t* in_mem_key_;
   std::shared_mutex* locks_;
 
   Entry* GetEntry_(int index) const {
-    return in_mem_entry_[index];
+    return &in_mem_entry_[index];
   }
 
   uint64_t Find_(uint64_t key, uint64_t begin, uint64_t end) const;
@@ -119,9 +176,9 @@ class BLevel::Iter : public Iterator {
       return false;
     if (EntryType_() == BLevel::Entry::Type::ENTRY_NONE)
       return false;
-    else if (EntryType_() == BLevel::Entry::Type::ENTRY_CLVEL) {
+    else if (EntryType_() == BLevel::Entry::Type::ENTRY_CLEVEL) {
       if (clevel_iter_ == nullptr)
-        clevel_iter_ = blevel_->GetEntry_(entry_index_)->clevel->begin();
+        clevel_iter_ = GetClevel_()->begin();
       return clevel_iter_->Valid() && !clevel_iter_->End();
     }
     else if (EntryType_() == BLevel::Entry::Type::ENTRY_VALUE)
@@ -130,7 +187,7 @@ class BLevel::Iter : public Iterator {
 
   bool Begin() const {
     if (entry_index_ == 0) {
-      if (entry_type_ == BLevel::Entry::Type::ENTRY_CLVEL)
+      if (entry_type_ == BLevel::Entry::Type::ENTRY_CLEVEL)
         return clevel_iter_->Begin();
       else
         return true;
@@ -142,9 +199,9 @@ class BLevel::Iter : public Iterator {
     if (entry_index_ >= blevel_->EntrySize()) {
       return true;
     } else if (entry_index_ == blevel_->EntrySize() - 1) {
-      if (EntryType_() == BLevel::Entry::Type::ENTRY_CLVEL) {
+      if (EntryType_() == BLevel::Entry::Type::ENTRY_CLEVEL) {
         if (clevel_iter_ == nullptr)
-          clevel_iter_ = blevel_->GetEntry_(entry_index_)->clevel->begin();
+          clevel_iter_ = GetClevel_()->begin();
         return clevel_iter_->End();
       }
     }
@@ -154,9 +211,9 @@ class BLevel::Iter : public Iterator {
   void SeekToFirst() {
     entry_index_ = 0;
     Lock_();
-    entry_type_ = blevel_->GetEntry_(entry_index_)->type;
-    if (entry_type_ == BLevel::Entry::Type::ENTRY_CLVEL) {
-      clevel_iter_ = blevel_->GetEntry_(entry_index_)->clevel->begin();
+    entry_type_ = EntryType_();
+    if (entry_type_ == BLevel::Entry::Type::ENTRY_CLEVEL) {
+      clevel_iter_ = GetClevel_()->begin();
       if (clevel_iter_->End())
         Next();
       return;
@@ -170,15 +227,14 @@ class BLevel::Iter : public Iterator {
   void SeekToLast() {
     entry_index_ = blevel_->EntrySize() - 1;
     Lock_();
-    while (blevel_->GetEntry_(entry_index_)->type ==
-           BLevel::Entry::Type::ENTRY_NONE) {
+    while (EntryType_() == BLevel::Entry::Type::ENTRY_NONE) {
       Unlock_();
       entry_index_--;
       Lock_();
     }
-    entry_type_ = blevel_->GetEntry_(entry_index_)->type;
-    if (entry_type_ == BLevel::Entry::Type::ENTRY_CLVEL) {
-      clevel_iter_ = blevel_->GetEntry_(entry_index_)->clevel->end();
+    entry_type_ = EntryType_();
+    if (entry_type_ == BLevel::Entry::Type::ENTRY_CLEVEL) {
+      clevel_iter_ = GetClevel_()->end();
     }
   }
 
@@ -187,10 +243,10 @@ class BLevel::Iter : public Iterator {
     Lock_();
     entry_type_ = EntryType_();
     if (entry_type_ == BLevel::Entry::Type::ENTRY_VALUE) {
-      if (blevel_->GetEntry_(entry_index_)->key < target)
+      if (blevel_->GetKey(entry_index_) < target)
         Next();
-    } else if (entry_type_ == BLevel::Entry::Type::ENTRY_CLVEL) {
-      clevel_iter_ = blevel_->GetEntry_(entry_index_)->clevel->begin();
+    } else if (entry_type_ == BLevel::Entry::Type::ENTRY_CLEVEL) {
+      clevel_iter_ = GetClevel_()->begin();
       clevel_iter_->Seek(target);
       if (clevel_iter_->End())
         Next();
@@ -204,7 +260,7 @@ class BLevel::Iter : public Iterator {
   }
 
   void Next() {
-    if (entry_type_ == BLevel::Entry::Type::ENTRY_CLVEL) {
+    if (entry_type_ == BLevel::Entry::Type::ENTRY_CLEVEL) {
       clevel_iter_->Next();
       if (!clevel_iter_->End())
         return;
@@ -216,13 +272,13 @@ class BLevel::Iter : public Iterator {
 
   uint64_t key() const {
     switch (entry_type_) {
-      case BLevel::Entry::Type::ENTRY_CLVEL:
+      case BLevel::Entry::Type::ENTRY_CLEVEL:
         return clevel_iter_->key();
       case BLevel::Entry::Type::ENTRY_NONE:
         assert(0);
         return 0;
       case BLevel::Entry::Type::ENTRY_VALUE:
-        return blevel_->GetEntry_(entry_index_)->key;
+        return blevel_->GetKey(entry_index_);
       default:
         assert(0);
         break;
@@ -231,13 +287,13 @@ class BLevel::Iter : public Iterator {
 
   uint64_t value() const {
     switch (entry_type_) {
-      case BLevel::Entry::Type::ENTRY_CLVEL:
+      case BLevel::Entry::Type::ENTRY_CLEVEL:
         return clevel_iter_->value();
       case BLevel::Entry::Type::ENTRY_NONE:
         assert(0);
         return 0;
       case BLevel::Entry::Type::ENTRY_VALUE:
-        return blevel_->GetEntry_(entry_index_)->value;
+        return blevel_->GetEntry_(entry_index_)->GetValue();
       default:
         assert(0);
         break;
@@ -249,7 +305,7 @@ class BLevel::Iter : public Iterator {
   uint64_t entry_index_;
   uint64_t begin_entry_index_;
   mutable Iterator* clevel_iter_;
-  BLevel::Entry::Type entry_type_;
+  uint64_t entry_type_;
   bool locked_;
 
   void Lock_() {
@@ -262,8 +318,8 @@ class BLevel::Iter : public Iterator {
     // locked_ = false;
   }
 
-  BLevel::Entry::Type EntryType_() const {
-    return blevel_->GetEntry_(entry_index_)->type;
+  uint64_t EntryType_() const {
+    return blevel_->GetEntry_(entry_index_)->GetType();
   }
 
   void NextEntry_() {
@@ -283,7 +339,11 @@ class BLevel::Iter : public Iterator {
     }
     if (End())
       return;
-    entry_type_ = blevel_->GetEntry_(entry_index_)->type;
+    entry_type_ = EntryType_();
+  }
+
+  CLevel* GetClevel_() const {
+    return blevel_->GetEntry_(entry_index_)->GetClevel(blevel_->base_addr_);
   }
 
 };
