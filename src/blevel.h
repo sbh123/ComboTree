@@ -53,7 +53,7 @@ class BLevel {
   Status Get(uint64_t key, uint64_t& value) const {
     uint64_t end;
     if (is_expanding_.load())
-      end = root_->size - 1;
+      end = std::min(root_->size - 1, root_->nr_entry);
     else
       end = EntrySize() - 1;
     return Get(key, value, 0, end);
@@ -62,7 +62,7 @@ class BLevel {
   Status Insert(uint64_t key, uint64_t value) {
     uint64_t end;
     if (is_expanding_.load())
-      end = root_->size - 1;
+      end = std::min(root_->size - 1, root_->nr_entry);
     else
       end = EntrySize() - 1;
     return Insert(key, value, 0, end);
@@ -71,7 +71,7 @@ class BLevel {
   Status Update(uint64_t key, uint64_t value) {
     uint64_t end;
     if (is_expanding_.load())
-      end = root_->size - 1;
+      end = std::min(root_->size - 1, root_->nr_entry);
     else
       end = EntrySize() - 1;
     return Update(key, value, 0, end);
@@ -80,7 +80,7 @@ class BLevel {
   Status Delete(uint64_t key) {
     uint64_t end;
     if (is_expanding_.load())
-      end = root_->size - 1;
+      end = std::min(root_->size - 1, root_->nr_entry);
     else
       end = EntrySize() - 1;
     return Delete(key, 0, end);
