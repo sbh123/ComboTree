@@ -58,6 +58,13 @@ void ComboTree::ChangeToComboTree_() {
 void ComboTree::ExpandComboTree_() {
   LOG(Debug::INFO, "start to expand combotree. current size is %ld", Size());
 
+  // change status
+  State tmp = State::USING_COMBO_TREE;
+  if (!status_.compare_exchange_strong(tmp, State::COMBO_TREE_EXPANDING)) {
+    LOG(Debug::WARNING, "another thread is expanding combotree! exit.");
+    return;
+  }
+
   BLevel* old_blevel = blevel_;
   ALevel* old_alevel = alevel_;
   std::string old_pool_path = manifest_->ComboTreePath();
@@ -68,13 +75,6 @@ void ComboTree::ExpandComboTree_() {
   blevel_ = new BLevel(new_pool, old_blevel);
   expand_min_key_.store(0);
   expand_max_key_.store(0);
-
-  // change status
-  State tmp = State::USING_COMBO_TREE;
-  if (!status_.compare_exchange_strong(tmp, State::COMBO_TREE_EXPANDING)) {
-    LOG(Debug::WARNING, "another thread is expanding combotree! exit.");
-    return;
-  }
 
   std::thread expandion_thread([&,new_pool,old_pool_path,old_alevel,old_blevel](){
     blevel_->Expansion(old_blevel, expand_min_key_, expand_max_key_);
@@ -89,8 +89,6 @@ void ComboTree::ExpandComboTree_() {
           "can not change state from COMBO_TREE_EXPANDING to USING_COMBO_TREE!");
     }
 
-    LOG(Debug::INFO, "finish expanding combotree. current size is %ld", Size());
-
     // remove old pool
     pop_.close();
     std::filesystem::remove(old_pool_path);
@@ -99,6 +97,8 @@ void ComboTree::ExpandComboTree_() {
     // TODO: delete immediately?
     delete old_alevel;
     delete old_blevel;
+
+    LOG(Debug::INFO, "finish expanding combotree. current size is %ld", Size());
   });
   expandion_thread.detach();
 }

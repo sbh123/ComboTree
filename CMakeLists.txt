@@ -50,6 +50,9 @@ enable_testing()
 
 add_executable(experiment tests/experiment.cc)
 
+# mutex test
+add_executable(mutex_test tests/mutex_test.cc)
+
 # persistentptr_vs_offset test
 add_executable(persistentptr_vs_offset tests/persistentptr_vs_offset.cc)
 target_link_libraries(persistentptr_vs_offset pmemobj)

@@ -55,17 +55,12 @@ class ComboTreeV2<uint64_t, uint64_t> : public kvbench::DB<uint64_t, uint64_t> {
     return cnt;
   }
 
-  int GetThreadNumber() const {
-    return nr_thread_;
-  }
-
   std::string Name() const {
     return "Combo Tree V2";
   }
 
  private:
   ComboTree* db_;
-  int nr_thread_ = 1;
   int scan_size_ = 100;
 };
 

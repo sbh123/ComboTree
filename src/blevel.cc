@@ -49,7 +49,7 @@ BLevel::BLevel(pmem::obj::pool_base pop, BLevel* old_blevel)
 {
   pmem::obj::pool<Root> pool(pop_);
   root_ = pool.root();
-  root_->nr_entry = old_blevel->Size() * 1.01;  // reserve some entry for insertion
+  root_->nr_entry = old_blevel->Size() * 1.1;  // reserve some entry for insertion
   root_->size = 0;
   base_addr_ = (uint64_t)root_.get() - root_.raw().off;
   pmem::obj::make_persistent_atomic<Entry[]>(pop_, root_->entry, EntrySize());
