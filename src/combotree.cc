@@ -186,6 +186,7 @@ bool ComboTree::Get(uint64_t key, uint64_t& value) const {
           std::this_thread::sleep_for(std::chrono::microseconds(5));
         }
       }
+      break;
     }
   }
   return s == Status::OK;
@@ -220,6 +221,7 @@ bool ComboTree::Delete(uint64_t key) {
           std::this_thread::sleep_for(std::chrono::microseconds(5));
         }
       }
+      break;
     }
   }
   return s == Status::OK;
