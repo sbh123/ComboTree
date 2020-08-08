@@ -7,6 +7,7 @@ set(PMEMKV_THRESHOLD    1024)
 set(CLEVEL_LEAF_ENTRY   8)      # must be even, and must <= 16
 set(CLEVEL_INDEX_ENTRY  8)      # must be even
 set(EXPANSION_FACTOR    2)
+set(ENTRY_SIZE_FACTOR   1.1)    # the entry size factor when expanding
 
 configure_file(
   "${PROJECT_SOURCE_DIR}/src/combotree_config.h.in"
@@ -49,6 +50,10 @@ find_package(PkgConfig QUIET)
 enable_testing()
 
 add_executable(experiment tests/experiment.cc)
+
+# lock_vs_lockfree test
+add_executable(lock_vs_lockfree tests/lock_vs_lockfree.cc)
+target_link_libraries(lock_vs_lockfree pthread)
 
 # mutex test
 add_executable(mutex_test tests/mutex_test.cc)

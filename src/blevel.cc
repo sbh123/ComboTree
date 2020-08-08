@@ -1,7 +1,7 @@
 #include <libpmemobj++/persistent_ptr.hpp>
 #include <libpmemobj++/make_persistent_atomic.hpp>
 #include <libpmemobj++/make_persistent_array_atomic.hpp>
-#include <iostream>
+#include "combotree_config.h"
 #include "blevel.h"
 #include "debug.h"
 
@@ -49,7 +49,7 @@ BLevel::BLevel(pmem::obj::pool_base pop, BLevel* old_blevel)
 {
   pmem::obj::pool<Root> pool(pop_);
   root_ = pool.root();
-  root_->nr_entry = old_blevel->Size() * 1.1;  // reserve some entry for insertion
+  root_->nr_entry = old_blevel->Size() * ENTRY_SIZE_FACTOR;  // reserve some entry for insertion
   root_->size = 0;
   base_addr_ = (uint64_t)root_.get() - root_.raw().off;
   pmem::obj::make_persistent_atomic<Entry[]>(pop_, root_->entry, EntrySize());
@@ -272,8 +272,6 @@ Status BLevel::Entry::Delete(std::shared_mutex* mutex, uint64_t base_addr, uint6
 uint64_t BLevel::Find_(uint64_t key, uint64_t begin, uint64_t end) const {
   assert(begin >= 0 && begin < EntrySize());
   assert(end >= 0 && end < EntrySize());
-  // if (end - begin > 10)
-  //   std::cout << end - begin << std::endl;
   int_fast32_t left = begin;
   int_fast32_t right = end;
   // binary search

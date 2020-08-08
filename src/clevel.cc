@@ -163,8 +163,7 @@ Status CLevel::LeafNode::Insert(pool_base& pop, uint64_t key, uint64_t value,
   }
 
   uint64_t new_sorted_array;
-  uint64_t entry_idx = (next_entry != LEAF_ENTRYS) ? next_entry
-                                                          : GetFreeIndex_();
+  int entry_idx = (next_entry != LEAF_ENTRYS) ? next_entry : GetFreeIndex_();
 
   // free mask is free index in sorted_array
   // after mask is the index which is bigger than sorted_index
@@ -188,7 +187,7 @@ Status CLevel::LeafNode::Insert(pool_base& pop, uint64_t key, uint64_t value,
   uint64_t before_index = sorted_array & before_mask;
   new_sorted_array =
       before_index |
-      (entry_idx << ((15 - sorted_index) * 4)) |
+      ((uint64_t)entry_idx << ((15 - sorted_index) * 4)) |
       after_index |
       free_index;
 

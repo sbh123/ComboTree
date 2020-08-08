@@ -28,7 +28,7 @@ int main(void) {
   combotree::RandomUniformUint64 rnd;
 
   for (int i = 0; i < 1024; ++i) {
-    uint64_t key, value;
+    uint64_t key;
     f >> key;
     kv.emplace(key, key);
     right_kv.emplace(key, key);

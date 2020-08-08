@@ -26,7 +26,7 @@ int main(void) {
 
   fstream f("/home/qyzhang/Projects/ComboTree/build/workload.txt", ios::in);
 
-  uint64_t key, value;
+  uint64_t key;
   for (int i = 0; i < 1024; ++i) {
     f >> key;
     kv.emplace(key, key);
