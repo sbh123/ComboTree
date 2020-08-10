@@ -3,7 +3,7 @@
 
 namespace combotree {
 
-ALevel::ALevel(BLevel* blevel, int span)
+ALevel::ALevel(std::shared_ptr<BLevel> blevel, int span)
     : span_(span), blevel_(blevel)
 {
   min_key_ = blevel_->MinEntryKey();

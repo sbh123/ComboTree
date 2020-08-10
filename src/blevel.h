@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <shared_mutex>
 #include <atomic>
+#include <memory>
 #include <libpmemobj++/persistent_ptr.hpp>
 #include "combotree/iterator.h"
 #include "status.h"
@@ -18,7 +19,7 @@ class BLevel {
   class Iter;
 
   BLevel(pmem::obj::pool_base pop, Iterator* iter, uint64_t size);
-  BLevel(pmem::obj::pool_base pop, BLevel* old_blevel);
+  BLevel(pmem::obj::pool_base pop, std::shared_ptr<BLevel> old_blevel);
   BLevel(pmem::obj::pool_base pop);
   ~BLevel();
 
@@ -99,7 +100,7 @@ class BLevel {
     return in_mem_key_[index];
   }
 
-  void Expansion(BLevel* old_blevel, std::atomic<uint64_t>& min_key,
+  void Expansion(std::shared_ptr<BLevel> old_blevel, std::atomic<uint64_t>& min_key,
                  std::atomic<uint64_t>& max_key);
 
   Iterator* begin();
@@ -223,14 +224,16 @@ class BLevel {
 class BLevel::Iter : public Iterator {
  public:
   explicit Iter(BLevel* blevel)
-      : blevel_(blevel), entry_index_(0), clevel_iter_(nullptr), locked_(false) {}
-  ~Iter() {
-    if (locked_) Unlock_();
-  }
+      : blevel_(blevel), entry_index_(0), clevel_iter_(nullptr), locked_(false)
+  {}
+
+  ~Iter() { if (locked_) Unlock_(); }
 
   bool Valid() const {
     if (entry_index_ < 0 || entry_index_ >= blevel_->EntrySize())
       return false;
+    if (blevel_->GetEntry_(entry_index_)->IsUnValid())
+      return true;
     if (EntryType_() == BLevel::Entry::Type::ENTRY_NONE)
       return false;
     else if (EntryType_() == BLevel::Entry::Type::ENTRY_CLEVEL) {
@@ -298,6 +301,7 @@ class BLevel::Iter : public Iterator {
   }
 
   void Seek(uint64_t target, uint64_t begin, uint64_t end) {
+    Unlock_();
     entry_index_ = blevel_->Find_(target, begin, end);
     Lock_();
     entry_type_ = EntryType_();
@@ -368,13 +372,15 @@ class BLevel::Iter : public Iterator {
   bool locked_;
 
   void Lock_() {
-    // blevel_->locks_[entry_index_].lock();
-    // locked_ = true;
+    assert(locked_ == false);
+    blevel_->locks_[entry_index_].lock();
+    locked_ = true;
   }
 
   void Unlock_() {
-    // blevel_->locks_[entry_index_].unlock();
-    // locked_ = false;
+    assert(locked_ == true);
+    blevel_->locks_[entry_index_].unlock();
+    locked_ = false;
   }
 
   uint64_t EntryType_() const {
@@ -387,6 +393,8 @@ class BLevel::Iter : public Iterator {
       delete clevel_iter_;
     clevel_iter_ = nullptr;
     entry_index_++;
+    if (entry_index_ >= blevel_->EntrySize())
+      return;
     Lock_();
     while (!End() && !Valid()) {
       Unlock_();

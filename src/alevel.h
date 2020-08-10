@@ -11,7 +11,7 @@ namespace combotree {
 
 class ALevel {
  public:
-  ALevel(BLevel* blevel, int span = DEFAULT_SPAN);
+  ALevel(std::shared_ptr<BLevel> blevel, int span = DEFAULT_SPAN);
 
   Status Insert(uint64_t key, uint64_t value) {
     uint64_t begin, end;
@@ -41,6 +41,14 @@ class ALevel {
     return blevel_->Size();
   }
 
+  Iterator* begin() {
+    return blevel_->begin();
+  }
+
+  Iterator* end() {
+    return blevel_->end();
+  }
+
  private:
   struct Entry {
     Entry() : key(0), offset(0) {}
@@ -50,7 +58,7 @@ class ALevel {
   };
 
   int span_;
-  BLevel* blevel_;
+  std::shared_ptr<BLevel> blevel_;
   uint64_t min_key_;
   uint64_t max_key_;
   uint64_t nr_blevel_entry_;

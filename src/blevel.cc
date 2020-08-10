@@ -1,3 +1,4 @@
+#include <memory>
 #include <libpmemobj++/persistent_ptr.hpp>
 #include <libpmemobj++/make_persistent_atomic.hpp>
 #include <libpmemobj++/make_persistent_array_atomic.hpp>
@@ -18,7 +19,7 @@ BLevel::BLevel(pmem::obj::pool_base pop, Iterator* iter, uint64_t size)
   base_addr_ = (uint64_t)root_.get() - root_.raw().off;
   pmem::obj::make_persistent_atomic<Entry[]>(pop_, root_->entry, root_->nr_entry);
   // add one extra lock to make blevel iter's logic simple
-  locks_ = new std::shared_mutex[root_->nr_entry + 1];
+  locks_ = new std::shared_mutex[EntrySize()];
   in_mem_entry_ = root_->entry.get();
   assert(GetEntry_(1) == &root_->entry[1]);
   int pos = 0;
@@ -43,7 +44,7 @@ BLevel::BLevel(pmem::obj::pool_base pop, Iterator* iter, uint64_t size)
   }
 }
 
-BLevel::BLevel(pmem::obj::pool_base pop, BLevel* old_blevel)
+BLevel::BLevel(pmem::obj::pool_base pop, std::shared_ptr<BLevel> old_blevel)
     : pop_(pop), in_mem_entry_(nullptr), in_mem_key_(nullptr),
       is_expanding_(true)
 {
@@ -54,7 +55,7 @@ BLevel::BLevel(pmem::obj::pool_base pop, BLevel* old_blevel)
   base_addr_ = (uint64_t)root_.get() - root_.raw().off;
   pmem::obj::make_persistent_atomic<Entry[]>(pop_, root_->entry, EntrySize());
   // add one extra lock to make blevel iter's logic simple
-  locks_ = new std::shared_mutex[EntrySize() + 1];
+  locks_ = new std::shared_mutex[EntrySize()];
   in_mem_entry_ = root_->entry.get();
   in_mem_key_ = new uint64_t[root_->nr_entry];
   assert(GetEntry_(1) == &root_->entry[1]);
@@ -95,7 +96,7 @@ void BLevel::ExpandAddEntry_(uint64_t& index, uint64_t key, uint64_t value) {
   }
 }
 
-void BLevel::Expansion(BLevel* old_blevel, std::atomic<uint64_t>& min_key,
+void BLevel::Expansion(std::shared_ptr<BLevel> old_blevel, std::atomic<uint64_t>& min_key,
                         std::atomic<uint64_t>& max_key) {
   uint64_t old_index = 0;
   uint64_t new_index = 0;
@@ -172,7 +173,7 @@ BLevel::BLevel(pmem::obj::pool_base pop)
 {
   pmem::obj::pool<Root> pool(pop_);
   root_ = pool.root();
-  locks_ = new std::shared_mutex[root_->nr_entry];
+  locks_ = new std::shared_mutex[EntrySize()];
 }
 
 BLevel::~BLevel() {

@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <atomic>
+#include <memory>
 #include <libpmemobj++/persistent_ptr.hpp>
 #include "combotree/iterator.h"
 
@@ -38,13 +39,12 @@ class ComboTree {
     COMBO_TREE_EXPANDING,
   };
 
-  // pool_dir_ end with '/'
   std::string pool_dir_;
   size_t pool_size_;
   pmem::obj::pool_base pop_;
-  ALevel* alevel_;
-  BLevel* blevel_;
-  PmemKV* pmemkv_;
+  std::shared_ptr<ALevel> alevel_;
+  std::shared_ptr<BLevel> blevel_;
+  std::shared_ptr<PmemKV> pmemkv_;
   Manifest* manifest_;
   std::atomic<State> status_;
   // max key finish expanding or in expanding

@@ -2,6 +2,7 @@
 #include <filesystem>
 #include <fstream>
 #include <map>
+#include <memory>
 #include "alevel.h"
 #include "combotree/iterator.h"
 #include "std_map_iterator.h"
@@ -35,8 +36,8 @@ int main(void) {
 
   combotree::Iterator* iter = new combotree::MapIterator(&kv);
   iter->SeekToFirst();
-  combotree::BLevel* blevel = new combotree::BLevel(pop, iter, kv.size());
-  combotree::ALevel* db = new combotree::ALevel(blevel);
+  shared_ptr<combotree::BLevel> blevel = make_shared<combotree::BLevel>(pop, iter, kv.size());
+  shared_ptr<combotree::ALevel> db = make_shared<combotree::ALevel>(blevel);
 
   // for (int i = 100; i < TEST_SIZE; ++i) {
   //   f >> key;

@@ -5,6 +5,9 @@
 
 namespace combotree {
 
+std::atomic<bool> PmemKV::read_valid_  = true;
+std::atomic<bool> PmemKV::write_valid_ = true;
+
 using pmem::kv::config;
 using pmem::kv::status;
 using pmem::kv::db;

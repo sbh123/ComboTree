@@ -32,6 +32,8 @@ class PmemKV {
 
   Status Insert(uint64_t key, uint64_t value) {
     WriteRef_();
+    if (!write_valid_.load(std::memory_order_acquire))
+      return Status::UNVALID;
     char key_buf[sizeof(uint64_t)];
     char value_buf[sizeof(uint64_t)];
     int2char(key, key_buf);
@@ -61,6 +63,8 @@ class PmemKV {
 
   Status Get(uint64_t key, uint64_t& value) const {
     ReadRef_();
+    if (!read_valid_.load(std::memory_order_acquire))
+      return Status::UNVALID;
     char key_buf[sizeof(uint64_t)];
     int2char(key, key_buf);
 
@@ -77,6 +81,8 @@ class PmemKV {
 
   Status Delete(uint64_t key) {
     WriteRef_();
+    if (!write_valid_.load(std::memory_order_acquire))
+      return Status::UNVALID;
     char key_buf[sizeof(uint64_t)];
     int2char(key, key_buf);
     auto s = db_->remove(string_view(key_buf, sizeof(uint64_t)));
@@ -91,6 +97,8 @@ class PmemKV {
 
   size_t Size() const {
     ReadRef_();
+    if (!read_valid_.load(std::memory_order_acquire))
+      return -1;
     size_t size;
     auto s = db_->count_all(size);
     assert(s == status::OK);
@@ -106,6 +114,22 @@ class PmemKV {
     return read_ref_.load() == 0;
   }
 
+  static void SetWriteValid() {
+    write_valid_.store(true, std::memory_order_release);
+  }
+
+  static void SetWriteUnvalid() {
+    write_valid_.store(false, std::memory_order_release);
+  }
+
+  static void SetReadValid() {
+    read_valid_.store(true, std::memory_order_release);
+  }
+
+  static void SetReadUnvalid() {
+    read_valid_.store(false, std::memory_order_release);
+  }
+
   class Iter;
 
   Iterator* begin();
@@ -115,6 +139,9 @@ class PmemKV {
   pmem::kv::db* db_;
   mutable std::atomic<int> write_ref_;
   mutable std::atomic<int> read_ref_;
+
+  static std::atomic<bool> write_valid_;
+  static std::atomic<bool> read_valid_;
 
   void WriteRef_() const { write_ref_++; }
   void WriteUnRef_() const { write_ref_--; }
@@ -157,7 +184,7 @@ class PmemKV::Iter : public Iterator {
       uint64_t mid_key = kv_pair_[middle].first;
       if (mid_key == target) {
         index_ = middle;
-        break;
+        return;
       } else if (mid_key < target) {
         left = middle + 1;
       } else {
