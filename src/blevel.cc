@@ -19,7 +19,7 @@ BLevel::BLevel(pmem::obj::pool_base pop, Iterator* iter, uint64_t size)
   base_addr_ = (uint64_t)root_.get() - root_.raw().off;
   pmem::obj::make_persistent_atomic<Entry[]>(pop_, root_->entry, root_->nr_entry);
   // add one extra lock to make blevel iter's logic simple
-  locks_ = new std::shared_mutex[EntrySize()];
+  locks_ = new std::shared_mutex[EntrySize() + 1];
   in_mem_entry_ = root_->entry.get();
   assert(GetEntry_(1) == &root_->entry[1]);
   int pos = 0;
@@ -55,7 +55,7 @@ BLevel::BLevel(pmem::obj::pool_base pop, std::shared_ptr<BLevel> old_blevel)
   base_addr_ = (uint64_t)root_.get() - root_.raw().off;
   pmem::obj::make_persistent_atomic<Entry[]>(pop_, root_->entry, EntrySize());
   // add one extra lock to make blevel iter's logic simple
-  locks_ = new std::shared_mutex[EntrySize()];
+  locks_ = new std::shared_mutex[EntrySize() + 1];
   in_mem_entry_ = root_->entry.get();
   in_mem_key_ = new uint64_t[root_->nr_entry];
   assert(GetEntry_(1) == &root_->entry[1]);
@@ -85,10 +85,11 @@ void BLevel::ExpandAddEntry_(uint64_t& index, uint64_t key, uint64_t value) {
       ent->SetTypeClevel();
       ent->SetClevel(new_clevel.get(), base_addr_);
     } else if (ent->IsNone()) {
-      ent->SetTypeValue();
-      ent->SetKey(key);
-      in_mem_key_[index] = key;
-      ent->SetValue(value);
+      // ent->SetTypeValue();
+      // ent->SetKey(key);
+      // in_mem_key_[EntrySize() - 1] = key;
+      // ent->SetValue(value);
+      assert(0);
     } else {
       assert(0);
     }
@@ -173,7 +174,7 @@ BLevel::BLevel(pmem::obj::pool_base pop)
 {
   pmem::obj::pool<Root> pool(pop_);
   root_ = pool.root();
-  locks_ = new std::shared_mutex[EntrySize()];
+  locks_ = new std::shared_mutex[EntrySize() + 1];
 }
 
 BLevel::~BLevel() {

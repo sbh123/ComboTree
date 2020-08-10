@@ -16,6 +16,7 @@ class PmemKV;
 class ComboTree {
  public:
   ComboTree(std::string pool_dir, size_t pool_size, bool create = true);
+  ~ComboTree();
 
   bool Insert(uint64_t key, uint64_t value);
   bool Update(uint64_t key, uint64_t value);
@@ -50,6 +51,7 @@ class ComboTree {
   // max key finish expanding or in expanding
   std::atomic<uint64_t> expand_min_key_;
   std::atomic<uint64_t> expand_max_key_;
+  std::atomic<bool> permit_delete_;
 
   bool ValidPoolDir_();
   void ChangeToComboTree_();
