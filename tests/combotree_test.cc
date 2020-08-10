@@ -36,23 +36,22 @@ int main(void) {
     bool res;
     if (op % 100 == 0) {
       // SCAN
+      std::vector<std::pair<uint64_t,uint64_t>> results;
+      size_t size = 0;
+      size = db->Scan(key, UINT64_MAX, UINT32_MAX, results);
       auto right_iter = right_kv.lower_bound(key);
-      auto iter = db->begin();
-      iter->Seek(key);
+      auto iter = results.begin();
       int cnt = 0;
       while (right_iter != right_kv.end()) {
         cnt++;
-        key = iter->key();
-        assert(right_iter->first == iter->key());
-        assert(right_iter->second == iter->value());
+        assert(right_iter->first == iter->first);
+        assert(right_iter->second == iter->second);
         right_iter++;
-        iter->Next();
+        iter++;
       }
-      assert(iter->End());
-      delete iter;
-      continue;
+      assert(iter == results.end());
     }
-    switch (op % 3) {
+    switch (op % 1) {
       case 0: // PUT
         value = rnd.Next();
         if (right_kv.count(key)) {

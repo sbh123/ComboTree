@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <atomic>
 #include <memory>
+#include <vector>
 #include <libpmemobj++/persistent_ptr.hpp>
 #include "combotree/iterator.h"
 
@@ -13,6 +14,11 @@ class BLevel;
 class Manifest;
 class PmemKV;
 
+struct Pair {
+  uint64_t key;
+  uint64_t value;
+};
+
 class ComboTree {
  public:
   ComboTree(std::string pool_dir, size_t pool_size, bool create = true);
@@ -22,6 +28,10 @@ class ComboTree {
   bool Update(uint64_t key, uint64_t value);
   bool Get(uint64_t key, uint64_t& value) const;
   bool Delete(uint64_t key);
+  size_t Scan(uint64_t min_key, uint64_t max_key, size_t size,
+      std::vector<std::pair<uint64_t, uint64_t>>& results);
+  size_t Scan(uint64_t min_key, uint64_t max_key, size_t size,
+      Pair* results);
 
   size_t Size() const;
 
@@ -56,6 +66,9 @@ class ComboTree {
   bool ValidPoolDir_();
   void ChangeToComboTree_();
   void ExpandComboTree_();
+  size_t Scan_(uint64_t min_key, uint64_t max_key, size_t size,
+      std::function<void(uint64_t,uint64_t)> callback,
+      std::function<uint64_t()> cur_max_key);
 };
 
 } // namespace combotree

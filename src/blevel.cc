@@ -1,3 +1,4 @@
+#include <iostream>
 #include <memory>
 #include <libpmemobj++/persistent_ptr.hpp>
 #include <libpmemobj++/make_persistent_atomic.hpp>
@@ -14,7 +15,7 @@ BLevel::BLevel(pmem::obj::pool_base pop, Iterator* iter, uint64_t size)
 {
   pmem::obj::pool<Root> pool(pop_);
   root_ = pool.root();
-  root_->nr_entry = iter->key() == 0 ? size : size + 1;
+  root_->nr_entry.store(iter->key() == 0 ? size : size + 1);
   root_->size = size;
   base_addr_ = (uint64_t)root_.get() - root_.raw().off;
   pmem::obj::make_persistent_atomic<Entry[]>(pop_, root_->entry, root_->nr_entry);
@@ -50,8 +51,9 @@ BLevel::BLevel(pmem::obj::pool_base pop, std::shared_ptr<BLevel> old_blevel)
 {
   pmem::obj::pool<Root> pool(pop_);
   root_ = pool.root();
-  root_->nr_entry = old_blevel->Size() * ENTRY_SIZE_FACTOR;  // reserve some entry for insertion
-  root_->size = 0;
+  root_->nr_entry.store(old_blevel->Size() * ENTRY_SIZE_FACTOR);  // reserve some entry for insertion
+  root_->size.store(0);
+  expanding_entry_index_.store(0);
   base_addr_ = (uint64_t)root_.get() - root_.raw().off;
   pmem::obj::make_persistent_atomic<Entry[]>(pop_, root_->entry, EntrySize());
   // add one extra lock to make blevel iter's logic simple
@@ -61,16 +63,16 @@ BLevel::BLevel(pmem::obj::pool_base pop, std::shared_ptr<BLevel> old_blevel)
   assert(GetEntry_(1) == &root_->entry[1]);
 }
 
-void BLevel::ExpandAddEntry_(uint64_t& index, uint64_t key, uint64_t value) {
-  if (index < EntrySize()) {
-    std::lock_guard<std::shared_mutex> lock(locks_[index]);
-    Entry* ent = GetEntry_(index);
+void BLevel::ExpandAddEntry_(uint64_t key, uint64_t value) {
+  if (expanding_entry_index_ < EntrySize()) {
+    std::lock_guard<std::shared_mutex> lock(locks_[expanding_entry_index_]);
+    Entry* ent = GetEntry_(expanding_entry_index_);
     ent->SetTypeValue();
     ent->SetKey(key);
-    in_mem_key_[index] = key;
+    in_mem_key_[expanding_entry_index_] = key;
     ent->SetValue(value);
-    index++;
     root_->size++;
+    expanding_entry_index_++;
   } else {
     std::lock_guard<std::shared_mutex> lock(locks_[EntrySize() - 1]);
     Entry* ent = GetEntry_(EntrySize() - 1);
@@ -100,56 +102,60 @@ void BLevel::ExpandAddEntry_(uint64_t& index, uint64_t key, uint64_t value) {
 void BLevel::Expansion(std::shared_ptr<BLevel> old_blevel, std::atomic<uint64_t>& min_key,
                         std::atomic<uint64_t>& max_key) {
   uint64_t old_index = 0;
-  uint64_t new_index = 0;
+  expanding_entry_index_.store(0);
   // handle entry 0 explicit
-  old_blevel->locks_[0].lock();
-  locks_[0].lock();
-  min_key.store(0);
-  max_key.store(old_blevel->GetKey(1));
-  Entry* old_ent = old_blevel->GetEntry_(0);
-  Entry* new_ent = GetEntry_(0);
-  new_ent->SetKey(0);
-  in_mem_key_[0] = 0;
-  if (old_ent->IsValue()) {
-    new_ent->SetTypeValue();
-    new_ent->SetValue(old_ent->GetValue());
-    root_->size++;
-    old_ent->SetTypeUnValid();
-    old_index++;
-  } else if (old_ent->IsClevel()) {
-    Iterator* clevel_iter = old_ent->GetClevel(old_blevel->base_addr_)->begin();
-    if (!clevel_iter->End() && clevel_iter->key() == 0) {
+  {
+    std::lock_guard<std::shared_mutex> old_lock(old_blevel->locks_[0]);
+    std::lock_guard<std::shared_mutex> lock(locks_[0]);
+    min_key.store(0);
+    max_key.store(old_blevel->GetKey(1));
+    Entry* old_ent = old_blevel->GetEntry_(0);
+    Entry* new_ent = GetEntry_(0);
+    new_ent->SetKey(0);
+    in_mem_key_[0] = 0;
+    if (old_ent->IsValue()) {
       new_ent->SetTypeValue();
-      new_ent->SetValue(clevel_iter->value());
+      new_ent->SetValue(old_ent->GetValue());
       root_->size++;
-      delete clevel_iter;
-      old_ent->GetClevel(old_blevel->base_addr_)->Delete(0);
+      old_ent->SetTypeUnValid();
+      old_index++;
+    } else if (old_ent->IsClevel()) {
+      Iterator* clevel_iter = old_ent->GetClevel(old_blevel->base_addr_)->begin();
+      if (!clevel_iter->End() && clevel_iter->key() == 0) {
+        new_ent->SetTypeValue();
+        new_ent->SetValue(clevel_iter->value());
+        root_->size++;
+        delete clevel_iter;
+        old_ent->GetClevel(old_blevel->base_addr_)->Delete(0);
+      } else {
+        new_ent->SetTypeNone();
+        delete clevel_iter;
+      }
+    } else if (old_ent->IsNone()) {
+      new_ent->SetTypeNone();
+      old_ent->SetTypeUnValid();
+      old_index++;
+    } else if (old_ent->IsUnValid()) {
+      assert(0);
     } else {
-      delete clevel_iter;
+      assert(0);
     }
-  } else if (old_ent->IsNone()) {
-    new_ent->SetTypeNone();
-    old_ent->SetTypeUnValid();
-    old_index++;
-  } else if (old_ent->IsUnValid()) {
-    assert(0);
+    expanding_entry_index_++;
   }
-  new_index++;
-  locks_[0].unlock();
-  old_blevel->locks_[0].unlock();
 
   // handle entry [1, EntrySize()]
   while (old_index < old_blevel->EntrySize()) {
     std::lock_guard<std::shared_mutex> old_ent_lock(old_blevel->locks_[old_index]);
+    min_key.store(old_blevel->GetKey(old_index));
     max_key.store(old_index + 1 == old_blevel->EntrySize() ? UINT64_MAX
                                   : old_blevel->GetKey(old_index + 1));
     Entry* old_ent = old_blevel->GetEntry_(old_index);
     if (old_ent->IsValue()) {
-      ExpandAddEntry_(new_index, old_ent->GetKey(), old_ent->GetValue());
+      ExpandAddEntry_(old_ent->GetKey(), old_ent->GetValue());
     } else if (old_ent->IsClevel()) {
       Iterator* clevel_iter = old_ent->GetClevel(old_blevel->base_addr_)->begin();
       while (!clevel_iter->End()) {
-        ExpandAddEntry_(new_index, clevel_iter->key(), clevel_iter->value());
+        ExpandAddEntry_(clevel_iter->key(), clevel_iter->value());
         clevel_iter->Next();
       }
       delete clevel_iter;
@@ -160,11 +166,9 @@ void BLevel::Expansion(std::shared_ptr<BLevel> old_blevel, std::atomic<uint64_t>
     }
     old_ent->SetTypeUnValid();
     old_index++;
-    min_key.store(old_index == old_blevel->EntrySize() ? UINT64_MAX
-                                  : old_blevel->GetKey(old_index));
   }
 
-  root_->nr_entry = new_index;
+  root_->nr_entry.store(expanding_entry_index_);
   is_expanding_.store(false);
 }
 
@@ -271,9 +275,72 @@ Status BLevel::Entry::Delete(std::shared_mutex* mutex, uint64_t base_addr, uint6
   return Status::UNVALID;
 }
 
+Status BLevel::Scan(uint64_t min_key, uint64_t max_key,
+                    size_t max_size, size_t& size,
+                    std::function<void(uint64_t,uint64_t)> callback) {
+  if (size >= max_size)
+    return Status::OK;
+
+  int end;
+  if (is_expanding_.load())
+    end = expanding_entry_index_.load() - 1;
+  else
+    end = EntrySize() - 1;
+  uint64_t entry_index = Find_(min_key, 0, end);
+  {
+    std::shared_lock<std::shared_mutex> lock(locks_[entry_index]);
+    Entry* ent = GetEntry_(entry_index);
+    if (ent->IsUnValid()) {
+      return Status::UNVALID;
+    } else if (ent->IsNone()) {
+      ;
+    } else if (ent->IsValue()) {
+      if (ent->GetKey() == min_key) {
+        callback(ent->GetKey(), ent->GetValue());
+        size++;
+      }
+    } else if (ent->IsClevel()) {
+      Iterator* iter = ent->GetClevel(base_addr_)->begin();
+      iter->Seek(min_key);
+      while (!iter->End()) {
+        if (size >= max_size || iter->key() > max_key) {
+          delete iter;
+          return Status::OK;
+        }
+        callback(iter->key(), iter->value());
+        size++;
+        iter->Next();
+      }
+      delete iter;
+    }
+  }
+
+  entry_index++;
+  while (entry_index < EntrySize()) {
+    std::shared_lock<std::shared_mutex> lock(locks_[entry_index]);
+    Entry* ent = GetEntry_(entry_index);
+    if (ent->IsUnValid()) {
+      return Status::UNVALID;
+    } else if (ent->IsNone()) {
+      ;
+    } else if (ent->IsValue()) {
+      if (size >= max_size || ent->GetKey() > max_key)
+        break;
+      callback(ent->GetKey(), ent->GetValue());
+      size++;
+    } else if (ent->IsClevel()) {
+      bool finish = ent->GetClevel(base_addr_)->Scan(max_key, max_size, size, callback);
+      if (finish)
+        return Status::OK;
+    }
+    entry_index++;
+  }
+  return Status::OK;
+}
+
 uint64_t BLevel::Find_(uint64_t key, uint64_t begin, uint64_t end) const {
-  assert(begin >= 0 && begin < EntrySize());
-  assert(end >= 0 && end < EntrySize());
+  assert(begin < EntrySize());
+  assert(end < EntrySize());
   int_fast32_t left = begin;
   int_fast32_t right = end;
   // binary search

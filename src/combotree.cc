@@ -120,7 +120,6 @@ void ComboTree::ExpandComboTree_() {
     std::filesystem::remove(old_pool_path);
     pop_ = new_pool;
 
-    // TODO: delete immediately?
     old_alevel.reset();
     old_blevel.reset();
 
@@ -133,7 +132,6 @@ void ComboTree::ExpandComboTree_() {
 bool ComboTree::Insert(uint64_t key, uint64_t value) {
   Status s;
   while (true) {
-out_while:
     // the order of comparison should not be changed
     if (status_.load() == State::USING_PMEMKV) {
       s = pmemkv_->Insert(key, value);
@@ -153,27 +151,25 @@ out_while:
         ExpandComboTree_();
       break;
     } else if (status_.load() == State::COMBO_TREE_EXPANDING) {
-      while (true) {
-        if (blevel_->Size() >= EXPANSION_FACTOR * blevel_->EntrySize()) {
-          std::this_thread::sleep_for(std::chrono::microseconds(5));
-          goto out_while;
-        } else if (key < expand_min_key_) {
-          s = blevel_->Insert(key, value);
-          break;
-        } else if (key > expand_max_key_) {
-          s = alevel_->Insert(key, value);
-          if (s == Status::UNVALID) {
-            goto out_while;
-          }
-          break;
-        } else {
-          std::this_thread::sleep_for(std::chrono::microseconds(5));
-          goto out_while;
-        }
+      if (blevel_->Size() >= EXPANSION_FACTOR * blevel_->EntrySize()) {
+        std::this_thread::sleep_for(std::chrono::microseconds(5));
+        continue;
+      } else if (key < expand_min_key_.load()) {
+        s = blevel_->Insert(key, value);
+        if (s == Status::UNVALID)
+          continue;
+      } else if (key >= expand_max_key_.load()) {
+        s = alevel_->Insert(key, value);
+        if (s == Status::UNVALID)
+          continue;
+      } else {
+        std::this_thread::sleep_for(std::chrono::microseconds(5));
+        continue;
       }
       break;
     }
   }
+  assert(s != Status::UNVALID);
   return s == Status::OK;
 }
 
@@ -202,24 +198,22 @@ bool ComboTree::Get(uint64_t key, uint64_t& value) const {
         continue;
       break;
     } else if (status_.load() == State::COMBO_TREE_EXPANDING) {
-      while (true) {
-        if (key < expand_min_key_) {
-          s = blevel_->Get(key, value);
-          break;
-        } else if (key > expand_max_key_) {
-          s = alevel_->Get(key, value);
-          if (s == Status::UNVALID) {
-            assert(key < expand_min_key_);
-            s = blevel_->Get(key, value);
-          }
-          break;
-        } else {
-          std::this_thread::sleep_for(std::chrono::microseconds(5));
-        }
+      if (key < expand_min_key_.load()) {
+        s = blevel_->Get(key, value);
+        if (s == Status::UNVALID)
+          continue;
+      } else if (key >= expand_max_key_.load()) {
+        s = alevel_->Get(key, value);
+        if (s == Status::UNVALID)
+          continue;
+      } else {
+        std::this_thread::sleep_for(std::chrono::microseconds(5));
+        continue;
       }
       break;
     }
   }
+  assert(s != Status::UNVALID);
   return s == Status::OK;
 }
 
@@ -241,25 +235,93 @@ bool ComboTree::Delete(uint64_t key) {
         continue;
       break;
     } else if (status_.load() == State::COMBO_TREE_EXPANDING) {
-      while (true) {
-        if (key < expand_min_key_) {
-          s = blevel_->Delete(key);
-          break;
-        } else if (key > expand_max_key_) {
-          s = alevel_->Delete(key);
-          if (s == Status::UNVALID) {
-            assert(key < expand_min_key_);
-            s = blevel_->Delete(key);
-          }
-          break;
-        } else {
-          std::this_thread::sleep_for(std::chrono::microseconds(5));
-        }
+      if (key < expand_min_key_.load()) {
+        s = blevel_->Delete(key);
+        if (s == Status::UNVALID)
+          continue;
+      } else if (key >= expand_max_key_.load()) {
+        s = alevel_->Delete(key);
+        if (s == Status::UNVALID)
+          continue;
+      } else {
+        std::this_thread::sleep_for(std::chrono::microseconds(5));
+        continue;
       }
       break;
     }
   }
+  assert(s != Status::UNVALID);
   return s == Status::OK;
+}
+
+size_t ComboTree::Scan_(uint64_t min_key, uint64_t max_key, size_t size,
+                        std::function<void(uint64_t,uint64_t)> callback,
+                        std::function<uint64_t()> cur_max_key) {
+  size_t count = 0;
+  while (true) {
+    if (status_.load() == State::USING_PMEMKV) {
+      Iterator* iter = pmemkv_->begin();
+      iter->Seek(min_key);
+      while (!iter->End() && count < size && iter->key() <= max_key) {
+        callback(iter->key(), iter->value());
+        iter->Next();
+        count++;
+      }
+      return count;
+    } else if (status_.load() == State::PMEMKV_TO_COMBO_TREE) {
+      std::this_thread::sleep_for(std::chrono::microseconds(5));
+      continue;
+    } else if (status_.load() == State::USING_COMBO_TREE) {
+      Status s = blevel_->Scan(min_key, max_key, size, count, callback);
+      if (s == Status::OK)
+        return count;
+      if (s == Status::UNVALID) {
+        min_key = size == 0 ? min_key : cur_max_key() + 1;
+        continue;
+      }
+    } else if (status_.load() == State::COMBO_TREE_EXPANDING) {
+      if (min_key < expand_min_key_.load()) {
+        Status s = blevel_->Scan(min_key, max_key, size, count, callback);
+        if (s == Status::OK)
+          return count;
+        if (s == Status::UNVALID) {
+          min_key = size == 0 ? min_key : cur_max_key() + 1;
+          continue;
+        }
+      } else if (min_key >= expand_max_key_.load()) {
+        Status s = alevel_->blevel_->Scan(min_key, max_key, size, count, callback);
+        if (s == Status::OK)
+          return count;
+        if (s == Status::UNVALID) {
+          min_key = size == 0 ? min_key : cur_max_key() + 1;
+          continue;
+        }
+      } else {
+        std::this_thread::sleep_for(std::chrono::microseconds(5));
+        continue;
+      }
+    }
+  }
+}
+
+size_t ComboTree::Scan(uint64_t min_key, uint64_t max_key, size_t size,
+                       std::vector<std::pair<uint64_t, uint64_t>>& results) {
+  return Scan_(min_key, max_key, size, [&](uint64_t key, uint64_t value) {
+      results.emplace_back(key, value);
+    }, [&]() {
+      return results.empty() ? min_key : results.back().first;
+    });
+}
+
+size_t ComboTree::Scan(uint64_t min_key, uint64_t max_key, size_t size,
+                       Pair* results) {
+  return Scan_(min_key, max_key, size,
+    [&](uint64_t key, uint64_t value) {
+      results[size].key = key;
+      results[size].value = value;
+    }, [&]() {
+      return size == 0 ? min_key : results[size - 1].key;
+    });
 }
 
 namespace {
@@ -288,14 +350,26 @@ bool ComboTree::ValidPoolDir_() {
 class ComboTree::Iter : public Iterator {
  public:
   Iter(ComboTree* tree)
-      : tree_(tree), iter_(nullptr)
+      : tree_(tree), iter_(nullptr), blevel_(nullptr), cur_key_(0)
   {
-    if (tree_->status_.load() == ComboTree::State::USING_PMEMKV) {
-      iter_ = tree_->pmemkv_->begin();
-    } else if (tree_->status_.load() == ComboTree::State::USING_COMBO_TREE) {
-      iter_ = tree_->blevel_->begin();
-    } else if (tree_->status_.load() == ComboTree::State::COMBO_TREE_EXPANDING) {
-      iter_ = tree_->blevel_->begin();
+    while (true) {
+      if (tree_->status_.load() == ComboTree::State::USING_PMEMKV) {
+        iter_ = tree_->pmemkv_->begin();
+        break;
+      } else if (tree_->status_.load() == ComboTree::State::PMEMKV_TO_COMBO_TREE) {
+        std::this_thread::sleep_for(std::chrono::microseconds(5));
+        continue;
+      } else if (tree_->status_.load() == ComboTree::State::USING_COMBO_TREE) {
+        blevel_ = tree_->alevel_->blevel_;
+        iter_ = blevel_->begin();
+        break;
+      } else if (tree_->status_.load() == ComboTree::State::COMBO_TREE_EXPANDING) {
+        blevel_ = tree_->alevel_->blevel_;
+        iter_ = blevel_->begin();
+        break;
+      } else {
+        assert(0);
+      }
     }
   }
 
@@ -314,39 +388,101 @@ class ComboTree::Iter : public Iterator {
   }
 
   void SeekToFirst() {
-    return iter_->SeekToFirst();
+    iter_->SeekToFirst();
   }
 
   void SeekToLast() {
-    return iter_->SeekToLast();
+    iter_->SeekToLast();
   }
 
   void Seek(uint64_t target) {
-    if (tree_->status_.load() == ComboTree::State::COMBO_TREE_EXPANDING) {
-      if (target > tree_->expand_max_key_.load()) {
-        delete iter_;
-        iter_ = tree_->alevel_->begin();
+    delete iter_;
+    while (true) {
+      if (tree_->status_.load() == ComboTree::State::USING_PMEMKV) {
+        iter_ = tree_->pmemkv_->begin();
         iter_->Seek(target);
-        if (!iter_->Valid()) {
-          delete iter_;
-          iter_ = tree_->blevel_->begin();
+        break;
+      } else if (tree_->status_.load() == ComboTree::State::PMEMKV_TO_COMBO_TREE) {
+        std::this_thread::sleep_for(std::chrono::microseconds(5));
+        continue;
+      } else if (tree_->status_.load() == ComboTree::State::COMBO_TREE_EXPANDING) {
+        if (target < tree_->expand_min_key_.load()) {
+          blevel_ = tree_->blevel_;
+          iter_ = blevel_->begin();
           iter_->Seek(target);
+          break;
+        } else if (target >= tree_->expand_max_key_.load()) {
+          blevel_ = tree_->alevel_->blevel_;
+          iter_ = blevel_->begin();
+          iter_->Seek(target);
+          break;
+        } else {
+          std::this_thread::sleep_for(std::chrono::microseconds(5));
+          continue;
         }
-      } else {
+      } else if (tree_->status_.load() == ComboTree::State::USING_COMBO_TREE) {
+        blevel_ = tree_->blevel_;
+        iter_ = blevel_->begin();
         iter_->Seek(target);
+        break;
       }
-    } else {
-      iter_->Seek(target);
     }
+    if (!iter_->End())
+      cur_key_ = iter_->key();
   }
 
   void Next() {
-    return iter_->Next();
+    while (true) {
+      if (tree_->status_.load() == ComboTree::State::USING_PMEMKV) {
+        iter_->Next();
+        break;
+      } else if (tree_->status_.load() == ComboTree::State::PMEMKV_TO_COMBO_TREE) {
+        std::this_thread::sleep_for(std::chrono::microseconds(5));
+        continue;
+      } else if (tree_->status_.load() == ComboTree::State::COMBO_TREE_EXPANDING) {
+        if (blevel_ == tree_->blevel_) {
+          if (cur_key_ < tree_->expand_min_key_.load()) {
+            iter_->Next();
+            break;
+          } else {
+            std::this_thread::sleep_for(std::chrono::microseconds(5));
+            continue;
+          }
+        } else if (blevel_ == tree_->alevel_->blevel_) {
+          if (cur_key_ < tree_->expand_max_key_.load()) {
+            blevel_ = tree_->blevel_;
+            delete iter_;
+            iter_ = blevel_->begin();
+            iter_->Seek(cur_key_);
+            continue;
+          } else {
+            iter_->Next();
+            break;
+          }
+        } else {
+          Seek(cur_key_);
+          continue;
+        }
+      } else if (tree_->status_.load() == ComboTree::State::USING_COMBO_TREE) {
+        if (blevel_ != tree_->blevel_) {
+          blevel_ = tree_->blevel_;
+          delete iter_;
+          iter_ = blevel_->begin();
+          iter_->Seek(cur_key_);
+        }
+        iter_->Next();
+        break;
+      } else {
+        assert(0);
+      }
+    }
+    if (!iter_->End())
+      cur_key_ = iter_->key();
   }
 
   // TODO: test Prev(), SeekToLast()
   void Prev() {
-    return iter_->Prev();
+    iter_->Prev();
   }
 
   uint64_t key() const {
@@ -360,6 +496,8 @@ class ComboTree::Iter : public Iterator {
  private:
   ComboTree* tree_;
   Iterator* iter_;
+  std::shared_ptr<BLevel> blevel_;
+  uint64_t cur_key_;
 };
 
 Iterator* ComboTree::begin() {

@@ -17,7 +17,7 @@ using pmem::kv::string_view;
 
 namespace {
 
-const uint64_t SIZE = 1024UL * 1024UL * 1024UL; // 1G
+const uint64_t SIZE = 512 * 1024UL * 1024UL;
 
 void int2char(uint64_t integer, char* buf) {
   *(uint64_t*)buf = integer;

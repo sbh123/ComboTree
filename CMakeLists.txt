@@ -51,6 +51,9 @@ enable_testing()
 
 add_executable(experiment tests/experiment.cc)
 
+# vector_vs_array test
+add_executable(vector_vs_array tests/vector_vs_array.cc)
+
 # lock_vs_lockfree test
 add_executable(lock_vs_lockfree tests/lock_vs_lockfree.cc)
 target_link_libraries(lock_vs_lockfree pthread)

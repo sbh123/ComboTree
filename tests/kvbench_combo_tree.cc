@@ -44,14 +44,12 @@ class ComboTreeV2<uint64_t, uint64_t> : public kvbench::DB<uint64_t, uint64_t> {
   }
 
   int Scan(uint64_t min_key, std::vector<uint64_t>* values) {
-    Iterator* iter = db_->begin();
-    iter->Seek(min_key);
-    int cnt = 0;
-    while (cnt < scan_size_ && !iter->End()) {
-      values->push_back(iter->value());
-      iter->Next();
-      cnt++;
-    }
+    // std::vector<std::pair<uint64_t,uint64_t>> results;
+    // results.reserve(scan_size_);
+    Pair results[scan_size_];
+    size_t cnt = db_->Scan(min_key, UINT64_MAX, scan_size_, results);
+    // assert(cnt == results.size());
+    // assert(cnt <= scan_size_);
     return cnt;
   }
 
@@ -61,7 +59,7 @@ class ComboTreeV2<uint64_t, uint64_t> : public kvbench::DB<uint64_t, uint64_t> {
 
  private:
   ComboTree* db_;
-  int scan_size_ = 100;
+  const int scan_size_ = 100;
 };
 
 int main(int argc, char** argv) {

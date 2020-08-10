@@ -9,6 +9,8 @@
 
 namespace combotree {
 
+class ComboTree;
+
 class ALevel {
  public:
   ALevel(std::shared_ptr<BLevel> blevel, int span = DEFAULT_SPAN);
@@ -48,6 +50,8 @@ class ALevel {
   Iterator* end() {
     return blevel_->end();
   }
+
+  friend ComboTree;
 
  private:
   struct Entry {

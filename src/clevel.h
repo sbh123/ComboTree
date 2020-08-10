@@ -21,6 +21,8 @@ class CLevel {
   Status Update(uint64_t key, uint64_t value);
   Status Get(uint64_t key, uint64_t& value) const;
   Status Delete(uint64_t key);
+  bool Scan(uint64_t max_key, size_t max_size, size_t& size,
+            std::function<void(uint64_t,uint64_t)> callback);
 
   class Iter;
 
@@ -80,6 +82,7 @@ struct CLevel::LeafNode {
   void PrintSortedArray() const;
 
   friend Iter;
+  friend CLevel;
 
  private:
   bool Split_(pmem::obj::pool_base& pop, pmem::obj::persistent_ptr_base& root);

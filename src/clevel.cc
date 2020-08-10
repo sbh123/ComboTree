@@ -69,6 +69,23 @@ Status CLevel::Delete(uint64_t key) {
     return index_root_()->Delete(key, root_);
 }
 
+bool CLevel::Scan(uint64_t max_key, size_t max_size, size_t& size,
+                  std::function<void(uint64_t,uint64_t)> callback) {
+  LeafNode* node = head_.get();
+  do {
+    for (int i = 0; i < node->nr_entry; ++i) {
+      uint64_t entry_key = node->GetEntryKey_(node->GetSortedEntry_(i));
+      if (size >= max_size || entry_key > max_key) {
+        return true;
+      }
+      callback(entry_key, node->entry[node->GetSortedEntry_(i)].value);
+      size++;
+    }
+    node = node->next.get();
+  } while (node != head_.get());
+  return false;
+}
+
 // find sorted index which is bigger or equal to key
 int CLevel::LeafNode::Find_(uint64_t key, bool& find) const {
   int left = 0;

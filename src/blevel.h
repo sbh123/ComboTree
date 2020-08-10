@@ -54,7 +54,7 @@ class BLevel {
   Status Get(uint64_t key, uint64_t& value) const {
     uint64_t end;
     if (is_expanding_.load())
-      end = std::min<uint64_t>(root_->size.load(), EntrySize()) - 1;
+      end = expanding_entry_index_.load() - 1;
     else
       end = EntrySize() - 1;
     return Get(key, value, 0, end);
@@ -62,10 +62,8 @@ class BLevel {
 
   Status Insert(uint64_t key, uint64_t value) {
     uint64_t end;
-    uint64_t size = root_->size.load();
-    uint64_t entry = EntrySize();
     if (is_expanding_.load())
-      end = std::min<uint64_t>(root_->size.load(), EntrySize()) - 1;
+      end = expanding_entry_index_.load() - 1;
     else
       end = EntrySize() - 1;
     return Insert(key, value, 0, end);
@@ -74,7 +72,7 @@ class BLevel {
   Status Update(uint64_t key, uint64_t value) {
     uint64_t end;
     if (is_expanding_.load())
-      end = std::min<uint64_t>(root_->size.load(), EntrySize()) - 1;
+      end = expanding_entry_index_.load() - 1;
     else
       end = EntrySize() - 1;
     return Update(key, value, 0, end);
@@ -83,11 +81,14 @@ class BLevel {
   Status Delete(uint64_t key) {
     uint64_t end;
     if (is_expanding_.load())
-      end = std::min<uint64_t>(root_->size.load(), EntrySize()) - 1;
+      end = expanding_entry_index_.load() - 1;
     else
       end = EntrySize() - 1;
     return Delete(key, 0, end);
   }
+
+  Status Scan(uint64_t min_key, uint64_t max_key, size_t max_size, size_t& size,
+              std::function<void(uint64_t,uint64_t)> callback);
 
   uint64_t MinKey() const;
   uint64_t MaxKey() const;
@@ -96,7 +97,7 @@ class BLevel {
   uint64_t MaxEntryKey() const;
 
   uint64_t Size() const { return root_->size; }
-  uint64_t EntrySize() const { return root_->nr_entry; }
+  uint64_t EntrySize() const { return root_->nr_entry.load(); }
 
   uint64_t GetKey(uint64_t index) const {
     return in_mem_key_[index];
@@ -126,7 +127,7 @@ class BLevel {
       ENTRY_NONE    = 0xC000000000000000UL,
     };
 
-    Entry() : type(Type::ENTRY_NONE) {}
+    Entry() : type(Type::ENTRY_UNVALID) {}
     Status Get(std::shared_mutex* mutex, uint64_t base_addr, uint64_t pkey, uint64_t& pvalue) const;
     Status Insert(std::shared_mutex* mutex, uint64_t base_addr, pmem::obj::pool_base& pop, uint64_t pkey, uint64_t pvalue);
     Status Update(std::shared_mutex* mutex, uint64_t base_addr, uint64_t pkey, uint64_t pvalue);
@@ -204,7 +205,7 @@ class BLevel {
 
   struct Root {
     pmem::obj::persistent_ptr<Entry[]> entry;
-    uint64_t nr_entry;
+    std::atomic<uint64_t> nr_entry;
     std::atomic<uint64_t> size;
   };
 
@@ -212,6 +213,7 @@ class BLevel {
   Entry* in_mem_entry_;
   uint64_t* in_mem_key_;
   std::shared_mutex* locks_;
+  std::atomic<uint64_t> expanding_entry_index_;
   std::atomic<bool> is_expanding_;
 
   Entry* GetEntry_(int index) const {
@@ -220,7 +222,7 @@ class BLevel {
 
   uint64_t Find_(uint64_t key, uint64_t begin, uint64_t end) const;
 
-  void ExpandAddEntry_(uint64_t& index, uint64_t key, uint64_t value);
+  void ExpandAddEntry_(uint64_t key, uint64_t value);
 };
 
 class BLevel::Iter : public Iterator {
