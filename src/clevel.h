@@ -18,9 +18,9 @@ class CLevel {
   void InitLeaf(pmem::obj::pool_base& pop);
 
   Status Insert(pmem::obj::pool_base& pop, uint64_t key, uint64_t value);
-  Status Update(uint64_t key, uint64_t value);
+  Status Update(pmem::obj::pool_base& pop, uint64_t key, uint64_t value);
+  Status Delete(pmem::obj::pool_base& pop, uint64_t key);
   Status Get(uint64_t key, uint64_t& value) const;
-  Status Delete(uint64_t key);
   bool Scan(uint64_t max_key, size_t max_size, size_t& size,
             std::function<void(uint64_t,uint64_t)> callback);
 
@@ -69,15 +69,15 @@ struct CLevel::LeafNode {
   pmem::obj::persistent_ptr<LeafNode> prev;
   pmem::obj::persistent_ptr<LeafNode> next;
   pmem::obj::persistent_ptr<IndexNode> parent;
-  uint64_t sorted_array;  // used as an array of uint4_t
-  int nr_entry;
-  int next_entry;
   Entry entry[LEAF_ENTRYS];
+  uint64_t sorted_array;  // used as an array of uint4_t
+  uint32_t nr_entry;
+  uint32_t next_entry;
 
   Status Insert(pmem::obj::pool_base& pop, uint64_t key, uint64_t value, pmem::obj::persistent_ptr_base& root);
-  Status Update(uint64_t key, uint64_t value, pmem::obj::persistent_ptr_base& root);
+  Status Update(pmem::obj::pool_base& pop, uint64_t key, uint64_t value, pmem::obj::persistent_ptr_base& root);
   Status Get(uint64_t key, uint64_t& value) const;
-  Status Delete(uint64_t key, pmem::obj::persistent_ptr_base& root);
+  Status Delete(pmem::obj::pool_base& pop, uint64_t key, pmem::obj::persistent_ptr_base& root);
 
   void PrintSortedArray() const;
 
@@ -124,17 +124,17 @@ struct CLevel::LeafNode {
 
 struct CLevel::IndexNode {
   pmem::obj::persistent_ptr<IndexNode> parent;
-  uint64_t keys[INDEX_ENTRYS + 1];
   pmem::obj::persistent_ptr_base child[INDEX_ENTRYS + 2];
+  uint64_t keys[INDEX_ENTRYS + 1];
   NodeType child_type;
   int nr_entry;
   int next_entry;
   uint8_t sorted_array[INDEX_ENTRYS + 1];
 
   Status Insert(pmem::obj::pool_base& pop, uint64_t key, uint64_t value, pmem::obj::persistent_ptr_base& root);
-  Status Update(uint64_t key, uint64_t value, pmem::obj::persistent_ptr_base& root);
+  Status Update(pmem::obj::pool_base& pop, uint64_t key, uint64_t value, pmem::obj::persistent_ptr_base& root);
   Status Get(uint64_t key, uint64_t& value) const;
-  Status Delete(uint64_t key, pmem::obj::persistent_ptr_base& root);
+  Status Delete(pmem::obj::pool_base& pop, uint64_t key, pmem::obj::persistent_ptr_base& root);
 
   bool InsertChild(pmem::obj::pool_base& pop, uint64_t child_key, pmem::obj::persistent_ptr_base child,
                    pmem::obj::persistent_ptr_base& root);
@@ -193,7 +193,7 @@ class CLevel::Iter : public Iterator {
            leaf_->nr_entry == 0) {
       leaf_ = leaf_->prev;
     }
-    sorted_index_ = std::max(0, leaf_->nr_entry - 1);
+    sorted_index_ = std::max<int>(0, leaf_->nr_entry - 1);
   }
 
   void Seek(uint64_t target) {
@@ -243,7 +243,7 @@ class CLevel::Iter : public Iterator {
       } while (!OID_EQUALS(leaf_.raw(), first_leaf_) &&
                leaf_->nr_entry == 0);
       UpdateLeaf_();
-      sorted_index_ = std::max(0, leaf_->nr_entry - 1);
+      sorted_index_ = std::max<int>(0, leaf_->nr_entry - 1);
     }
   }
 
@@ -260,7 +260,7 @@ class CLevel::Iter : public Iterator {
  private:
   CLevel* clevel_;
   pmem::obj::persistent_ptr<LeafNode> leaf_;
-  int sorted_index_;
+  uint32_t sorted_index_;
   // cache these information in RAM
   const PMEMoid& first_leaf_;
   const PMEMoid& last_leaf_;

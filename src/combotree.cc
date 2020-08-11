@@ -66,8 +66,8 @@ void ComboTree::ChangeToComboTree_() {
     manifest_->SetIsComboTree(true);
     State tmp = State::PMEMKV_TO_COMBO_TREE;
     // must change status before wating no ref
-    bool exchanged = status_.compare_exchange_strong(tmp, State::USING_COMBO_TREE);
-    assert(exchanged);
+    if (!status_.compare_exchange_strong(tmp, State::USING_COMBO_TREE))
+      LOG(Debug::ERROR, "can not change state from PMEMKV_TO_COMBO_TREE to USING_COMBO_TREE!");
     delete iter;
     PmemKV::SetReadUnvalid();
     while (!pmemkv_->NoReadRef()) ;
@@ -306,9 +306,11 @@ size_t ComboTree::Scan_(uint64_t min_key, uint64_t max_key, size_t size,
 
 size_t ComboTree::Scan(uint64_t min_key, uint64_t max_key, size_t size,
                        std::vector<std::pair<uint64_t, uint64_t>>& results) {
-  return Scan_(min_key, max_key, size, [&](uint64_t key, uint64_t value) {
+  return Scan_(min_key, max_key, size,
+    [&](uint64_t key, uint64_t value) {
       results.emplace_back(key, value);
-    }, [&]() {
+    },
+    [&]() {
       return results.empty() ? min_key : results.back().first;
     });
 }
@@ -319,7 +321,8 @@ size_t ComboTree::Scan(uint64_t min_key, uint64_t max_key, size_t size,
     [&](uint64_t key, uint64_t value) {
       results[size].key = key;
       results[size].value = value;
-    }, [&]() {
+    },
+    [&]() {
       return size == 0 ? min_key : results[size - 1].key;
     });
 }

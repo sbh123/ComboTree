@@ -79,10 +79,10 @@ int main(void) {
       case 2: // DELETE
         if (right_kv.count(key)) {
           right_kv.erase(key);
-          s = db->Delete(key);
+          s = db->Delete(pop, key);
           assert(s == Status::OK);
         } else {
-          s = db->Delete(key);
+          s = db->Delete(pop, key);
           assert(s == Status::DOES_NOT_EXIST);
         }
         break;

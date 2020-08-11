@@ -39,12 +39,12 @@ class BLevel {
 
   Status Update(uint64_t key, uint64_t value, uint64_t begin, uint64_t end) {
     uint64_t idx = Find_(key, begin, end);
-    return GetEntry_(idx)->Update(&locks_[idx], base_addr_, key, value);
+    return GetEntry_(idx)->Update(&locks_[idx], base_addr_, pop_, key, value);
   }
 
   Status Delete(uint64_t key, uint64_t begin, uint64_t end) {
     uint64_t idx = Find_(key, begin, end);
-    Status s = GetEntry_(idx)->Delete(&locks_[idx], base_addr_, key);
+    Status s = GetEntry_(idx)->Delete(&locks_[idx], base_addr_, pop_, key);
     if (s == Status::OK) {
       root_->size--;
     }
@@ -130,8 +130,8 @@ class BLevel {
     Entry() : type(Type::ENTRY_UNVALID) {}
     Status Get(std::shared_mutex* mutex, uint64_t base_addr, uint64_t pkey, uint64_t& pvalue) const;
     Status Insert(std::shared_mutex* mutex, uint64_t base_addr, pmem::obj::pool_base& pop, uint64_t pkey, uint64_t pvalue);
-    Status Update(std::shared_mutex* mutex, uint64_t base_addr, uint64_t pkey, uint64_t pvalue);
-    Status Delete(std::shared_mutex* mutex, uint64_t base_addr, uint64_t pkey);
+    Status Update(std::shared_mutex* mutex, uint64_t base_addr, pmem::obj::pool_base& pop, uint64_t pkey, uint64_t pvalue);
+    Status Delete(std::shared_mutex* mutex, uint64_t base_addr, pmem::obj::pool_base& pop, uint64_t pkey);
 
     const static uint64_t type_mask_  = 0xC000000000000000UL;
     const static uint64_t value_mask_ = 0x3FFFFFFFFFFFFFFFUL;

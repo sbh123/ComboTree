@@ -1,10 +1,10 @@
 #include <iostream>
+#include <set>
 #include <libpmemobj++/persistent_ptr.hpp>
 #include <libpmemobj++/make_persistent_atomic.hpp>
 #include <libpmemobj.h>
 #include "clevel.h"
 #include "debug.h"
-#include <set>
 
 namespace combotree {
 
@@ -33,6 +33,8 @@ void CLevel::InitLeaf(pool_base& pop) {
   head_->prev = head_;
   head_->next = head_;
   root_ = head_;
+  head_.persist();
+  pop.persist(this, sizeof(*this));
 }
 
 Status CLevel::Insert(pool_base& pop, uint64_t key, uint64_t value) {
@@ -42,17 +44,19 @@ Status CLevel::Insert(pool_base& pop, uint64_t key, uint64_t value) {
     if (!OID_EQUALS(root.raw(), root_.raw())) {
       type_ = NodeType::INDEX;
       root_ = root;
+      pop.persist(&type_, sizeof(type_));
+      pop.persist(&root_, sizeof(root_));
     }
     return s;
   } else
     return index_root_()->Insert(pop, key, value, root_);
 }
 
-Status CLevel::Update(uint64_t key, uint64_t value) {
+Status CLevel::Update(pool_base& pop, uint64_t key, uint64_t value) {
   if (type_ == NodeType::LEAF)
-    return leaf_root_()->Update(key, value, root_);
+    return leaf_root_()->Update(pop, key, value, root_);
   else
-    return index_root_()->Update(key, value, root_);
+    return index_root_()->Update(pop, key, value, root_);
 }
 
 Status CLevel::Get(uint64_t key, uint64_t& value) const {
@@ -62,18 +66,18 @@ Status CLevel::Get(uint64_t key, uint64_t& value) const {
     return index_root_()->Get(key, value);
 }
 
-Status CLevel::Delete(uint64_t key) {
+Status CLevel::Delete(pool_base& pop, uint64_t key) {
   if (type_ == NodeType::LEAF)
-    return leaf_root_()->Delete(key, root_);
+    return leaf_root_()->Delete(pop, key, root_);
   else
-    return index_root_()->Delete(key, root_);
+    return index_root_()->Delete(pop, key, root_);
 }
 
 bool CLevel::Scan(uint64_t max_key, size_t max_size, size_t& size,
                   std::function<void(uint64_t,uint64_t)> callback) {
   LeafNode* node = head_.get();
   do {
-    for (int i = 0; i < node->nr_entry; ++i) {
+    for (uint32_t i = 0; i < node->nr_entry; ++i) {
       uint64_t entry_key = node->GetEntryKey_(node->GetSortedEntry_(i));
       if (size >= max_size || entry_key > max_key) {
         return true;
@@ -116,6 +120,7 @@ void CLevel::LeafNode::PrintSortedArray() const {
 }
 
 bool CLevel::LeafNode::Split_(pool_base& pop, persistent_ptr_base& root) {
+  // LOG(Debug::INFO, "Split");
   assert(nr_entry == LEAF_ENTRYS);
 
   if (parent == nullptr) {
@@ -193,7 +198,7 @@ Status CLevel::LeafNode::Insert(pool_base& pop, uint64_t key, uint64_t value,
   uint64_t free_index = sorted_array & free_mask;
 
   uint64_t after_mask = 0;
-  for (int i = 0; i < nr_entry - sorted_index; ++i)
+  for (uint32_t i = 0; i < nr_entry - sorted_index; ++i)
     after_mask = (after_mask << 4) | 0x0FUL;
   after_mask = after_mask << ((16 - nr_entry) * 4);
   uint64_t after_index = (sorted_array & after_mask) >> 4;
@@ -208,18 +213,30 @@ Status CLevel::LeafNode::Insert(pool_base& pop, uint64_t key, uint64_t value,
       after_index |
       free_index;
 
-  entry[entry_idx].key = key;
-  entry[entry_idx].value = value;
-  nr_entry++;
-  if (entry_idx == next_entry) next_entry++;
-  sorted_array = new_sorted_array;
+  Entry new_ent;
+  new_ent.key = key;
+  new_ent.value = value;
+  pop.memcpy_persist(&entry[entry_idx], &new_ent, sizeof(new_ent));
+
+  // meta_data include sorted_array, nr_entry and next_entry.
+  // meta_data[0-1] is sorted_array
+  // meta_data[2]   is nr_entry
+  // meta_data[3]   is next_entry
+  static_assert(offsetof(CLevel::LeafNode, nr_entry) - offsetof(CLevel::LeafNode, sorted_array) == 8);
+  static_assert(offsetof(CLevel::LeafNode, next_entry) - offsetof(CLevel::LeafNode, nr_entry) == 4);
+  static_assert(sizeof(next_entry) == 4);
+  uint32_t meta_data[4];
+  *(uint64_t*)meta_data = new_sorted_array;
+  meta_data[2] = nr_entry + 1;
+  meta_data[3] = (uint32_t)entry_idx == next_entry ? next_entry + 1 : next_entry;
+  pop.memcpy_persist(&sorted_array, meta_data, sizeof(meta_data));
 
   // Valid_();
   // PrintSortedArray();
   return Status::OK;
 }
 
-Status CLevel::LeafNode::Delete(uint64_t key, persistent_ptr_base& base) {
+Status CLevel::LeafNode::Delete(pool_base& pop, uint64_t key, persistent_ptr_base& base) {
   bool find;
   int sorted_index = Find_(key, find);
   if (!find) {
@@ -239,7 +256,7 @@ Status CLevel::LeafNode::Delete(uint64_t key, persistent_ptr_base& base) {
   uint64_t free_index = sorted_array & free_mask;
 
   uint64_t after_mask = 0;
-  for (int i = 0; i < nr_entry - sorted_index - 1; ++i)
+  for (uint32_t i = 0; i < nr_entry - sorted_index - 1; ++i)
     after_mask = (after_mask << 4) | 0x0FUL;
   after_mask = after_mask << ((16 - nr_entry) * 4);
   uint64_t after_index = (sorted_array & after_mask) << 4;
@@ -255,15 +272,22 @@ Status CLevel::LeafNode::Delete(uint64_t key, persistent_ptr_base& base) {
       (entry_index << ((next_entry - nr_entry) * 4)) |
       free_index;
 
-  sorted_array = new_sorted_array;
-  nr_entry--;
+  // meta_data include sorted_array, nr_entry and next_entry.
+  // meta_data[0-1] is sorted_array
+  // meta_data[2]   is nr_entry
+  static_assert(offsetof(CLevel::LeafNode, nr_entry) - offsetof(CLevel::LeafNode, sorted_array) == 8);
+  static_assert(sizeof(nr_entry) == 4);
+  uint32_t meta_data[3];
+  *(uint64_t*)meta_data = new_sorted_array;
+  meta_data[2] = nr_entry - 1;
+  pop.memcpy_persist(&sorted_array, meta_data, sizeof(meta_data));
 
   // Valid_();
   // PrintSortedArray();
   return Status::OK;
 }
 
-Status CLevel::LeafNode::Update(uint64_t key, uint64_t value, persistent_ptr_base& root) {
+Status CLevel::LeafNode::Update(pool_base& pop, uint64_t key, uint64_t value, persistent_ptr_base& root) {
   assert(0);
 }
 
@@ -345,6 +369,7 @@ bool CLevel::IndexNode::Split_(pool_base& pop, persistent_ptr_base& root) {
   memcpy(new_node->sorted_array, new_sorted_array, sizeof(uint8_t) * new_node->nr_entry);
   // change children's parent
   new_node->AdoptChild_();
+  new_node.persist();
 
   nr_entry = INDEX_ENTRYS / 2;
   parent->InsertChild(pop, keys[sorted_array[INDEX_ENTRYS / 2]], new_node, root);
@@ -402,9 +427,9 @@ Status CLevel::IndexNode::Insert(pool_base& pop, uint64_t key,
   return leaf->Insert(pop, key, value, root);
 }
 
-Status CLevel::IndexNode::Update(uint64_t key, uint64_t value, persistent_ptr_base& root) {
+Status CLevel::IndexNode::Update(pool_base& pop, uint64_t key, uint64_t value, persistent_ptr_base& root) {
   auto leaf = FindLeafNode_(key);
-  return leaf->Update(key, value, root);
+  return leaf->Update(pop, key, value, root);
 }
 
 Status CLevel::IndexNode::Get(uint64_t key, uint64_t& value) const {
@@ -412,9 +437,9 @@ Status CLevel::IndexNode::Get(uint64_t key, uint64_t& value) const {
   return leaf->Get(key, value);
 }
 
-Status CLevel::IndexNode::Delete(uint64_t key, persistent_ptr_base& root) {
+Status CLevel::IndexNode::Delete(pool_base& pop, uint64_t key, persistent_ptr_base& root) {
   auto leaf = FindLeafNode_(key);
-  return leaf->Delete(key, root);
+  return leaf->Delete(pop, key, root);
 }
 
 Iterator* CLevel::begin() {
