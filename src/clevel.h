@@ -144,7 +144,7 @@ struct CLevel::IndexNode {
  private:
   bool Split_(pmem::obj::pool_base& pop, pmem::obj::persistent_ptr_base& root);
 
-  void AdoptChild_();
+  void AdoptChild_(pmem::obj::pool_base& pop);
 
   pmem::obj::persistent_ptr<LeafNode> FindLeafNode_(uint64_t key) const;
 

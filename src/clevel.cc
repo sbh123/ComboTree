@@ -2,6 +2,7 @@
 #include <set>
 #include <libpmemobj++/persistent_ptr.hpp>
 #include <libpmemobj++/make_persistent_atomic.hpp>
+#include <libpmemobj++/transaction.hpp>
 #include <libpmemobj.h>
 #include "clevel.h"
 #include "debug.h"
@@ -15,12 +16,12 @@ using pmem::obj::pool_base;
 
 void CLevel::LeafNode::Valid_() {
   std::set<int> idx;
-  for (int i = 0; i < nr_entry; ++i) {
+  for (uint32_t i = 0; i < nr_entry; ++i) {
     int index = GetSortedEntry_(i);
     assert(idx.count(index) == 0);
     idx.emplace(index);
   }
-  for (int i = 0; i < next_entry - nr_entry; ++i) {
+  for (uint32_t i = 0; i < next_entry - nr_entry; ++i) {
     int index = GetSortedEntry_(15 - i);
     assert(idx.count(index) == 0);
     idx.emplace(index);
@@ -123,6 +124,7 @@ bool CLevel::LeafNode::Split_(pool_base& pop, persistent_ptr_base& root) {
   // LOG(Debug::INFO, "Split");
   assert(nr_entry == LEAF_ENTRYS);
 
+  pmem::obj::transaction::run(pop, [&](){
   if (parent == nullptr) {
     make_persistent_atomic<IndexNode>(pop, parent);
     parent->child_type = NodeType::LEAF;
@@ -162,9 +164,12 @@ bool CLevel::LeafNode::Split_(pool_base& pop, persistent_ptr_base& root) {
     before_mask = (before_mask >> 4) | 0xF000000000000000UL;
   uint64_t before_index = sorted_array & before_mask;
   sorted_array = before_index | free_index;
+  pop.persist(&sorted_array, sizeof(sorted_array));
 #endif
   nr_entry = LEAF_ENTRYS - LEAF_ENTRYS / 2;
+  pop.persist(&nr_entry, sizeof(nr_entry));
   parent->InsertChild(pop, new_node->entry[new_node->GetSortedEntry_(0)].key, new_node, root);
+  });
   return true;
 }
 
@@ -333,16 +338,20 @@ persistent_ptr<CLevel::LeafNode> CLevel::IndexNode::FindLeafNode_(uint64_t key) 
     return index_child_(child_idx)->FindLeafNode_(key);
 }
 
-void CLevel::IndexNode::AdoptChild_() {
+void CLevel::IndexNode::AdoptChild_(pool_base& pop) {
   for (int i = 0; i <= nr_entry; ++i) {
-    if (child_type == NodeType::INDEX)
+    if (child_type == NodeType::INDEX) {
       index_child_(i)->parent = this;
-    else
+      pop.persist(&index_child_(i)->parent, sizeof(index_child_(i)->parent));
+    } else {
       leaf_child_(i)->parent = this;
+      pop.persist(&leaf_child_(i)->parent, sizeof(leaf_child_(i)->parent));
+    }
   }
 }
 
 bool CLevel::IndexNode::Split_(pool_base& pop, persistent_ptr_base& root) {
+  // LOG(Debug::INFO, "IndexNode Split");
   assert(nr_entry == INDEX_ENTRYS + 1);
 
   if (parent == nullptr) {
@@ -368,7 +377,7 @@ bool CLevel::IndexNode::Split_(pool_base& pop, persistent_ptr_base& root) {
   new_node->next_entry = INDEX_ENTRYS / 2;
   memcpy(new_node->sorted_array, new_sorted_array, sizeof(uint8_t) * new_node->nr_entry);
   // change children's parent
-  new_node->AdoptChild_();
+  new_node->AdoptChild_(pop);
   new_node.persist();
 
   nr_entry = INDEX_ENTRYS / 2;
