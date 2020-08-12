@@ -70,8 +70,8 @@ void BLevel::ExpandAddEntry_(uint64_t key, uint64_t value) {
     std::lock_guard<std::shared_mutex> lock(locks_[expanding_entry_index_]);
     Entry* ent = GetEntry_(expanding_entry_index_);
     Entry new_ent;
-    new_ent.SetTypeValue();
     new_ent.SetKey(key);
+    new_ent.SetTypeValue();
     new_ent.SetValue(value);
     pop_.memcpy_persist(ent, &new_ent, sizeof(new_ent));
     in_mem_key_[expanding_entry_index_] = key;
@@ -91,7 +91,7 @@ void BLevel::ExpandAddEntry_(uint64_t key, uint64_t value) {
       Entry new_ent;
       new_ent.SetTypeClevel();
       new_ent.SetClevel(new_clevel.get(), base_addr_);
-      pop_.memcpy_persist(ent, &new_ent, sizeof(new_ent));
+      pop_.memcpy_persist(&ent->value, &new_ent.value, sizeof(new_ent.value));
     } else if (ent->IsNone()) {
       assert(0);
     } else {
@@ -244,7 +244,7 @@ Status BLevel::Entry::Insert(std::shared_mutex* mutex, uint64_t base_addr,
     Entry new_ent;
     new_ent.SetTypeClevel();
     new_ent.SetClevel(new_clevel.get(), base_addr);
-    pop.memcpy_persist(this, &new_ent, sizeof(*this));
+    pop.memcpy_persist(&value, &new_ent.value, sizeof(new_ent.value));
     return Status::OK;
   } else if (IsClevel()) {
     return GetClevel(base_addr)->Insert(pop, pkey, pvalue);
@@ -253,7 +253,7 @@ Status BLevel::Entry::Insert(std::shared_mutex* mutex, uint64_t base_addr,
       Entry new_ent;
       new_ent.SetValue(pvalue);
       new_ent.SetTypeValue();
-      pop.memcpy_persist(this, &new_ent, sizeof(*this));
+      pop.memcpy_persist(&value, &new_ent.value, sizeof(new_ent.value));
       return Status::OK;
     } else {
       pmem::obj::persistent_ptr<CLevel> new_clevel;
@@ -267,7 +267,7 @@ Status BLevel::Entry::Insert(std::shared_mutex* mutex, uint64_t base_addr,
       Entry new_ent;
       new_ent.SetClevel(new_clevel.get(), base_addr);
       new_ent.SetTypeClevel();
-      pop.memcpy_persist(this, &new_ent, sizeof(*this));
+      pop.memcpy_persist(&value, &new_ent.value, sizeof(new_ent.value));
       return Status::OK;
     }
   }
@@ -289,7 +289,7 @@ Status BLevel::Entry::Delete(std::shared_mutex* mutex, uint64_t base_addr,
     if (pkey == key) {
       Entry new_ent;
       new_ent.SetTypeNone();
-      pop.memcpy_persist(this, &new_ent, sizeof(*this));
+      pop.memcpy_persist(&value, &new_ent.value, sizeof(new_ent.value));
       return Status::OK;
     } else {
       return Status::DOES_NOT_EXIST;
