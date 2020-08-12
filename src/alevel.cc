@@ -18,7 +18,7 @@ ALevel::ALevel(std::shared_ptr<BLevel> blevel, int span)
   entry_[0].offset = 1;
   for (uint64_t offset = 2; offset < blevel_->EntrySize(); ++offset) {
     // calculate cdf and index for every key
-    uint64_t cur_key = blevel_->GetEntry_(offset)->key;
+    uint64_t cur_key = blevel_->GetKey(offset);
     int index = CDFIndex_(cur_key);
     if (entry_[index].key == 0) {
       entry_[index].key = cur_key;
