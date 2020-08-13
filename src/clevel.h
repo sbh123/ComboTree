@@ -75,10 +75,10 @@ struct CLevel::LeafNode {
   LeafNode* prev;
   LeafNode* next;
   IndexNode* parent;
-  Entry entry[LEAF_ENTRYS];
   uint64_t sorted_array;  // used as an array of uint4_t
   uint32_t nr_entry;
   uint32_t next_entry;
+  Entry entry[LEAF_ENTRYS];
 
   Status Insert(pmem::obj::pool_base& pop, Slab<CLevel::LeafNode>* slab, uint64_t key, uint64_t value, void*& root);
   Status Update(pmem::obj::pool_base& pop, uint64_t key, uint64_t value, void*& root);
@@ -130,11 +130,11 @@ struct CLevel::LeafNode {
 
 struct CLevel::IndexNode {
   IndexNode* parent;
-  void* child[INDEX_ENTRYS + 2];
-  uint64_t keys[INDEX_ENTRYS + 1];
   NodeType child_type;
   int nr_entry;
   int next_entry;
+  uint64_t keys[INDEX_ENTRYS + 1];
+  void* child[INDEX_ENTRYS + 2];
   uint8_t sorted_array[INDEX_ENTRYS + 1];
 
   Status Insert(pmem::obj::pool_base& pop, Slab<LeafNode>* leaf_slab, uint64_t key, uint64_t value, void*& root);
