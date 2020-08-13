@@ -226,7 +226,7 @@ class BLevel {
 
   uint64_t Find_(uint64_t key, uint64_t begin, uint64_t end) const;
 
-  void ExpandAddEntry_(uint64_t key, uint64_t value);
+  void ExpandAddEntry_(uint64_t key, uint64_t value, size_t& size);
 };
 
 class BLevel::Iter : public Iterator {
