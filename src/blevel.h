@@ -8,6 +8,7 @@
 #include "combotree/iterator.h"
 #include "status.h"
 #include "clevel.h"
+#include "slab.h"
 #include "debug.h"
 
 namespace combotree {
@@ -30,7 +31,7 @@ class BLevel {
 
   Status Insert(uint64_t key, uint64_t value, uint64_t begin, uint64_t end) {
     uint64_t idx = Find_(key, begin, end);
-    Status s = GetEntry_(idx)->Insert(&locks_[idx], base_addr_, pop_, key, value);
+    Status s = GetEntry_(idx)->Insert(&locks_[idx], base_addr_, pop_, clevel_slab_, key, value);
     if (s == Status::OK) {
       root_->size++;
     }
@@ -129,7 +130,8 @@ class BLevel {
 
     Entry() : type(Type::ENTRY_UNVALID) {}
     Status Get(std::shared_mutex* mutex, uint64_t base_addr, uint64_t pkey, uint64_t& pvalue) const;
-    Status Insert(std::shared_mutex* mutex, uint64_t base_addr, pmem::obj::pool_base& pop, uint64_t pkey, uint64_t pvalue);
+    Status Insert(std::shared_mutex* mutex, uint64_t base_addr, pmem::obj::pool_base& pop,
+        Slab<CLevel>* clevel_slab, uint64_t pkey, uint64_t pvalue);
     Status Update(std::shared_mutex* mutex, uint64_t base_addr, pmem::obj::pool_base& pop, uint64_t pkey, uint64_t pvalue);
     Status Delete(std::shared_mutex* mutex, uint64_t base_addr, pmem::obj::pool_base& pop, uint64_t pkey);
 
@@ -202,6 +204,7 @@ class BLevel {
 
   pmem::obj::pool_base pop_;
   uint64_t base_addr_;
+  Slab<CLevel>* clevel_slab_;
 
   struct Root {
     pmem::obj::persistent_ptr<Entry[]> entry;

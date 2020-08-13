@@ -20,6 +20,7 @@ BLevel::BLevel(pmem::obj::pool_base pop, Iterator* iter, uint64_t size)
   root_.persist();
   base_addr_ = (uint64_t)root_.get() - root_.raw().off;
   pmem::obj::make_persistent_atomic<Entry[]>(pop_, root_->entry, root_->nr_entry);
+  clevel_slab_ = new Slab<CLevel>(pop_, EntrySize() / 4.0);
   // add one extra lock to make blevel iter's logic simple
   locks_ = new std::shared_mutex[EntrySize() + 1];
   in_mem_entry_ = root_->entry.get();
@@ -58,6 +59,7 @@ BLevel::BLevel(pmem::obj::pool_base pop, std::shared_ptr<BLevel> old_blevel)
   expanding_entry_index_.store(0);
   base_addr_ = (uint64_t)root_.get() - root_.raw().off;
   pmem::obj::make_persistent_atomic<Entry[]>(pop_, root_->entry, EntrySize());
+  clevel_slab_ = new Slab<CLevel>(pop_, EntrySize() / 4.0);
   // add one extra lock to make blevel iter's logic simple
   locks_ = new std::shared_mutex[EntrySize() + 1];
   in_mem_entry_ = root_->entry.get();
@@ -83,14 +85,13 @@ void BLevel::ExpandAddEntry_(uint64_t key, uint64_t value) {
     if (ent->IsClevel()) {
       ent->GetClevel(base_addr_)->Insert(pop_, key, value);
     } else if (ent->IsValue()) {
-      pmem::obj::persistent_ptr<CLevel> new_clevel;
-      pmem::obj::make_persistent_atomic<CLevel>(pop_, new_clevel);
+      CLevel* new_clevel = clevel_slab_->Allocate();
       new_clevel->InitLeaf(pop_);
       new_clevel->Insert(pop_, ent->GetKey(), ent->GetValue());
       new_clevel->Insert(pop_, key, value);
       Entry new_ent;
       new_ent.SetTypeClevel();
-      new_ent.SetClevel(new_clevel.get(), base_addr_);
+      new_ent.SetClevel(new_clevel, base_addr_);
       pop_.memcpy_persist(&ent->value, &new_ent.value, sizeof(new_ent.value));
     } else if (ent->IsNone()) {
       assert(0);
@@ -189,6 +190,7 @@ BLevel::BLevel(pmem::obj::pool_base pop)
 {
   pmem::obj::pool<Root> pool(pop_);
   root_ = pool.root();
+  clevel_slab_ = new Slab<CLevel>(pop_, EntrySize() / 4.0);
   locks_ = new std::shared_mutex[EntrySize() + 1];
 }
 
@@ -197,6 +199,8 @@ BLevel::~BLevel() {
     delete locks_;
   if (in_mem_key_)
     delete in_mem_key_;
+  if (clevel_slab_)
+    delete clevel_slab_;
 }
 
 Status BLevel::Entry::Get(std::shared_mutex* mutex, uint64_t base_addr,
@@ -220,8 +224,8 @@ Status BLevel::Entry::Get(std::shared_mutex* mutex, uint64_t base_addr,
 }
 
 Status BLevel::Entry::Insert(std::shared_mutex* mutex, uint64_t base_addr,
-                             pmem::obj::pool_base& pop, uint64_t pkey,
-                             uint64_t pvalue) {
+                             pmem::obj::pool_base& pop, Slab<CLevel>* clevel_slab,
+                             uint64_t pkey, uint64_t pvalue) {
   // TODO: lock scope too large. https://stackoverflow.com/a/34995051/7640227
   std::lock_guard<std::shared_mutex> lock(*mutex);
   if (IsUnValid()) {
@@ -231,8 +235,7 @@ Status BLevel::Entry::Insert(std::shared_mutex* mutex, uint64_t base_addr,
       return Status::ALREADY_EXISTS;
     }
     uint64_t old_val = GetValue();
-    pmem::obj::persistent_ptr<CLevel> new_clevel = nullptr;
-    pmem::obj::make_persistent_atomic<CLevel>(pop, new_clevel);
+    CLevel* new_clevel = clevel_slab->Allocate();
     new_clevel->InitLeaf(pop);
 
     [[maybe_unused]] Status s;
@@ -243,7 +246,7 @@ Status BLevel::Entry::Insert(std::shared_mutex* mutex, uint64_t base_addr,
 
     Entry new_ent;
     new_ent.SetTypeClevel();
-    new_ent.SetClevel(new_clevel.get(), base_addr);
+    new_ent.SetClevel(new_clevel, base_addr);
     pop.memcpy_persist(&value, &new_ent.value, sizeof(new_ent.value));
     return Status::OK;
   } else if (IsClevel()) {
@@ -256,8 +259,7 @@ Status BLevel::Entry::Insert(std::shared_mutex* mutex, uint64_t base_addr,
       pop.memcpy_persist(&value, &new_ent.value, sizeof(new_ent.value));
       return Status::OK;
     } else {
-      pmem::obj::persistent_ptr<CLevel> new_clevel;
-      pmem::obj::make_persistent_atomic<CLevel>(pop, new_clevel);
+      CLevel* new_clevel = clevel_slab->Allocate();
       new_clevel->InitLeaf(pop);
 
       [[maybe_unused]] Status s;
@@ -265,7 +267,7 @@ Status BLevel::Entry::Insert(std::shared_mutex* mutex, uint64_t base_addr,
       assert(s == Status::OK);
 
       Entry new_ent;
-      new_ent.SetClevel(new_clevel.get(), base_addr);
+      new_ent.SetClevel(new_clevel, base_addr);
       new_ent.SetTypeClevel();
       pop.memcpy_persist(&value, &new_ent.value, sizeof(new_ent.value));
       return Status::OK;
