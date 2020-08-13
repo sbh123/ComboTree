@@ -7,7 +7,7 @@ set(PMEMKV_THRESHOLD    1024)
 set(CLEVEL_LEAF_ENTRY   8)      # must be even, and must <= 16
 set(CLEVEL_INDEX_ENTRY  8)      # must be even
 set(EXPANSION_FACTOR    2)
-set(ENTRY_SIZE_FACTOR   1.1)    # the entry size factor when expanding
+set(ENTRY_SIZE_FACTOR   1.2)    # the entry size factor when expanding
 
 configure_file(
   "${PROJECT_SOURCE_DIR}/src/combotree_config.h.in"

@@ -4,6 +4,7 @@
 #include <libpmemobj++/make_persistent_atomic.hpp>
 #include <libpmemobj++/transaction.hpp>
 #include <libpmemobj.h>
+#include "slab.h"
 #include "clevel.h"
 #include "debug.h"
 
@@ -28,21 +29,21 @@ void CLevel::LeafNode::Valid_() {
   }
 }
 
-void CLevel::InitLeaf(pool_base& pop) {
+void CLevel::InitLeaf(pool_base& pop, Slab<LeafNode>* slab) {
   type_ = NodeType::LEAF;
-  make_persistent_atomic<LeafNode>(pop, head_);
+  head_ = slab->Allocate();
   head_->prev = head_;
   head_->next = head_;
   root_ = head_;
-  head_.persist();
+  pop.persist(head_, sizeof(*head_));
   pop.persist(this, sizeof(*this));
 }
 
-Status CLevel::Insert(pool_base& pop, uint64_t key, uint64_t value) {
+Status CLevel::Insert(pool_base& pop, Slab<LeafNode>* leaf_slab, uint64_t key, uint64_t value) {
   if (type_ == NodeType::LEAF) {
-    persistent_ptr_base root = root_;
-    Status s = leaf_root_()->Insert(pop, key, value, root);
-    if (!OID_EQUALS(root.raw(), root_.raw())) {
+    void* root = root_;
+    Status s = leaf_root_()->Insert(pop, leaf_slab, key, value, root);
+    if (root != root_) {
       type_ = NodeType::INDEX;
       root_ = root;
       pop.persist(&type_, sizeof(type_));
@@ -50,7 +51,7 @@ Status CLevel::Insert(pool_base& pop, uint64_t key, uint64_t value) {
     }
     return s;
   } else
-    return index_root_()->Insert(pop, key, value, root_);
+    return index_root_()->Insert(pop, leaf_slab, key, value, root_);
 }
 
 Status CLevel::Update(pool_base& pop, uint64_t key, uint64_t value) {
@@ -69,14 +70,14 @@ Status CLevel::Get(uint64_t key, uint64_t& value) const {
 
 Status CLevel::Delete(pool_base& pop, uint64_t key) {
   if (type_ == NodeType::LEAF)
-    return leaf_root_()->Delete(pop, key, root_);
+    return leaf_root_()->Delete(pop, key);
   else
-    return index_root_()->Delete(pop, key, root_);
+    return index_root_()->Delete(pop, key);
 }
 
 bool CLevel::Scan(uint64_t max_key, size_t max_size, size_t& size,
                   std::function<void(uint64_t,uint64_t)> callback) {
-  LeafNode* node = head_.get();
+  LeafNode* node = head_;
   do {
     for (uint32_t i = 0; i < node->nr_entry; ++i) {
       uint64_t entry_key = node->GetEntryKey_(node->GetSortedEntry_(i));
@@ -86,8 +87,8 @@ bool CLevel::Scan(uint64_t max_key, size_t max_size, size_t& size,
       callback(entry_key, node->entry[node->GetSortedEntry_(i)].value);
       size++;
     }
-    node = node->next.get();
-  } while (node != head_.get());
+    node = node->next;
+  } while (node != head_);
   return false;
 }
 
@@ -120,20 +121,21 @@ void CLevel::LeafNode::PrintSortedArray() const {
   }
 }
 
-bool CLevel::LeafNode::Split_(pool_base& pop, persistent_ptr_base& root) {
+bool CLevel::LeafNode::Split_(pool_base& pop, Slab<LeafNode>* leaf_slab, void*& root) {
   // LOG(Debug::INFO, "Split");
   assert(nr_entry == LEAF_ENTRYS);
 
   pmem::obj::transaction::run(pop, [&](){
   if (parent == nullptr) {
-    make_persistent_atomic<IndexNode>(pop, parent);
+    persistent_ptr<IndexNode> tmp;
+    make_persistent_atomic<IndexNode>(pop, tmp);
+    parent = tmp.get();
     parent->child_type = NodeType::LEAF;
-    parent->child[0] = static_cast<persistent_ptr<LeafNode>>(this);
+    parent->child[0] = this;
     root = parent;
   }
 
-  persistent_ptr<LeafNode> new_node;
-  make_persistent_atomic<LeafNode>(pop, new_node);
+  LeafNode* new_node = leaf_slab->Allocate();
   uint64_t new_sorted_array = 0;
   // copy bigger half to new node
   for (int i = 0; i < LEAF_ENTRYS / 2; ++i) {
@@ -149,7 +151,7 @@ bool CLevel::LeafNode::Split_(pool_base& pop, persistent_ptr_base& root) {
   new_node->nr_entry = LEAF_ENTRYS / 2;
   new_node->next_entry = LEAF_ENTRYS / 2;
   new_node->sorted_array = new_sorted_array << ((16 - new_node->nr_entry) * 4);
-  new_node.persist();
+  pop.persist(new_node, sizeof(*new_node));
 
 #if LEAF_ENTRYS != 16
   // add free entry
@@ -173,8 +175,8 @@ bool CLevel::LeafNode::Split_(pool_base& pop, persistent_ptr_base& root) {
   return true;
 }
 
-Status CLevel::LeafNode::Insert(pool_base& pop, uint64_t key, uint64_t value,
-                                persistent_ptr_base& root) {
+Status CLevel::LeafNode::Insert(pool_base& pop, Slab<LeafNode>* leaf_slab, uint64_t key, uint64_t value,
+                                void*& root) {
   bool find;
   int sorted_index = Find_(key, find);
   // already exist
@@ -183,10 +185,10 @@ Status CLevel::LeafNode::Insert(pool_base& pop, uint64_t key, uint64_t value,
   // if not find, insert key in index
   if (nr_entry == LEAF_ENTRYS) {
     // full, split
-    Split_(pop, root);
+    Split_(pop, leaf_slab, root);
     // key should insert to the newly split node
     if (key >= next->entry[next->GetSortedEntry_(0)].key)
-      return next->Insert(pop, key, value, root);
+      return next->Insert(pop, leaf_slab, key, value, root);
   }
 
   uint64_t new_sorted_array;
@@ -241,7 +243,7 @@ Status CLevel::LeafNode::Insert(pool_base& pop, uint64_t key, uint64_t value,
   return Status::OK;
 }
 
-Status CLevel::LeafNode::Delete(pool_base& pop, uint64_t key, persistent_ptr_base& base) {
+Status CLevel::LeafNode::Delete(pool_base& pop, uint64_t key) {
   bool find;
   int sorted_index = Find_(key, find);
   if (!find) {
@@ -292,7 +294,7 @@ Status CLevel::LeafNode::Delete(pool_base& pop, uint64_t key, persistent_ptr_bas
   return Status::OK;
 }
 
-Status CLevel::LeafNode::Update(pool_base& pop, uint64_t key, uint64_t value, persistent_ptr_base& root) {
+Status CLevel::LeafNode::Update(pool_base& pop, uint64_t key, uint64_t value, void*& root) {
   assert(0);
 }
 
@@ -309,7 +311,7 @@ Status CLevel::LeafNode::Get(uint64_t key, uint64_t& value) const {
   return Status::OK;
 }
 
-persistent_ptr<CLevel::LeafNode> CLevel::IndexNode::FindLeafNode_(uint64_t key) const {
+CLevel::LeafNode* CLevel::IndexNode::FindLeafNode_(uint64_t key) const {
   assert(nr_entry > 0);
   if (key >= keys[sorted_array[nr_entry - 1]]) {
     if (child_type == CLevel::NodeType::LEAF)
@@ -350,14 +352,16 @@ void CLevel::IndexNode::AdoptChild_(pool_base& pop) {
   }
 }
 
-bool CLevel::IndexNode::Split_(pool_base& pop, persistent_ptr_base& root) {
+bool CLevel::IndexNode::Split_(pool_base& pop, void*& root) {
   // LOG(Debug::INFO, "IndexNode Split");
   assert(nr_entry == INDEX_ENTRYS + 1);
 
   if (parent == nullptr) {
-    make_persistent_atomic<IndexNode>(pop, parent);
+    persistent_ptr<IndexNode> tmp;
+    make_persistent_atomic<IndexNode>(pop, tmp);
+    parent = tmp.get();
     parent->child_type = NodeType::INDEX;
-    parent->child[0] = static_cast<persistent_ptr<IndexNode>>(this);
+    parent->child[0] = this;
     root = parent;
   }
 
@@ -381,13 +385,13 @@ bool CLevel::IndexNode::Split_(pool_base& pop, persistent_ptr_base& root) {
   new_node.persist();
 
   nr_entry = INDEX_ENTRYS / 2;
-  parent->InsertChild(pop, keys[sorted_array[INDEX_ENTRYS / 2]], new_node, root);
+  parent->InsertChild(pop, keys[sorted_array[INDEX_ENTRYS / 2]], new_node.get(), root);
   return true;
 }
 
 bool CLevel::IndexNode::InsertChild(pool_base& pop, uint64_t child_key,
-                                    persistent_ptr_base new_child,
-                                    persistent_ptr_base& root) {
+                                    void* new_child,
+                                    void*& root) {
   int left = 0;
   int right = nr_entry - 1;
 
@@ -430,13 +434,13 @@ bool CLevel::IndexNode::InsertChild(pool_base& pop, uint64_t child_key,
   return true;
 }
 
-Status CLevel::IndexNode::Insert(pool_base& pop, uint64_t key,
-                               uint64_t value, persistent_ptr_base& root) {
+Status CLevel::IndexNode::Insert(pool_base& pop, Slab<LeafNode>* leaf_slab,
+                                 uint64_t key, uint64_t value, void*& root) {
   auto leaf = FindLeafNode_(key);
-  return leaf->Insert(pop, key, value, root);
+  return leaf->Insert(pop, leaf_slab, key, value, root);
 }
 
-Status CLevel::IndexNode::Update(pool_base& pop, uint64_t key, uint64_t value, persistent_ptr_base& root) {
+Status CLevel::IndexNode::Update(pool_base& pop, uint64_t key, uint64_t value, void*& root) {
   auto leaf = FindLeafNode_(key);
   return leaf->Update(pop, key, value, root);
 }
@@ -446,9 +450,9 @@ Status CLevel::IndexNode::Get(uint64_t key, uint64_t& value) const {
   return leaf->Get(key, value);
 }
 
-Status CLevel::IndexNode::Delete(pool_base& pop, uint64_t key, persistent_ptr_base& root) {
+Status CLevel::IndexNode::Delete(pool_base& pop, uint64_t key) {
   auto leaf = FindLeafNode_(key);
-  return leaf->Delete(pop, key, root);
+  return leaf->Delete(pop, key);
 }
 
 Iterator* CLevel::begin() {

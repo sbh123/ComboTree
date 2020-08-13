@@ -2,6 +2,7 @@
 #include <filesystem>
 #include <vector>
 #include "pmemkv.h"
+#include "slab.h"
 #include "clevel.h"
 #include "timer.h"
 #include "random.h"
@@ -16,9 +17,10 @@ int main(void) {
   std::filesystem::remove(PATH);
   auto pop = pmem::obj::pool_base::create(PATH, "CLevel VS PmemKV",
                                           PMEMOBJ_MIN_POOL * 128, 0666);
+  Slab<CLevel::LeafNode>* slab = new Slab<CLevel::LeafNode>(pop, 1000);
   CLevel* clevel;
   clevel = new CLevel();
-  clevel->InitLeaf(pop);
+  clevel->InitLeaf(pop, slab);
 
   std::filesystem::remove(PMEMKV_PATH);
   PmemKV* pmemkv;
@@ -46,7 +48,7 @@ int main(void) {
   timer.Start();
   for (int i = 0; i < TEST_SIZE; ++i) {
     key = keys[i];
-    clevel->Insert(pop, key, key);
+    clevel->Insert(pop, slab, key, key);
   }
   duration = timer.Stop();
   std::cout << "clevel put time: " << duration << std::endl;

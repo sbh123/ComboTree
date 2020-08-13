@@ -21,6 +21,7 @@ BLevel::BLevel(pmem::obj::pool_base pop, Iterator* iter, uint64_t size)
   base_addr_ = (uint64_t)root_.get() - root_.raw().off;
   pmem::obj::make_persistent_atomic<Entry[]>(pop_, root_->entry, root_->nr_entry);
   clevel_slab_ = new Slab<CLevel>(pop_, EntrySize() / 4.0);
+  leaf_node_slab_ = new Slab<CLevel::LeafNode>(pop_, EntrySize() / 4.0);
   // add one extra lock to make blevel iter's logic simple
   locks_ = new std::shared_mutex[EntrySize() + 1];
   in_mem_entry_ = root_->entry.get();
@@ -60,6 +61,7 @@ BLevel::BLevel(pmem::obj::pool_base pop, std::shared_ptr<BLevel> old_blevel)
   base_addr_ = (uint64_t)root_.get() - root_.raw().off;
   pmem::obj::make_persistent_atomic<Entry[]>(pop_, root_->entry, EntrySize());
   clevel_slab_ = new Slab<CLevel>(pop_, EntrySize() / 4.0);
+  leaf_node_slab_ = new Slab<CLevel::LeafNode>(pop_, EntrySize() / 4.0);
   // add one extra lock to make blevel iter's logic simple
   locks_ = new std::shared_mutex[EntrySize() + 1];
   in_mem_entry_ = root_->entry.get();
@@ -83,12 +85,12 @@ void BLevel::ExpandAddEntry_(uint64_t key, uint64_t value) {
     std::lock_guard<std::shared_mutex> lock(locks_[EntrySize() - 1]);
     Entry* ent = GetEntry_(EntrySize() - 1);
     if (ent->IsClevel()) {
-      ent->GetClevel(base_addr_)->Insert(pop_, key, value);
+      ent->GetClevel(base_addr_)->Insert(pop_, leaf_node_slab_, key, value);
     } else if (ent->IsValue()) {
       CLevel* new_clevel = clevel_slab_->Allocate();
-      new_clevel->InitLeaf(pop_);
-      new_clevel->Insert(pop_, ent->GetKey(), ent->GetValue());
-      new_clevel->Insert(pop_, key, value);
+      new_clevel->InitLeaf(pop_, leaf_node_slab_);
+      new_clevel->Insert(pop_, leaf_node_slab_, ent->GetKey(), ent->GetValue());
+      new_clevel->Insert(pop_, leaf_node_slab_, key, value);
       Entry new_ent;
       new_ent.SetTypeClevel();
       new_ent.SetClevel(new_clevel, base_addr_);
@@ -191,6 +193,7 @@ BLevel::BLevel(pmem::obj::pool_base pop)
   pmem::obj::pool<Root> pool(pop_);
   root_ = pool.root();
   clevel_slab_ = new Slab<CLevel>(pop_, EntrySize() / 4.0);
+  leaf_node_slab_ = new Slab<CLevel::LeafNode>(pop_, EntrySize() / 4.0);
   locks_ = new std::shared_mutex[EntrySize() + 1];
 }
 
@@ -225,6 +228,7 @@ Status BLevel::Entry::Get(std::shared_mutex* mutex, uint64_t base_addr,
 
 Status BLevel::Entry::Insert(std::shared_mutex* mutex, uint64_t base_addr,
                              pmem::obj::pool_base& pop, Slab<CLevel>* clevel_slab,
+                             Slab<CLevel::LeafNode>* leaf_node_slab,
                              uint64_t pkey, uint64_t pvalue) {
   // TODO: lock scope too large. https://stackoverflow.com/a/34995051/7640227
   std::lock_guard<std::shared_mutex> lock(*mutex);
@@ -236,12 +240,12 @@ Status BLevel::Entry::Insert(std::shared_mutex* mutex, uint64_t base_addr,
     }
     uint64_t old_val = GetValue();
     CLevel* new_clevel = clevel_slab->Allocate();
-    new_clevel->InitLeaf(pop);
+    new_clevel->InitLeaf(pop, leaf_node_slab);
 
     [[maybe_unused]] Status s;
-    s = new_clevel->Insert(pop, key, old_val);
+    s = new_clevel->Insert(pop, leaf_node_slab, key, old_val);
     assert(s == Status::OK);
-    s = new_clevel->Insert(pop, pkey, pvalue);
+    s = new_clevel->Insert(pop, leaf_node_slab, pkey, pvalue);
     assert(s == Status::OK);
 
     Entry new_ent;
@@ -250,7 +254,7 @@ Status BLevel::Entry::Insert(std::shared_mutex* mutex, uint64_t base_addr,
     pop.memcpy_persist(&value, &new_ent.value, sizeof(new_ent.value));
     return Status::OK;
   } else if (IsClevel()) {
-    return GetClevel(base_addr)->Insert(pop, pkey, pvalue);
+    return GetClevel(base_addr)->Insert(pop, leaf_node_slab, pkey, pvalue);
   } else if (IsNone()) {
     if (pkey == key) {
       Entry new_ent;
@@ -260,10 +264,10 @@ Status BLevel::Entry::Insert(std::shared_mutex* mutex, uint64_t base_addr,
       return Status::OK;
     } else {
       CLevel* new_clevel = clevel_slab->Allocate();
-      new_clevel->InitLeaf(pop);
+      new_clevel->InitLeaf(pop, leaf_node_slab);
 
       [[maybe_unused]] Status s;
-      s = new_clevel->Insert(pop, pkey, pvalue);
+      s = new_clevel->Insert(pop, leaf_node_slab, pkey, pvalue);
       assert(s == Status::OK);
 
       Entry new_ent;

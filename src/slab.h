@@ -33,7 +33,7 @@ class Slab {
         std::shared_lock<std::shared_mutex> lock(lock_);
         next = next_.fetch_add(1);
         if (next < array_size_) {
-          CLevel* buf = data_.back().get();
+          T* buf = data_.back().get();
           return &buf[next];
         }
       }
@@ -44,7 +44,7 @@ class Slab {
           pmem::obj::persistent_ptr<T[]> data;
           pmem::obj::make_persistent_atomic<T[]>(pop_, data, array_size_);
           data_.push_back(data);
-          CLevel* buf = data_.back().get();
+          T* buf = data_.back().get();
           return &buf[0];
         }
       }

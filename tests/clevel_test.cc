@@ -5,11 +5,13 @@
 #include <vector>
 #include "combotree/iterator.h"
 #include "clevel.h"
+#include "slab.h"
 #include "random.h"
 
 using combotree::CLevel;
 using combotree::Iterator;
 using combotree::Status;
+using combotree::Slab;
 
 using namespace std;
 
@@ -20,9 +22,10 @@ int main(void) {
   std::filesystem::remove(PATH);
   auto pop = pmem::obj::pool_base::create(PATH, "CLevel Test",
                                           PMEMOBJ_MIN_POOL * 128, 0666);
+  Slab<CLevel::LeafNode>* slab = new Slab<CLevel::LeafNode>(pop, 1000);
   CLevel* db;
   db = new CLevel();
-  db->InitLeaf(pop);
+  db->InitLeaf(pop, slab);
 
   combotree::RandomUniformUint64 rnd;
   std::map<uint64_t, uint64_t> right_kv;
@@ -58,11 +61,11 @@ int main(void) {
       case 0: // PUT
         value = key;
         if (right_kv.count(key)) {
-          s = db->Insert(pop, key, value);
+          s = db->Insert(pop, slab, key, value);
           assert(s == Status::ALREADY_EXISTS);
         } else {
           right_kv.emplace(key, value);
-          s = db->Insert(pop, key, value);
+          s = db->Insert(pop, slab, key, value);
           assert(s == Status::OK);
         }
         break;

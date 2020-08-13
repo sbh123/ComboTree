@@ -4,6 +4,7 @@
 #include <libpmemobj++/persistent_ptr.hpp>
 #include <libpmemobj.h>
 #include "combotree/iterator.h"
+#include "slab.h"
 #include "status.h"
 #include "combotree_config.h"
 #include "debug.h"
@@ -13,11 +14,18 @@ namespace combotree {
 #define LEAF_ENTRYS   CLEVEL_LEAF_ENTRY
 #define INDEX_ENTRYS  CLEVEL_INDEX_ENTRY
 
+class BLevel;
+
 class CLevel {
  public:
-  void InitLeaf(pmem::obj::pool_base& pop);
+  struct Entry;
+  struct LeafNode;
+  struct IndexNode;
 
-  Status Insert(pmem::obj::pool_base& pop, uint64_t key, uint64_t value);
+ public:
+  void InitLeaf(pmem::obj::pool_base& pop, Slab<CLevel::LeafNode>* slab);
+
+  Status Insert(pmem::obj::pool_base& pop, Slab<CLevel::LeafNode>* slab, uint64_t key, uint64_t value);
   Status Update(pmem::obj::pool_base& pop, uint64_t key, uint64_t value);
   Status Delete(pmem::obj::pool_base& pop, uint64_t key);
   Status Get(uint64_t key, uint64_t& value) const;
@@ -29,26 +37,24 @@ class CLevel {
   Iterator* begin();
   Iterator* end();
 
- private:
-  struct Entry;
-  struct LeafNode;
-  struct IndexNode;
+  friend BLevel;
 
+ private:
   enum class NodeType {
     LEAF,
     INDEX,
   };
 
-  pmem::obj::persistent_ptr_base root_;
-  pmem::obj::persistent_ptr<LeafNode> head_;
+  void* root_;
+  LeafNode* head_;
   NodeType type_;
 
-  pmem::obj::persistent_ptr<LeafNode> leaf_root_() const {
-    return static_cast<pmem::obj::persistent_ptr<LeafNode>>(root_.raw());
+  LeafNode* leaf_root_() const {
+    return static_cast<LeafNode*>(root_);
   }
 
-  pmem::obj::persistent_ptr<IndexNode> index_root_() const {
-    return static_cast<pmem::obj::persistent_ptr<IndexNode>>(root_.raw());
+  IndexNode* index_root_() const {
+    return static_cast<IndexNode*>(root_);
   }
 };
 
@@ -66,18 +72,18 @@ struct CLevel::LeafNode {
   LeafNode() : prev(nullptr), next(nullptr), parent(nullptr),
                sorted_array(0), nr_entry(0), next_entry(0) {}
 
-  pmem::obj::persistent_ptr<LeafNode> prev;
-  pmem::obj::persistent_ptr<LeafNode> next;
-  pmem::obj::persistent_ptr<IndexNode> parent;
+  LeafNode* prev;
+  LeafNode* next;
+  IndexNode* parent;
   Entry entry[LEAF_ENTRYS];
   uint64_t sorted_array;  // used as an array of uint4_t
   uint32_t nr_entry;
   uint32_t next_entry;
 
-  Status Insert(pmem::obj::pool_base& pop, uint64_t key, uint64_t value, pmem::obj::persistent_ptr_base& root);
-  Status Update(pmem::obj::pool_base& pop, uint64_t key, uint64_t value, pmem::obj::persistent_ptr_base& root);
+  Status Insert(pmem::obj::pool_base& pop, Slab<CLevel::LeafNode>* slab, uint64_t key, uint64_t value, void*& root);
+  Status Update(pmem::obj::pool_base& pop, uint64_t key, uint64_t value, void*& root);
   Status Get(uint64_t key, uint64_t& value) const;
-  Status Delete(pmem::obj::pool_base& pop, uint64_t key, pmem::obj::persistent_ptr_base& root);
+  Status Delete(pmem::obj::pool_base& pop, uint64_t key);
 
   void PrintSortedArray() const;
 
@@ -85,7 +91,7 @@ struct CLevel::LeafNode {
   friend CLevel;
 
  private:
-  bool Split_(pmem::obj::pool_base& pop, pmem::obj::persistent_ptr_base& root);
+  bool Split_(pmem::obj::pool_base& pop, Slab<CLevel::LeafNode>* slab, void*& root);
 
   void Valid_();
 
@@ -123,37 +129,37 @@ struct CLevel::LeafNode {
 };
 
 struct CLevel::IndexNode {
-  pmem::obj::persistent_ptr<IndexNode> parent;
-  pmem::obj::persistent_ptr_base child[INDEX_ENTRYS + 2];
+  IndexNode* parent;
+  void* child[INDEX_ENTRYS + 2];
   uint64_t keys[INDEX_ENTRYS + 1];
   NodeType child_type;
   int nr_entry;
   int next_entry;
   uint8_t sorted_array[INDEX_ENTRYS + 1];
 
-  Status Insert(pmem::obj::pool_base& pop, uint64_t key, uint64_t value, pmem::obj::persistent_ptr_base& root);
-  Status Update(pmem::obj::pool_base& pop, uint64_t key, uint64_t value, pmem::obj::persistent_ptr_base& root);
+  Status Insert(pmem::obj::pool_base& pop, Slab<LeafNode>* leaf_slab, uint64_t key, uint64_t value, void*& root);
+  Status Update(pmem::obj::pool_base& pop, uint64_t key, uint64_t value, void*& root);
   Status Get(uint64_t key, uint64_t& value) const;
-  Status Delete(pmem::obj::pool_base& pop, uint64_t key, pmem::obj::persistent_ptr_base& root);
+  Status Delete(pmem::obj::pool_base& pop, uint64_t key);
 
-  bool InsertChild(pmem::obj::pool_base& pop, uint64_t child_key, pmem::obj::persistent_ptr_base child,
-                   pmem::obj::persistent_ptr_base& root);
+  bool InsertChild(pmem::obj::pool_base& pop, uint64_t child_key, void* child,
+                   void*& root);
 
   friend Iter;
 
  private:
-  bool Split_(pmem::obj::pool_base& pop, pmem::obj::persistent_ptr_base& root);
+  bool Split_(pmem::obj::pool_base& pop, void*& root);
 
   void AdoptChild_(pmem::obj::pool_base& pop);
 
-  pmem::obj::persistent_ptr<LeafNode> FindLeafNode_(uint64_t key) const;
+  LeafNode* FindLeafNode_(uint64_t key) const;
 
-  pmem::obj::persistent_ptr<LeafNode> leaf_child_(int index) const {
-    return static_cast<pmem::obj::persistent_ptr<LeafNode>>(child[index].raw());
+  LeafNode* leaf_child_(int index) const {
+    return static_cast<LeafNode*>(child[index]);
   }
 
-  pmem::obj::persistent_ptr<IndexNode> index_child_(int index) const {
-    return static_cast<pmem::obj::persistent_ptr<IndexNode>>(child[index].raw());
+  IndexNode* index_child_(int index) const {
+    return static_cast<IndexNode*>(child[index]);
   }
 };
 
@@ -163,8 +169,8 @@ class CLevel::Iter : public Iterator {
  public:
   Iter(CLevel* clevel)
       : clevel_(clevel), leaf_(clevel_->head_), sorted_index_(0),
-        first_leaf_(clevel_->head_.raw()),
-        last_leaf_(clevel_->head_->prev.raw()),
+        first_leaf_(clevel_->head_),
+        last_leaf_(clevel_->head_->prev),
         is_first_leaf_(true), is_last_leaf_(false)  {}
   ~Iter() {};
 
@@ -179,7 +185,7 @@ class CLevel::Iter : public Iterator {
 
   void SeekToFirst() {
     leaf_ = clevel_->head_;
-    while (!OID_EQUALS(leaf_.raw(), last_leaf_) &&
+    while (leaf_ != last_leaf_ &&
            leaf_->nr_entry == 0) {
       leaf_ = leaf_->next;
     }
@@ -189,7 +195,7 @@ class CLevel::Iter : public Iterator {
 
   void SeekToLast() {
     leaf_ = clevel_->head_->prev;
-    while (!OID_EQUALS(leaf_.raw(), first_leaf_) &&
+    while (leaf_ != first_leaf_ &&
            leaf_->nr_entry == 0) {
       leaf_ = leaf_->prev;
     }
@@ -205,10 +211,10 @@ class CLevel::Iter : public Iterator {
       leaf_ = clevel_->index_root_()->FindLeafNode_(target);
       sorted_index_ = leaf_->Find_(target, find);
       if (sorted_index_ == leaf_->nr_entry) {
-        if (!OID_EQUALS(leaf_.raw(), last_leaf_)) {
+        if (leaf_ != last_leaf_) {
           do {
             leaf_ = leaf_->next;
-          } while (!OID_EQUALS(leaf_.raw(), last_leaf_) &&
+          } while (leaf_ != last_leaf_ &&
                   leaf_->nr_entry == 0);
           sorted_index_ = 0;
         }
@@ -225,7 +231,7 @@ class CLevel::Iter : public Iterator {
     } else {
       do {
         leaf_ = leaf_->next;
-      } while (!OID_EQUALS(leaf_.raw(), last_leaf_) &&
+      } while (leaf_ != last_leaf_ &&
                leaf_->nr_entry == 0);
       UpdateLeaf_();
       sorted_index_ = 0;
@@ -240,7 +246,7 @@ class CLevel::Iter : public Iterator {
     } else {
       do {
         leaf_ = leaf_->prev;
-      } while (!OID_EQUALS(leaf_.raw(), first_leaf_) &&
+      } while (leaf_ != first_leaf_ &&
                leaf_->nr_entry == 0);
       UpdateLeaf_();
       sorted_index_ = std::max<int>(0, leaf_->nr_entry - 1);
@@ -259,11 +265,11 @@ class CLevel::Iter : public Iterator {
 
  private:
   CLevel* clevel_;
-  pmem::obj::persistent_ptr<LeafNode> leaf_;
+  LeafNode* leaf_;
   uint32_t sorted_index_;
   // cache these information in RAM
-  const PMEMoid& first_leaf_;
-  const PMEMoid& last_leaf_;
+  LeafNode* first_leaf_;
+  LeafNode* last_leaf_;
   uint64_t sorted_array_;
   CLevel::Entry* entry_;
   bool is_first_leaf_;
@@ -271,8 +277,8 @@ class CLevel::Iter : public Iterator {
   int nr_entry_;
 
   void UpdateLeaf_() {
-    is_first_leaf_ = OID_EQUALS(leaf_.raw(), first_leaf_);
-    is_last_leaf_ = OID_EQUALS(leaf_.raw(), last_leaf_);
+    is_first_leaf_ = leaf_ == first_leaf_;
+    is_last_leaf_ = leaf_ == last_leaf_;
     nr_entry_ = leaf_->nr_entry;
     sorted_array_ = leaf_->sorted_array;
     entry_ = leaf_->entry;
