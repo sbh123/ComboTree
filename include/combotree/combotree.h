@@ -32,6 +32,8 @@ class ComboTree {
       std::vector<std::pair<uint64_t, uint64_t>>& results);
   size_t Scan(uint64_t min_key, uint64_t max_key, size_t size,
       Pair* results);
+  size_t Scan(uint64_t min_key, uint64_t max_key, size_t size,
+      uint64_t* results);
 
   size_t Size() const;
 

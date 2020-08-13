@@ -327,6 +327,19 @@ size_t ComboTree::Scan(uint64_t min_key, uint64_t max_key, size_t size,
     });
 }
 
+size_t ComboTree::Scan(uint64_t min_key, uint64_t max_key, size_t size,
+                       uint64_t* results) {
+  uint64_t last_key;
+  return Scan_(min_key, max_key, size,
+    [&](uint64_t key, uint64_t value) {
+      last_key = key;
+      results[size] = value;
+    },
+    [&]() {
+      return size == 0 ? min_key : last_key;
+    });
+}
+
 namespace {
 
 // https://stackoverflow.com/a/18101042/7640227

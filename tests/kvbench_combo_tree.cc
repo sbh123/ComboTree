@@ -44,12 +44,9 @@ class ComboTreeV2<uint64_t, uint64_t> : public kvbench::DB<uint64_t, uint64_t> {
   }
 
   int Scan(uint64_t min_key, std::vector<uint64_t>* values) {
-    // std::vector<std::pair<uint64_t,uint64_t>> results;
-    // results.reserve(scan_size_);
-    Pair results[scan_size_];
+    // Pair results[scan_size_];
+    uint64_t results[scan_size_];
     size_t cnt = db_->Scan(min_key, UINT64_MAX, scan_size_, results);
-    // assert(cnt == results.size());
-    // assert(cnt <= scan_size_);
     return cnt;
   }
 
