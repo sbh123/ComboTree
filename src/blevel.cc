@@ -57,7 +57,7 @@ BLevel::BLevel(pmem::obj::pool_base pop, std::shared_ptr<BLevel> old_blevel)
   root_->nr_entry.store(old_blevel->Size() * ENTRY_SIZE_FACTOR);  // reserve some entry for insertion
   root_->size.store(EntrySize());
   root_.persist();
-  expanding_entry_index_.store(0);
+  expanding_entry_index_.store(0, std::memory_order_release);
   base_addr_ = (uint64_t)root_.get() - root_.raw().off;
   pmem::obj::make_persistent_atomic<Entry[]>(pop_, root_->entry, EntrySize());
   clevel_slab_ = new Slab<CLevel>(pop_, EntrySize() / 4.0);
@@ -70,17 +70,18 @@ BLevel::BLevel(pmem::obj::pool_base pop, std::shared_ptr<BLevel> old_blevel)
 }
 
 void BLevel::ExpandAddEntry_(uint64_t key, uint64_t value, size_t& size) {
-  if (expanding_entry_index_ < EntrySize()) {
-    std::lock_guard<std::shared_mutex> lock(locks_[expanding_entry_index_]);
-    Entry* ent = GetEntry_(expanding_entry_index_);
+  uint64_t entry_index = expanding_entry_index_.load(std::memory_order_acquire);
+  if (entry_index < EntrySize()) {
+    std::lock_guard<std::shared_mutex> lock(locks_[entry_index]);
+    Entry* ent = GetEntry_(entry_index);
     Entry new_ent;
     new_ent.SetKey(key);
     new_ent.SetTypeValue();
     new_ent.SetValue(value);
     pop_.memcpy_persist(ent, &new_ent, sizeof(new_ent));
-    in_mem_key_[expanding_entry_index_] = key;
+    in_mem_key_[entry_index] = key;
     size++;
-    expanding_entry_index_++;
+    expanding_entry_index_.fetch_add(1, std::memory_order_release);
   } else {
     std::lock_guard<std::shared_mutex> lock(locks_[EntrySize() - 1]);
     Entry* ent = GetEntry_(EntrySize() - 1);
@@ -107,7 +108,7 @@ void BLevel::ExpandAddEntry_(uint64_t key, uint64_t value, size_t& size) {
 void BLevel::Expansion(std::shared_ptr<BLevel> old_blevel, std::atomic<uint64_t>& min_key,
                         std::atomic<uint64_t>& max_key) {
   uint64_t old_index = 0;
-  expanding_entry_index_.store(0);
+  expanding_entry_index_.store(0, std::memory_order_release);
   size_t size = 0;
   // handle entry 0 explicit
   {
@@ -153,7 +154,7 @@ void BLevel::Expansion(std::shared_ptr<BLevel> old_blevel, std::atomic<uint64_t>
     } else {
       assert(0);
     }
-    expanding_entry_index_++;
+    expanding_entry_index_.fetch_add(1, std::memory_order_release);
   }
 
   // handle entry [1, EntrySize()]
@@ -186,7 +187,7 @@ void BLevel::Expansion(std::shared_ptr<BLevel> old_blevel, std::atomic<uint64_t>
     root_->size.fetch_add(size - EntrySize());
   else
     root_->size.fetch_sub(EntrySize() - size);
-  root_->nr_entry.store(expanding_entry_index_);
+  root_->nr_entry.store(expanding_entry_index_.load(std::memory_order_acquire));
   root_.persist();
   is_expanding_.store(false);
 }
@@ -321,7 +322,7 @@ Status BLevel::Scan(uint64_t min_key, uint64_t max_key,
 
   int end;
   if (is_expanding_.load())
-    end = expanding_entry_index_.load() - 1;
+    end = expanding_entry_index_.load(std::memory_order_acquire) - 1;
   else
     end = EntrySize() - 1;
   uint64_t entry_index = Find_(min_key, 0, end);
