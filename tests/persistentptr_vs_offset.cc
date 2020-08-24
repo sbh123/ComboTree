@@ -10,7 +10,7 @@ using combotree::Timer;
 
 #define PATH        "/mnt/pmem0/persistent"
 #define TEST_SIZE   10000000
-#define PTR(type, offset) ((type*)(base_addr + (offset & 0x3FFFFFFFFFFFFFFF)))
+#define PTR(type, offset) ((type*)(base_addr + (offset & 0x3FFFFFFFFFFFFFFFUL)))
 
 struct A {
   uint64_t a;

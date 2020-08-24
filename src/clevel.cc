@@ -39,31 +39,35 @@ void CLevel::InitLeaf(MemoryManagement* mem) {
 }
 
 Status CLevel::Insert(MemoryManagement* mem, uint64_t key, uint64_t value) {
-  if (root_.IsLeaf())
-    return root_.leaf()->Insert(mem, mutex_, key, value, &root_);
+  Node root = root_;
+  if (root.IsLeaf())
+    return root.leaf()->Insert(mem, mutex_, key, value, &root_);
   else
-    return root_.index()->Insert(mem, mutex_, key, value, &root_);
+    return root.index()->Insert(mem, mutex_, key, value, &root_);
 }
 
 Status CLevel::Update(MemoryManagement* mem, uint64_t key, uint64_t value) {
-  if (root_.IsLeaf())
-    return root_.leaf()->Update(mem, mutex_, key, value, &root_);
+  Node root = root_;
+  if (root.IsLeaf())
+    return root.leaf()->Update(mem, mutex_, key, value, &root_);
   else
-    return root_.index()->Update(mem, mutex_, key, value, &root_);
+    return root.index()->Update(mem, mutex_, key, value, &root_);
 }
 
 Status CLevel::Get(MemoryManagement* mem, uint64_t key, uint64_t& value) const {
-  if (root_.IsLeaf())
-    return root_.leaf()->Get(mem, key, value);
+  Node root = root_;
+  if (root.IsLeaf())
+    return root.leaf()->Get(mem, key, value);
   else
-    return root_.index()->Get(mem, key, value);
+    return root.index()->Get(mem, key, value);
 }
 
 Status CLevel::Delete(MemoryManagement* mem, uint64_t key) {
-  if (root_.IsLeaf())
-    return root_.leaf()->Delete(mem, mutex_, key);
+  Node root = root_;
+  if (root.IsLeaf())
+    return root.leaf()->Delete(mem, mutex_, key);
   else
-    return root_.index()->Delete(mem, mutex_, key);
+    return root.index()->Delete(mem, mutex_, key);
 }
 
 bool CLevel::Scan(MemoryManagement* mem, uint64_t max_key, size_t max_size,
@@ -73,10 +77,11 @@ bool CLevel::Scan(MemoryManagement* mem, uint64_t max_key, size_t max_size,
 
 bool CLevel::Scan(MemoryManagement* mem, uint64_t min_key, uint64_t max_key,
                   size_t max_size, size_t& size, std::function<void(uint64_t,uint64_t)> callback) {
-  if (root_.IsLeaf())
+  Node root = root_;
+  if (root.IsLeaf())
     return head_->Scan(mem, min_key, max_key, max_size, size, callback);
   else
-    return root_.index()->Scan(mem, min_key, max_key, max_size, size, callback);
+    return root.index()->Scan(mem, min_key, max_key, max_size, size, callback);
 }
 
 // find sorted index which is bigger or equal to key
@@ -400,7 +405,6 @@ bool CLevel::IndexNode::InsertChild(MemoryManagement* mem, uint64_t child_key,
   }
 
   // left is the first entry bigger than leaf
-  uint64_t new_sorted_array;
   int entry_idx = GetFreeEntry_();
   PutChild_(mem, entry_idx, child_key, new_child);
   PutSortedArray_(mem, left, entry_idx);

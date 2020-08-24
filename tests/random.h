@@ -25,8 +25,8 @@ class RandomUniformUint64 {
     gen_.seed(seed);
   }
 
-  int Next() {
-    return dist_(gen_) % 100000;
+  uint64_t Next() {
+    return dist_(gen_) & 0x3FFFFFFFFFFFFFFFUL;
   }
 
  private:

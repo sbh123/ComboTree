@@ -108,17 +108,17 @@ void ComboTree::ExpandComboTree_() {
     expand_min_key_.store(0);
     expand_max_key_.store(0);
 
+    // remove old pool
+    pop_.close();
+    std::filesystem::remove(old_pool_path);
+    pop_ = new_pool;
+
     // change status
     State tmp = State::COMBO_TREE_EXPANDING;
     if (!status_.compare_exchange_strong(tmp, State::USING_COMBO_TREE)) {
       LOG(Debug::ERROR,
           "can not change state from COMBO_TREE_EXPANDING to USING_COMBO_TREE!");
     }
-
-    // remove old pool
-    pop_.close();
-    std::filesystem::remove(old_pool_path);
-    pop_ = new_pool;
 
     old_alevel.reset();
     old_blevel.reset();

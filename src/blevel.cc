@@ -60,8 +60,8 @@ BLevel::BLevel(pmem::obj::pool_base pop, std::shared_ptr<BLevel> old_blevel)
   expanding_entry_index_.store(0, std::memory_order_release);
   base_addr_ = (uint64_t)root_.get() - root_.raw().off;
   pmem::obj::make_persistent_atomic<Entry[]>(pop_, root_->entry, EntrySize());
-  clevel_slab_ = new Slab<CLevel>(pop_, EntrySize() / 4.0);
-  Slab<CLevel::LeafNode>* leaf_slab = new Slab<CLevel::LeafNode>(pop_, EntrySize());
+  clevel_slab_ = new Slab<CLevel>(pop_, 256);
+  Slab<CLevel::LeafNode>* leaf_slab = new Slab<CLevel::LeafNode>(pop_, 256);
   clevel_mem_ = new CLevel::MemoryManagement(pop, leaf_slab);
   // add one extra lock to make blevel iter's logic simple
   locks_ = new std::shared_mutex[EntrySize() + 1];
@@ -242,7 +242,6 @@ Status BLevel::Entry::Insert(std::shared_mutex* mutex, CLevel::MemoryManagement*
   // std::lock_guard<std::shared_mutex> lock(*mutex);
   uint64_t data = value;
   [[maybe_unused]] Status debug_status;
-  uint64_t old_val;
   CLevel* new_clevel;
   switch (GetType(data)) {
     case Type::ENTRY_INVALID:
@@ -251,11 +250,10 @@ Status BLevel::Entry::Insert(std::shared_mutex* mutex, CLevel::MemoryManagement*
       if (pkey == key)
         return Status::ALREADY_EXISTS;
 
-      old_val = data & 0x3FFFFFFFFFFFFFFF;
       new_clevel = clevel_slab->Allocate();
       new_clevel->InitLeaf(mem);
 
-      debug_status = new_clevel->Insert(mem, key, old_val);
+      debug_status = new_clevel->Insert(mem, key, GetValue(data));
       assert(debug_status == Status::OK);
       debug_status = new_clevel->Insert(mem, pkey, pvalue);
       assert(debug_status == Status::OK);

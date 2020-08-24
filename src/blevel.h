@@ -159,7 +159,7 @@ class BLevel {
       return reinterpret_cast<CLevel*>(GetValue(data) + mem->BaseAddr());
     }
 
-    static uint64_t GetValue(uint64_t data) { return data & 0x3FFFFFFFFFFFFFFF; }
+    static uint64_t GetValue(uint64_t data) { return data & 0x3FFFFFFFFFFFFFFFUL; }
     static uint64_t GetType(uint64_t data) { return data >> 62; }
 
     bool IsNone() const { return type == Type::ENTRY_NONE; }

@@ -41,7 +41,7 @@ class CLevel {
 
   class Mutex {
    private:
-    static const int GROUP_SIZE = 128;
+    static const int GROUP_SIZE = 32;
     std::vector<std::mutex*> leaf_mutex;
     std::mutex global_mutex;
     std::mutex expand_mutex;
@@ -58,7 +58,7 @@ class CLevel {
 
     uint64_t AllocateId() {
       uint64_t new_id = id_pool.fetch_add(1);
-      int dim1 = new_id / GROUP_SIZE;
+      unsigned dim1 = new_id / GROUP_SIZE;
       if (dim1 + 1 > leaf_mutex.size()) {
         std::lock_guard<std::mutex> lock(expand_mutex);
         while (dim1 + 1 > leaf_mutex.size())
@@ -69,7 +69,7 @@ class CLevel {
   };
 
   struct Node {
-    enum Type {
+    enum Type : uint64_t {
       LEAF  = 0,
       INDEX = 1,
     };

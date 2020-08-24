@@ -30,7 +30,7 @@ class ComboTreeV2<uint64_t, uint64_t> : public kvbench::DB<uint64_t, uint64_t> {
   }
 
   int Put(uint64_t key, uint64_t value) {
-    db_->Insert(key, value);
+    db_->Insert(key, key);
     return 0;
   }
 
