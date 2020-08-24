@@ -92,7 +92,7 @@ class BLevel {
   uint64_t MinEntryKey() const;
   uint64_t MaxEntryKey() const;
 
-  uint64_t Size() const { return root_->size; }
+  uint64_t Size() const { return root_->size.load(); }
   uint64_t EntrySize() const { return root_->nr_entry.load(); }
 
   uint64_t GetKey(uint64_t index) const {
@@ -155,11 +155,12 @@ class BLevel {
       mem->persist(&value, sizeof(value));
     }
 
-    CLevel* GetClevel(CLevel::MemoryManagement* mem) const {
-      return reinterpret_cast<CLevel*>(ptr + mem->BaseAddr());
+    static CLevel* GetClevel(CLevel::MemoryManagement* mem, uint64_t data) {
+      return reinterpret_cast<CLevel*>(GetValue(data) + mem->BaseAddr());
     }
 
-    uint64_t GetValue() const { return ptr; }
+    static uint64_t GetValue(uint64_t data) { return data & 0x3FFFFFFFFFFFFFFF; }
+    static uint64_t GetType(uint64_t data) { return data >> 62; }
 
     bool IsNone() const { return type == Type::ENTRY_NONE; }
     bool IsValue() const { return type == Type::ENTRY_VALUE; }

@@ -84,11 +84,11 @@ void BLevel::ExpandAddEntry_(uint64_t key, uint64_t value, size_t& size) {
     std::lock_guard<std::shared_mutex> lock(locks_[EntrySize() - 1]);
     Entry* ent = GetEntry_(EntrySize() - 1);
     if (ent->IsClevel()) {
-      ent->GetClevel(clevel_mem_)->Insert(clevel_mem_, key, value);
+      Entry::GetClevel(clevel_mem_, ent->value)->Insert(clevel_mem_, key, value);
     } else if (ent->IsValue()) {
       CLevel* new_clevel = clevel_slab_->Allocate();
       new_clevel->InitLeaf(clevel_mem_);
-      new_clevel->Insert(clevel_mem_, ent->key, ent->GetValue());
+      new_clevel->Insert(clevel_mem_, ent->key, Entry::GetValue(ent->value));
       new_clevel->Insert(clevel_mem_, key, value);
       ent->SetCLevel(clevel_mem_, new_clevel);
     } else if (ent->IsNone()) {
@@ -115,31 +115,37 @@ void BLevel::Expansion(std::shared_ptr<BLevel> old_blevel, std::atomic<uint64_t>
     Entry* new_ent = GetEntry_(0);
     new_ent->SetKey(clevel_mem_, 0);
     in_mem_key_[0] = 0;
-    if (old_ent->IsValue()) {
-      new_ent->SetValue(clevel_mem_, old_ent->GetValue());
-      size++;
-      old_ent->SetInvalid(old_blevel->clevel_mem_);
-      old_index++;
-    } else if (old_ent->IsClevel()) {
-      size_t scan_size = 0;
-      CLevel* clevel = old_ent->GetClevel(old_blevel->clevel_mem_);
-      clevel->Scan(old_blevel->clevel_mem_, 0, 0, 1, scan_size,
-        [&](uint64_t key, uint64_t value) {
-          new_ent->SetValue(clevel_mem_, value);
-          size++;
-        });
-      if (scan_size == 1)
-        clevel->Delete(old_blevel->clevel_mem_, 0);
-      else
+    uint64_t old_data = old_ent->value;
+    size_t scan_size = 0;
+    CLevel* clevel;
+    switch (Entry::GetType(old_data)) {
+      case Entry::Type::ENTRY_INVALID:
+        assert(0);
+      case Entry::Type::ENTRY_VALUE:
+        new_ent->SetValue(clevel_mem_, Entry::GetValue(old_ent->value));
+        size++;
+        old_ent->SetInvalid(old_blevel->clevel_mem_);
+        old_index++;
+        break;
+      case Entry::Type::ENTRY_CLEVEL:
+        clevel = Entry::GetClevel(old_blevel->clevel_mem_, old_data);
+        clevel->Scan(old_blevel->clevel_mem_, 0, 0, 1, scan_size,
+          [&](uint64_t key, uint64_t value) {
+            new_ent->SetValue(clevel_mem_, value);
+            size++;
+          });
+        if (scan_size == 1)
+          clevel->Delete(old_blevel->clevel_mem_, 0);
+        else
+          new_ent->SetNone(clevel_mem_);
+        break;
+      case Entry::Type::ENTRY_NONE:
         new_ent->SetNone(clevel_mem_);
-    } else if (old_ent->IsNone()) {
-      new_ent->SetNone(clevel_mem_);
-      old_ent->SetInvalid(old_blevel->clevel_mem_);
-      old_index++;
-    } else if (old_ent->IsInvalid()) {
-      assert(0);
-    } else {
-      assert(0);
+        old_ent->SetInvalid(old_blevel->clevel_mem_);
+        old_index++;
+        break;
+      default:
+        assert(0);
     }
     expanding_entry_index_.fetch_add(1, std::memory_order_release);
   }
@@ -151,19 +157,26 @@ void BLevel::Expansion(std::shared_ptr<BLevel> old_blevel, std::atomic<uint64_t>
     max_key.store(old_index + 1 == old_blevel->EntrySize() ? UINT64_MAX
                                   : old_blevel->GetKey(old_index + 1));
     Entry* old_ent = old_blevel->GetEntry_(old_index);
-    if (old_ent->IsValue()) {
-      ExpandAddEntry_(old_ent->key, old_ent->GetValue(), size);
-    } else if (old_ent->IsClevel()) {
-      size_t scan_size = 0;
-      CLevel* clevel = old_ent->GetClevel(old_blevel->clevel_mem_);
-      clevel->Scan(old_blevel->clevel_mem_, 0, UINT64_MAX, UINT64_MAX, scan_size,
-        [&](uint64_t key, uint64_t value) {
-          ExpandAddEntry_(key, value, size);
-        });
-    } else if (old_ent->IsNone()) {
-      ;
-    } else if (old_ent->IsInvalid()) {
-      assert(0);
+    uint64_t old_data = old_ent->value;
+    size_t scan_size = 0;
+    CLevel* clevel;
+    switch (Entry::GetType(old_data)) {
+      case Entry::Type::ENTRY_INVALID:
+        assert(0);
+      case Entry::Type::ENTRY_VALUE:
+        ExpandAddEntry_(old_ent->key, Entry::GetValue(old_data), size);
+        break;
+      case Entry::Type::ENTRY_CLEVEL:
+        clevel = Entry::GetClevel(old_blevel->clevel_mem_, old_data);
+        clevel->Scan(old_blevel->clevel_mem_, 0, UINT64_MAX, UINT64_MAX, scan_size,
+          [&](uint64_t key, uint64_t value) {
+            ExpandAddEntry_(key, value, size);
+          });
+        break;
+      case Entry::Type::ENTRY_NONE:
+        break;
+      default:
+        assert(0);
     }
     old_ent->SetInvalid(old_blevel->clevel_mem_);
     old_index++;
@@ -201,20 +214,24 @@ BLevel::~BLevel() {
 
 Status BLevel::Entry::Get(std::shared_mutex* mutex, CLevel::MemoryManagement* mem,
                           uint64_t pkey, uint64_t& pvalue) const {
-  std::shared_lock<std::shared_mutex> lock(*mutex);
-  if (IsInvalid()) {
-    return Status::INVALID;
-  } else if (IsValue()) {
-    if (pkey == key) {
-      pvalue = GetValue();
-      return Status::OK;
-    } else {
+  // std::shared_lock<std::shared_mutex> lock(*mutex);
+  uint64_t data = value;
+  switch (GetType(data)) {
+    case Type::ENTRY_INVALID:
+      return Status::INVALID;
+    case Type::ENTRY_VALUE:
+      if (pkey == key) {
+        pvalue = GetValue(data);
+        return Status::OK;
+      } else {
+        return Status::DOES_NOT_EXIST;
+      }
+    case Type::ENTRY_CLEVEL:
+      return GetClevel(mem, data)->Get(mem, pkey, pvalue);
+    case Type::ENTRY_NONE:
       return Status::DOES_NOT_EXIST;
-    }
-  } else if (IsClevel()) {
-    return GetClevel(mem)->Get(mem, pkey, pvalue);
-  } else if (IsNone()) {
-    return Status::DOES_NOT_EXIST;
+    default:
+      assert(0);
   }
   return Status::INVALID;
 }
@@ -222,42 +239,47 @@ Status BLevel::Entry::Get(std::shared_mutex* mutex, CLevel::MemoryManagement* me
 Status BLevel::Entry::Insert(std::shared_mutex* mutex, CLevel::MemoryManagement* mem,
                              Slab<CLevel>* clevel_slab, uint64_t pkey, uint64_t pvalue) {
   // TODO: lock scope too large. https://stackoverflow.com/a/34995051/7640227
-  std::lock_guard<std::shared_mutex> lock(*mutex);
-  if (IsInvalid()) {
-    return Status::INVALID;
-  } else if (IsValue()) {
-    if (pkey == key)
-      return Status::ALREADY_EXISTS;
+  // std::lock_guard<std::shared_mutex> lock(*mutex);
+  uint64_t data = value;
+  [[maybe_unused]] Status debug_status;
+  uint64_t old_val;
+  CLevel* new_clevel;
+  switch (GetType(data)) {
+    case Type::ENTRY_INVALID:
+      return Status::INVALID;
+    case Type::ENTRY_VALUE:
+      if (pkey == key)
+        return Status::ALREADY_EXISTS;
 
-    uint64_t old_val = GetValue();
-    CLevel* new_clevel = clevel_slab->Allocate();
-    new_clevel->InitLeaf(mem);
-
-    [[maybe_unused]] Status debug_status;
-    debug_status = new_clevel->Insert(mem, key, old_val);
-    assert(debug_status == Status::OK);
-    debug_status = new_clevel->Insert(mem, pkey, pvalue);
-    assert(debug_status == Status::OK);
-
-    SetCLevel(mem, new_clevel);
-    return Status::OK;
-  } else if (IsClevel()) {
-    return GetClevel(mem)->Insert(mem, pkey, pvalue);
-  } else if (IsNone()) {
-    if (pkey == key) {
-      SetValue(mem, pvalue);
-      return Status::OK;
-    } else {
-      CLevel* new_clevel = clevel_slab->Allocate();
+      old_val = data & 0x3FFFFFFFFFFFFFFF;
+      new_clevel = clevel_slab->Allocate();
       new_clevel->InitLeaf(mem);
 
-      [[maybe_unused]] Status debug_status;
+      debug_status = new_clevel->Insert(mem, key, old_val);
+      assert(debug_status == Status::OK);
       debug_status = new_clevel->Insert(mem, pkey, pvalue);
       assert(debug_status == Status::OK);
 
       SetCLevel(mem, new_clevel);
       return Status::OK;
-    }
+    case Type::ENTRY_CLEVEL:
+      return GetClevel(mem, data)->Insert(mem, pkey, pvalue);
+    case Type::ENTRY_NONE:
+      if (pkey == key) {
+        SetValue(mem, pvalue);
+        return Status::OK;
+      } else {
+        new_clevel = clevel_slab->Allocate();
+        new_clevel->InitLeaf(mem);
+
+        debug_status = new_clevel->Insert(mem, pkey, pvalue);
+        assert(debug_status == Status::OK);
+
+        SetCLevel(mem, new_clevel);
+        return Status::OK;
+      }
+    default:
+      assert(0);
   }
   return Status::INVALID;
 }
@@ -269,20 +291,24 @@ Status BLevel::Entry::Update(std::shared_mutex* mutex, CLevel::MemoryManagement*
 
 Status BLevel::Entry::Delete(std::shared_mutex* mutex, CLevel::MemoryManagement* mem,
                              uint64_t pkey) {
-  std::lock_guard<std::shared_mutex> lock(*mutex);
-  if (IsInvalid()) {
-    return Status::INVALID;
-  } else if (IsValue()) {
-    if (pkey == key) {
-      SetNone(mem);
-      return Status::OK;
-    } else {
+  // std::lock_guard<std::shared_mutex> lock(*mutex);
+  uint64_t data = value;
+  switch (GetType(data)) {
+    case Type::ENTRY_INVALID:
+      return Status::INVALID;
+    case Type::ENTRY_VALUE:
+      if (pkey == key) {
+        SetNone(mem);
+        return Status::OK;
+      } else {
+        return Status::DOES_NOT_EXIST;
+      }
+    case Type::ENTRY_CLEVEL:
+      return GetClevel(mem, data)->Delete(mem, pkey);
+    case Type::ENTRY_NONE:
       return Status::DOES_NOT_EXIST;
-    }
-  } else if (IsClevel()) {
-    return GetClevel(mem)->Delete(mem, pkey);
-  } else if (IsNone()) {
-    return Status::DOES_NOT_EXIST;
+    default:
+      assert(0);
   }
   return Status::INVALID;
 }
@@ -302,20 +328,28 @@ Status BLevel::Scan(uint64_t min_key, uint64_t max_key,
   {
     std::shared_lock<std::shared_mutex> lock(locks_[entry_index]);
     Entry* ent = GetEntry_(entry_index);
-    if (ent->IsInvalid()) {
-      return Status::INVALID;
-    } else if (ent->IsNone()) {
-      ;
-    } else if (ent->IsValue()) {
-      if (ent->key >= min_key) {
-        callback(ent->key, ent->GetValue());
-        size++;
-      }
-    } else if (ent->IsClevel()) {
-      CLevel* clevel = ent->GetClevel(clevel_mem_);
-      bool finish = clevel->Scan(clevel_mem_, min_key, max_key, max_size, size, callback);
-      if (finish)
-        return Status::OK;
+    uint64_t data = ent->value;
+    CLevel* clevel;
+    bool finish;
+    switch (Entry::GetType(data)) {
+      case Entry::Type::ENTRY_INVALID:
+        return Status::INVALID;
+      case Entry::Type::ENTRY_VALUE:
+        if (ent->key >= min_key) {
+          callback(ent->key, Entry::GetValue(data));
+          size++;
+        }
+        break;
+      case Entry::Type::ENTRY_CLEVEL:
+        clevel = Entry::GetClevel(clevel_mem_, data);
+        finish = clevel->Scan(clevel_mem_, min_key, max_key, max_size, size, callback);
+        if (finish)
+          return Status::OK;
+        break;
+      case Entry::Type::ENTRY_NONE:
+        break;
+      default:
+        assert(0);
     }
   }
 
@@ -323,20 +357,28 @@ Status BLevel::Scan(uint64_t min_key, uint64_t max_key,
   while (entry_index < EntrySize()) {
     std::shared_lock<std::shared_mutex> lock(locks_[entry_index]);
     Entry* ent = GetEntry_(entry_index);
-    if (ent->IsInvalid()) {
-      return Status::INVALID;
-    } else if (ent->IsNone()) {
-      ;
-    } else if (ent->IsValue()) {
-      if (size >= max_size || ent->key > max_key)
+    uint64_t data = ent->value;
+    bool finish;
+    CLevel* clevel;
+    switch (Entry::GetType(data)) {
+      case Entry::Type::ENTRY_INVALID:
+        return Status::INVALID;
+      case Entry::Type::ENTRY_VALUE:
+        if (size >= max_size || ent->key > max_key)
+          break;
+        callback(ent->key, Entry::GetValue(data));
+        size++;
         break;
-      callback(ent->key, ent->GetValue());
-      size++;
-    } else if (ent->IsClevel()) {
-      CLevel* clevel = ent->GetClevel(clevel_mem_);
-      bool finish = clevel->Scan(clevel_mem_, max_key, max_size, size, callback);
-      if (finish)
-        return Status::OK;
+      case Entry::Type::ENTRY_CLEVEL:
+        clevel = Entry::GetClevel(clevel_mem_, data);
+        finish = clevel->Scan(clevel_mem_, max_key, max_size, size, callback);
+        if (finish)
+          return Status::OK;
+        break;
+      case Entry::Type::ENTRY_NONE:
+        break;
+      default:
+        assert(0);
     }
     entry_index++;
   }
