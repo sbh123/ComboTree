@@ -38,27 +38,25 @@ int main(void) {
     bool res;
     if (op % 100 == 0) {
       // SCAN
-      // std::vector<std::pair<uint64_t,uint64_t>> results;
-      // size_t size = 0;
-      // size = db->Scan(key, UINT64_MAX, UINT64_MAX, results);
-      // auto right_iter = right_kv.lower_bound(key);
-      // auto iter = results.begin();
-      // assert(size == results.size());
-      // int cnt = 0;
-      // while (right_iter != right_kv.end()) {
-      //   cnt++;
-      //   assert(iter != results.end());
-      //   assert(right_iter->first == iter->first);
-      //   assert(right_iter->second == iter->second);
-      //   right_iter++;
-      //   iter++;
-      // }
-      // assert(iter == results.end());
+      std::vector<std::pair<uint64_t,uint64_t>> results;
+      size_t size = 0;
+      size = db->Scan(key, UINT64_MAX, UINT64_MAX, results);
+      auto right_iter = right_kv.lower_bound(key);
+      auto iter = results.begin();
+      assert(size == results.size());
+      int cnt = 0;
+      while (right_iter != right_kv.end()) {
+        cnt++;
+        assert(iter != results.end());
+        assert(right_iter->first == iter->first);
+        assert(right_iter->second == iter->second);
+        right_iter++;
+        iter++;
+      }
+      assert(iter == results.end());
     }
     switch (op % 3) {
       case 0: // PUT
-      case 2: // DELETE
-      case 1: // GET
         value = rnd.Next();
         if (right_kv.count(key)) {
           res = db->Insert(key, value);
@@ -69,6 +67,7 @@ int main(void) {
           assert(res);
         }
         break;
+      case 1: // GET
         if (right_kv.count(key)) {
           right_value = right_kv.at(key);
           res = db->Get(key, value);
@@ -78,6 +77,7 @@ int main(void) {
           assert(!res);
         }
         break;
+      case 2: // DELETE
         if (right_kv.count(key)) {
           right_kv.erase(key);
           res = db->Delete(key);

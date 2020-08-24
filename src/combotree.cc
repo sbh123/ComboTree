@@ -254,39 +254,38 @@ bool ComboTree::Delete(uint64_t key) {
   return s == Status::OK;
 }
 
-size_t ComboTree::Scan_(uint64_t min_key, uint64_t max_key, size_t size,
-                        std::function<void(uint64_t,uint64_t)> callback,
+size_t ComboTree::Scan_(uint64_t min_key, uint64_t max_key, size_t max_size,
+                        size_t& count, std::function<void(uint64_t,uint64_t)> callback,
                         std::function<uint64_t()> cur_max_key) {
-  size_t count = 0;
   while (true) {
     if (status_.load() == State::USING_PMEMKV) {
-      return pmemkv_->Scan(min_key, max_key, size, callback);
+      return pmemkv_->Scan(min_key, max_key, max_size, callback);
     } else if (status_.load() == State::PMEMKV_TO_COMBO_TREE) {
       std::this_thread::sleep_for(std::chrono::microseconds(5));
       continue;
     } else if (status_.load() == State::USING_COMBO_TREE) {
-      Status s = blevel_->Scan(min_key, max_key, size, count, callback);
+      Status s = blevel_->Scan(min_key, max_key, max_size, count, callback);
       if (s == Status::OK)
         return count;
       if (s == Status::INVALID) {
-        min_key = size == 0 ? min_key : cur_max_key() + 1;
+        min_key = max_size == 0 ? min_key : cur_max_key() + 1;
         continue;
       }
     } else if (status_.load() == State::COMBO_TREE_EXPANDING) {
       if (min_key < expand_min_key_.load()) {
-        Status s = blevel_->Scan(min_key, max_key, size, count, callback);
+        Status s = blevel_->Scan(min_key, max_key, max_size, count, callback);
         if (s == Status::OK)
           return count;
         if (s == Status::INVALID) {
-          min_key = size == 0 ? min_key : cur_max_key() + 1;
+          min_key = max_size == 0 ? min_key : cur_max_key() + 1;
           continue;
         }
       } else if (min_key >= expand_max_key_.load()) {
-        Status s = alevel_->blevel_->Scan(min_key, max_key, size, count, callback);
+        Status s = alevel_->blevel_->Scan(min_key, max_key, max_size, count, callback);
         if (s == Status::OK)
           return count;
         if (s == Status::INVALID) {
-          min_key = size == 0 ? min_key : cur_max_key() + 1;
+          min_key = max_size == 0 ? min_key : cur_max_key() + 1;
           continue;
         }
       } else {
@@ -297,9 +296,10 @@ size_t ComboTree::Scan_(uint64_t min_key, uint64_t max_key, size_t size,
   }
 }
 
-size_t ComboTree::Scan(uint64_t min_key, uint64_t max_key, size_t size,
+size_t ComboTree::Scan(uint64_t min_key, uint64_t max_key, size_t max_size,
                        std::vector<std::pair<uint64_t, uint64_t>>& results) {
-  return Scan_(min_key, max_key, size,
+  size_t count = 0;
+  return Scan_(min_key, max_key, max_size, count,
     [&](uint64_t key, uint64_t value) {
       results.emplace_back(key, value);
     },
@@ -308,28 +308,30 @@ size_t ComboTree::Scan(uint64_t min_key, uint64_t max_key, size_t size,
     });
 }
 
-size_t ComboTree::Scan(uint64_t min_key, uint64_t max_key, size_t size,
+size_t ComboTree::Scan(uint64_t min_key, uint64_t max_key, size_t max_size,
                        Pair* results) {
-  return Scan_(min_key, max_key, size,
+  size_t count = 0;
+  return Scan_(min_key, max_key, max_size, count,
     [&](uint64_t key, uint64_t value) {
-      results[size].key = key;
-      results[size].value = value;
+      results[count].key = key;
+      results[count].value = value;
     },
     [&]() {
-      return size == 0 ? min_key : results[size - 1].key;
+      return count == 0 ? min_key : results[count - 1].key;
     });
 }
 
-size_t ComboTree::Scan(uint64_t min_key, uint64_t max_key, size_t size,
+size_t ComboTree::Scan(uint64_t min_key, uint64_t max_key, size_t max_size,
                        uint64_t* results) {
   uint64_t last_key;
-  return Scan_(min_key, max_key, size,
+  size_t count = 0;
+  return Scan_(min_key, max_key, max_size, count,
     [&](uint64_t key, uint64_t value) {
       last_key = key;
-      results[size] = value;
+      results[count] = value;
     },
     [&]() {
-      return size == 0 ? min_key : last_key;
+      return count == 0 ? min_key : last_key;
     });
 }
 
