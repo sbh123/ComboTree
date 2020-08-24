@@ -273,36 +273,38 @@ bool CLevel::LeafNode::Scan(MemoryManagement* mem, uint64_t min_key,
 bool CLevel::LeafNode::Scan_(MemoryManagement* mem, uint64_t max_key,
                              size_t max_size, size_t& size, uint64_t last_seen,
                              std::function<void(uint64_t,uint64_t)> callback) {
-  uint64_t entry_key = 0;
-  if (GetSortedKey_(0) > last_seen) {
-    for (uint32_t i = 0; i < nr_entry; ++i) {
-      entry_key = GetSortedKey_(i);
-      if (size >= max_size || entry_key > max_key)
-        return true;
-      callback(entry_key, entry[GetSortedEntry_(i)].value);
-      size++;
-    }
-  } else {
-    // key[0] <= last_seen, special situation
+  LeafNode* node = this;
+  while (true) {
+    uint64_t entry_key = 0;
+    if (node->GetSortedKey_(0) > last_seen) {
+      for (uint32_t i = 0; i < node->nr_entry; ++i) {
+        entry_key = node->GetSortedKey_(i);
+        if (size >= max_size || entry_key > max_key)
+          return true;
+        callback(entry_key, node->entry[node->GetSortedEntry_(i)].value);
+        size++;
+      }
+    } else {
+      // key[0] <= last_seen, special situation
 #ifndef NDEBUG
-    if (nr_entry != 0)
-      LOG(Debug::WARNING, "scan special situation");
+      if (node->nr_entry != 0)
+        LOG(Debug::WARNING, "scan special situation");
 #endif // NDEBUG
-    for (uint32_t i = 0; i < nr_entry; ++i) {
-      entry_key = GetSortedKey_(i);
-      if (size >= max_size || entry_key > max_key)
-        return true;
-      if (entry_key <= last_seen)
-        continue;
-      callback(entry_key, entry[GetSortedEntry_(i)].value);
-      size++;
+      for (uint32_t i = 0; i < node->nr_entry; ++i) {
+        entry_key = node->GetSortedKey_(i);
+        if (size >= max_size || entry_key > max_key)
+          return true;
+        if (entry_key <= last_seen)
+          continue;
+        callback(entry_key, node->entry[node->GetSortedEntry_(i)].value);
+        size++;
+      }
     }
+    node = node->GetNext(mem->BaseAddr());
+    assert(node != this);
+    if (!node)
+      return false;
   }
-  LeafNode* next_node = GetNext(mem->BaseAddr());
-  if (next_node)
-    return next_node->Scan_(mem, max_key, max_size, size, std::max(entry_key, last_seen), callback);
-  else
-    return false;
 }
 
 // find sorted index which is bigger or equal to key
