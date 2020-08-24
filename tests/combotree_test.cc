@@ -3,13 +3,14 @@
 #include <fstream>
 #include <map>
 #include <vector>
+#include <cassert>
 #include "combotree/combotree.h"
 #include "random.h"
 
 using namespace std;
 
 #define COMBO_TREE_DIR  "/mnt/pmem0/combotree/"
-#define TEST_SIZE       1000000
+#define TEST_SIZE       40000000
 
 int main(void) {
   std::filesystem::remove_all(COMBO_TREE_DIR);
@@ -29,21 +30,23 @@ int main(void) {
     uint64_t key;
     uint64_t value;
     uint64_t right_value;
-    f_op >> op;
-    f >> key;
-    // key = rnd.Next();
-    // op = rnd.Next();
+    // f_op >> op;
+    // f >> key;
+    key = rnd.Next();
+    op = rnd.Next();
     bool res;
     if (op % 100 == 0) {
       // SCAN
       std::vector<std::pair<uint64_t,uint64_t>> results;
       size_t size = 0;
-      size = db->Scan(key, UINT64_MAX, UINT32_MAX, results);
+      size = db->Scan(key, UINT64_MAX, UINT64_MAX, results);
       auto right_iter = right_kv.lower_bound(key);
       auto iter = results.begin();
+      assert(size == results.size());
       int cnt = 0;
       while (right_iter != right_kv.end()) {
         cnt++;
+        assert(iter != results.end());
         assert(right_iter->first == iter->first);
         assert(right_iter->second == iter->second);
         right_iter++;

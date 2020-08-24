@@ -4,9 +4,9 @@ project(ComboTree)
 ## Combo Tree Configuration
 set(DEFAULT_SPAN        2)
 set(PMEMKV_THRESHOLD    1024)
-set(CLEVEL_LEAF_ENTRY   8)      # must be even, and must <= 16
-set(CLEVEL_INDEX_ENTRY  8)      # must be even
-set(EXPANSION_FACTOR    2)
+set(CLEVEL_LEAF_ENTRY   14)      # must <= 14
+set(CLEVEL_INDEX_ENTRY  15)      # must be old and <= 15
+set(EXPANSION_FACTOR    8)
 set(ENTRY_SIZE_FACTOR   1.2)    # the entry size factor when expanding
 
 configure_file(
@@ -66,10 +66,10 @@ add_executable(persistentptr_vs_offset tests/persistentptr_vs_offset.cc)
 target_link_libraries(persistentptr_vs_offset pmemobj)
 
 # pmemkv_vs_clevel test
-add_executable(pmemkv_vs_clevel tests/pmemkv_vs_clevel.cc src/clevel.cc src/pmemkv.cc)
-target_link_libraries(pmemkv_vs_clevel pmemobj pmemkv)
+# add_executable(pmemkv_vs_clevel tests/pmemkv_vs_clevel.cc src/clevel.cc src/pmemkv.cc)
+# target_link_libraries(pmemkv_vs_clevel pmemobj pmemkv)
 
-# pmemkv_vs_clevel test
+# pmemkv_vs_pmemobj test
 add_executable(pmem_vs_pmemobj tests/pmem_vs_pmemobj.cc)
 target_link_libraries(pmem_vs_pmemobj pmemobj pmem)
 

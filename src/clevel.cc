@@ -22,74 +22,61 @@ void CLevel::LeafNode::Valid_() {
     assert(idx.count(index) == 0);
     idx.emplace(index);
   }
-  for (uint32_t i = 0; i < next_entry - nr_entry; ++i) {
+  for (uint32_t i = 0; i < LEAF_ENTRYS - nr_entry; ++i) {
     int index = GetSortedEntry_(15 - i);
     assert(idx.count(index) == 0);
     idx.emplace(index);
   }
 }
 
-void CLevel::InitLeaf(pool_base& pop, Slab<LeafNode>* slab) {
-  type_ = NodeType::LEAF;
-  head_ = slab->Allocate();
-  head_->prev = head_;
-  head_->next = head_;
+void CLevel::InitLeaf(MemoryManagement* mem) {
+  head_ = mem->NewLeafNode();
+  head_->id = mutex_.AllocateId();
   root_ = head_;
-  pop.persist(head_, sizeof(*head_));
-  pop.persist(this, sizeof(*this));
+  mem->persist(head_, sizeof(*head_));
+  mem->persist(this, sizeof(*this));
+  assert(head_);
 }
 
-Status CLevel::Insert(pool_base& pop, Slab<LeafNode>* leaf_slab, uint64_t key, uint64_t value) {
-  if (type_ == NodeType::LEAF) {
-    void* root = root_;
-    Status s = leaf_root_()->Insert(pop, leaf_slab, key, value, root);
-    if (root != root_) {
-      type_ = NodeType::INDEX;
-      root_ = root;
-      pop.persist(&type_, sizeof(type_));
-      pop.persist(&root_, sizeof(root_));
-    }
-    return s;
-  } else
-    return index_root_()->Insert(pop, leaf_slab, key, value, root_);
-}
-
-Status CLevel::Update(pool_base& pop, uint64_t key, uint64_t value) {
-  if (type_ == NodeType::LEAF)
-    return leaf_root_()->Update(pop, key, value, root_);
+Status CLevel::Insert(MemoryManagement* mem, uint64_t key, uint64_t value) {
+  if (root_.IsLeaf())
+    return root_.leaf()->Insert(mem, mutex_, key, value, &root_);
   else
-    return index_root_()->Update(pop, key, value, root_);
+    return root_.index()->Insert(mem, mutex_, key, value, &root_);
 }
 
-Status CLevel::Get(uint64_t key, uint64_t& value) const {
-  if (type_ == NodeType::LEAF)
-    return leaf_root_()->Get(key, value);
+Status CLevel::Update(MemoryManagement* mem, uint64_t key, uint64_t value) {
+  if (root_.IsLeaf())
+    return root_.leaf()->Update(mem, mutex_, key, value, &root_);
   else
-    return index_root_()->Get(key, value);
+    return root_.index()->Update(mem, mutex_, key, value, &root_);
 }
 
-Status CLevel::Delete(pool_base& pop, uint64_t key) {
-  if (type_ == NodeType::LEAF)
-    return leaf_root_()->Delete(pop, key);
+Status CLevel::Get(MemoryManagement* mem, uint64_t key, uint64_t& value) const {
+  if (root_.IsLeaf())
+    return root_.leaf()->Get(mem, key, value);
   else
-    return index_root_()->Delete(pop, key);
+    return root_.index()->Get(mem, key, value);
 }
 
-bool CLevel::Scan(uint64_t max_key, size_t max_size, size_t& size,
-                  std::function<void(uint64_t,uint64_t)> callback) {
-  LeafNode* node = head_;
-  do {
-    for (uint32_t i = 0; i < node->nr_entry; ++i) {
-      uint64_t entry_key = node->GetEntryKey_(node->GetSortedEntry_(i));
-      if (size >= max_size || entry_key > max_key) {
-        return true;
-      }
-      callback(entry_key, node->entry[node->GetSortedEntry_(i)].value);
-      size++;
-    }
-    node = node->next;
-  } while (node != head_);
-  return false;
+Status CLevel::Delete(MemoryManagement* mem, uint64_t key) {
+  if (root_.IsLeaf())
+    return root_.leaf()->Delete(mem, mutex_, key);
+  else
+    return root_.index()->Delete(mem, mutex_, key);
+}
+
+bool CLevel::Scan(MemoryManagement* mem, uint64_t max_key, size_t max_size,
+                  size_t& size, std::function<void(uint64_t,uint64_t)> callback) {
+  return head_->Scan_(mem, max_key, max_size, size, 0, callback);
+}
+
+bool CLevel::Scan(MemoryManagement* mem, uint64_t min_key, uint64_t max_key,
+                  size_t max_size, size_t& size, std::function<void(uint64_t,uint64_t)> callback) {
+  if (root_.IsLeaf())
+    return head_->Scan(mem, min_key, max_key, max_size, size, callback);
+  else
+    return root_.index()->Scan(mem, min_key, max_key, max_size, size, callback);
 }
 
 // find sorted index which is bigger or equal to key
@@ -99,8 +86,7 @@ int CLevel::LeafNode::Find_(uint64_t key, bool& find) const {
   // binary search
   while (left <= right) {
     int middle = (left + right) / 2;
-    int mid_idx = GetSortedEntry_(middle);
-    uint64_t mid_key = GetEntryKey_(mid_idx);
+    uint64_t mid_key = GetSortedKey_(middle);
     if (mid_key == key) {
       find = true;
       return middle; // find
@@ -121,187 +107,132 @@ void CLevel::LeafNode::PrintSortedArray() const {
   }
 }
 
-bool CLevel::LeafNode::Split_(pool_base& pop, Slab<LeafNode>* leaf_slab, void*& root) {
+CLevel::LeafNode* CLevel::LeafNode::Split_(MemoryManagement* mem, Mutex& mutex,
+                                           Node* root) {
   // LOG(Debug::INFO, "Split");
   assert(nr_entry == LEAF_ENTRYS);
 
-  pmem::obj::transaction::run(pop, [&](){
-  if (parent == nullptr) {
-    persistent_ptr<IndexNode> tmp;
-    make_persistent_atomic<IndexNode>(pop, tmp);
-    parent = tmp.get();
-    parent->child_type = NodeType::LEAF;
+  // lock global mutex
+  std::lock_guard<std::mutex> lock(mutex.GetGlobalMutex());
+
+  // get parent
+  IndexNode* parent;
+  if (root->IsLeaf()) {
+    // allocate new root
+    parent = mem->NewIndexNode();
     parent->child[0] = this;
-    root = parent;
+    mem->persist(parent, sizeof(*parent));
+  } else {
+    parent = root->index()->FindParent(GetSortedKey_(0), this);
   }
 
-  LeafNode* new_node = leaf_slab->Allocate();
-  uint64_t new_sorted_array = 0;
   // copy bigger half to new node
+  LeafNode* new_node = mem->NewLeafNode();
   for (int i = 0; i < LEAF_ENTRYS / 2; ++i) {
-    new_node->entry[i].key = entry[GetSortedEntry_(i + LEAF_ENTRYS / 2)].key;
-    new_node->entry[i].value = entry[GetSortedEntry_(i + LEAF_ENTRYS / 2)].value;
-    new_sorted_array = (new_sorted_array << 4) | i;
+    new_node->entry[i].key = entry[GetSortedEntry_(i + LEAF_ENTRYS - LEAF_ENTRYS / 2)].key;
+    new_node->entry[i].value = entry[GetSortedEntry_(i + LEAF_ENTRYS - LEAF_ENTRYS / 2)].value;
   }
-  new_node->prev = this;
+  new_node->id = mutex.AllocateId();
   new_node->next = next;
-  new_node->next->prev = new_node;
-  new_node->prev->next = new_node;
-  new_node->parent = parent;
+  new_node->min_key = new_node->GetSortedKey_(0);
   new_node->nr_entry = LEAF_ENTRYS / 2;
-  new_node->next_entry = LEAF_ENTRYS / 2;
-  new_node->sorted_array = new_sorted_array << ((16 - new_node->nr_entry) * 4);
-  pop.persist(new_node, sizeof(*new_node));
+  mem->persist(new_node, sizeof(*new_node));
 
-#if LEAF_ENTRYS != 16
-  // add free entry
-  uint64_t free_mask = 0;
-  for (int i = 0; i < LEAF_ENTRYS - LEAF_ENTRYS / 2; ++i)
-    free_mask = (free_mask << 4) | 0x0FUL;
-  free_mask <<= (16 - LEAF_ENTRYS) * 4;
-  uint64_t free_index = (sorted_array & free_mask) >> ((16 - LEAF_ENTRYS) * 4);
+  // insert new node to parent
+  parent->InsertChild(mem, new_node->GetSortedKey_(0), new_node, root);
 
-  uint64_t before_mask = 0;
-  for (int i = 0; i < LEAF_ENTRYS / 2; ++i)
-    before_mask = (before_mask >> 4) | 0xF000000000000000UL;
-  uint64_t before_index = sorted_array & before_mask;
-  sorted_array = before_index | free_index;
-  pop.persist(&sorted_array, sizeof(sorted_array));
-#endif
+  // change root
+  if (root->IsLeaf()) {
+    Node new_root(parent);
+    mem->memcpy_persist(root, &new_root, sizeof(new_root));
+  }
+
+  // change next ptr
+  SetNext(mem->BaseAddr(), new_node);
+  mem->persist(&next, sizeof(next));
+
+  // change metadata
   nr_entry = LEAF_ENTRYS - LEAF_ENTRYS / 2;
-  pop.persist(&nr_entry, sizeof(nr_entry));
-  parent->InsertChild(pop, new_node->entry[new_node->GetSortedEntry_(0)].key, new_node, root);
-  });
-  return true;
+  mem->persist(&meta_data, sizeof(meta_data));
+
+  return new_node;
 }
 
-Status CLevel::LeafNode::Insert(pool_base& pop, Slab<LeafNode>* leaf_slab, uint64_t key, uint64_t value,
-                                void*& root) {
+Status CLevel::LeafNode::Insert(MemoryManagement* mem, Mutex& mutex, uint64_t key,
+                                uint64_t value, Node* root) {
+  std::lock_guard<std::mutex> lock(mutex.GetLeafMutex(id));
+
+  // if not find, insert key in index
+  if (nr_entry == LEAF_ENTRYS) {
+    // full, split
+    LeafNode* new_node = Split_(mem, mutex, root);
+    // key should insert to the newly split node
+    if (key >= new_node->min_key)
+      return new_node->Insert(mem, mutex, key, value, root);
+  }
+
   bool find;
   int sorted_index = Find_(key, find);
   // already exist
   if (find) return Status::ALREADY_EXISTS;
 
-  // if not find, insert key in index
-  if (nr_entry == LEAF_ENTRYS) {
-    // full, split
-    Split_(pop, leaf_slab, root);
-    // key should insert to the newly split node
-    if (key >= next->entry[next->GetSortedEntry_(0)].key)
-      return next->Insert(pop, leaf_slab, key, value, root);
+  // special situation, this node has split
+  if (sorted_index == nr_entry) {
+    LeafNode* next = GetNext(mem->BaseAddr());
+    if (next && key >= next->min_key)
+      return next->Insert(mem, mutex, key, value, root);
   }
 
-  uint64_t new_sorted_array;
-  int entry_idx = (next_entry != LEAF_ENTRYS) ? next_entry : GetFreeIndex_();
-
-  // free mask is free index in sorted_array
-  // after mask is the index which is bigger than sorted_index
-  // before mask is the index which is less than sorted_index
-  uint64_t free_mask = 0;
-  int nr_free = (next_entry != LEAF_ENTRYS) ? (next_entry - nr_entry)
-                                            : (next_entry - nr_entry - 1);
-  for (int i = 0; i < nr_free; ++i)
-    free_mask = (free_mask << 4) | 0x0FUL;
-  uint64_t free_index = sorted_array & free_mask;
-
-  uint64_t after_mask = 0;
-  for (uint32_t i = 0; i < nr_entry - sorted_index; ++i)
-    after_mask = (after_mask << 4) | 0x0FUL;
-  after_mask = after_mask << ((16 - nr_entry) * 4);
-  uint64_t after_index = (sorted_array & after_mask) >> 4;
-
-  uint64_t before_mask = 0;
-  for (int i = 0; i < sorted_index; ++i)
-    before_mask = (before_mask >> 4) | 0xF000000000000000UL;
-  uint64_t before_index = sorted_array & before_mask;
-  new_sorted_array =
-      before_index |
-      ((uint64_t)entry_idx << ((15 - sorted_index) * 4)) |
-      after_index |
-      free_index;
-
-  Entry new_ent;
-  new_ent.key = key;
-  new_ent.value = value;
-  pop.memcpy_persist(&entry[entry_idx], &new_ent, sizeof(new_ent));
-
-  // meta_data include sorted_array, nr_entry and next_entry.
-  // meta_data[0-1] is sorted_array
-  // meta_data[2]   is nr_entry
-  // meta_data[3]   is next_entry
-  static_assert(offsetof(CLevel::LeafNode, nr_entry) - offsetof(CLevel::LeafNode, sorted_array) == 8);
-  static_assert(offsetof(CLevel::LeafNode, next_entry) - offsetof(CLevel::LeafNode, nr_entry) == 4);
-  static_assert(sizeof(next_entry) == 4);
-  uint32_t meta_data[4];
-  *(uint64_t*)meta_data = new_sorted_array;
-  meta_data[2] = nr_entry + 1;
-  meta_data[3] = (uint32_t)entry_idx == next_entry ? next_entry + 1 : next_entry;
-  pop.memcpy_persist(&sorted_array, meta_data, sizeof(meta_data));
+  int free_index = GetFreeEntry_();
+  PutEntry_(mem, free_index, key, value);
+  PutSortedArray_(mem, sorted_index, free_index);
 
   // Valid_();
   // PrintSortedArray();
   return Status::OK;
 }
 
-Status CLevel::LeafNode::Delete(pool_base& pop, uint64_t key) {
+Status CLevel::LeafNode::Delete(MemoryManagement* mem, Mutex& mutex, uint64_t key) {
+  std::lock_guard<std::mutex> lock(mutex.GetLeafMutex(id));
+
   bool find;
   int sorted_index = Find_(key, find);
   if (!find) {
+    // special situation, this node has split
+    if (sorted_index == nr_entry) {
+      LeafNode* next = GetNext(mem->BaseAddr());
+      if (next && key >= next->min_key)
+        return next->Delete(mem, mutex, key);
+    }
     // key not exist
     return Status::DOES_NOT_EXIST;
   }
 
   uint64_t entry_index = GetSortedEntry_(sorted_index);
 
-  // free mask is free index in sorted_array
-  // after mask is the index which is bigger than sorted_index
-  // before mask is the index which is less than sorted_index
-  uint64_t free_mask = 0;
-  int nr_free = next_entry - nr_entry;
-  for (int i = 0; i < nr_free; ++i)
-    free_mask = (free_mask << 4) | 0x0FUL;
-  uint64_t free_index = sorted_array & free_mask;
-
-  uint64_t after_mask = 0;
-  for (uint32_t i = 0; i < nr_entry - sorted_index - 1; ++i)
-    after_mask = (after_mask << 4) | 0x0FUL;
-  after_mask = after_mask << ((16 - nr_entry) * 4);
-  uint64_t after_index = (sorted_array & after_mask) << 4;
-
-  uint64_t before_mask = 0;
-  for (int i = 0; i < sorted_index; ++i)
-    before_mask = (before_mask >> 4) | 0xF000000000000000UL;
-  uint64_t before_index = sorted_array & before_mask;
-
-  uint64_t new_sorted_array =
-      before_index |
-      after_index |
-      (entry_index << ((next_entry - nr_entry) * 4)) |
-      free_index;
-
-  // meta_data include sorted_array, nr_entry and next_entry.
-  // meta_data[0-1] is sorted_array
-  // meta_data[2]   is nr_entry
-  static_assert(offsetof(CLevel::LeafNode, nr_entry) - offsetof(CLevel::LeafNode, sorted_array) == 8);
-  static_assert(sizeof(nr_entry) == 4);
-  uint32_t meta_data[3];
-  *(uint64_t*)meta_data = new_sorted_array;
-  meta_data[2] = nr_entry - 1;
-  pop.memcpy_persist(&sorted_array, meta_data, sizeof(meta_data));
+  DeleteSortedArray_(mem, sorted_index, entry_index);
 
   // Valid_();
   // PrintSortedArray();
   return Status::OK;
 }
 
-Status CLevel::LeafNode::Update(pool_base& pop, uint64_t key, uint64_t value, void*& root) {
+Status CLevel::LeafNode::Update(MemoryManagement* mem, Mutex& mutex,
+                                uint64_t key, uint64_t value, Node* root) {
   assert(0);
 }
 
-Status CLevel::LeafNode::Get(uint64_t key, uint64_t& value) const {
+Status CLevel::LeafNode::Get(MemoryManagement* mem, uint64_t key, uint64_t& value) const {
+  // lock free
   bool find;
   int sorted_index = Find_(key, find);
   if (!find) {
+    // special situation, this node has split
+    if (sorted_index == nr_entry) {
+      LeafNode* next = GetNext(mem->BaseAddr());
+      if (next && key >= next->min_key)
+        return next->Get(mem, key, value);
+    }
     // key not exist
     return Status::DOES_NOT_EXIST;
   }
@@ -311,93 +242,154 @@ Status CLevel::LeafNode::Get(uint64_t key, uint64_t& value) const {
   return Status::OK;
 }
 
-CLevel::LeafNode* CLevel::IndexNode::FindLeafNode_(uint64_t key) const {
-  assert(nr_entry > 0);
-  if (key >= keys[sorted_array[nr_entry - 1]]) {
-    if (child_type == CLevel::NodeType::LEAF)
-      return leaf_child_(sorted_array[nr_entry - 1] + 1);
-    else
-      return index_child_(sorted_array[nr_entry - 1] + 1)->FindLeafNode_(key);
+bool CLevel::LeafNode::Scan(MemoryManagement* mem, uint64_t min_key,
+                            uint64_t max_key, size_t max_size, size_t& size,
+                            std::function<void(uint64_t,uint64_t)> callback) {
+  bool find = false;
+  uint64_t entry_key = 0;
+  for (uint32_t i = 0; i < nr_entry; ++i) {
+    entry_key = GetSortedKey_(i);
+    if (entry_key < min_key)
+      continue;
+    if (size >= max_size || entry_key > max_key)
+      return true;
+    callback(entry_key, entry[GetSortedEntry_(i)].value);
+    find = true;
+    size++;
   }
+  LeafNode* next_node = GetNext(mem->BaseAddr());
+  if (find && next_node)
+    return next_node->Scan_(mem, max_key, max_size, size, entry_key, callback);
+  if (!find && next_node)
+    return next_node->Scan(mem, min_key, max_key, max_size, size, callback);
+  return false;
+}
 
+bool CLevel::LeafNode::Scan_(MemoryManagement* mem, uint64_t max_key,
+                             size_t max_size, size_t& size, uint64_t last_seen,
+                             std::function<void(uint64_t,uint64_t)> callback) {
+  uint64_t entry_key = 0;
+  if (GetSortedKey_(0) > last_seen) {
+    for (uint32_t i = 0; i < nr_entry; ++i) {
+      entry_key = GetSortedKey_(i);
+      if (size >= max_size || entry_key > max_key)
+        return true;
+      callback(entry_key, entry[GetSortedEntry_(i)].value);
+      size++;
+    }
+  } else {
+    // key[0] <= last_seen, special situation
+#ifndef NDEBUG
+    if (nr_entry != 0)
+      LOG(Debug::WARNING, "scan special situation");
+#endif // NDEBUG
+    for (uint32_t i = 0; i < nr_entry; ++i) {
+      entry_key = GetSortedKey_(i);
+      if (size >= max_size || entry_key > max_key)
+        return true;
+      if (entry_key <= last_seen)
+        continue;
+      callback(entry_key, entry[GetSortedEntry_(i)].value);
+      size++;
+    }
+  }
+  LeafNode* next_node = GetNext(mem->BaseAddr());
+  if (next_node)
+    return next_node->Scan_(mem, max_key, max_size, size, std::max(entry_key, last_seen), callback);
+  else
+    return false;
+}
+
+// find sorted index which is bigger or equal to key
+CLevel::Node CLevel::IndexNode::FindChild_(uint64_t key) const {
   int left = 0;
   int right = nr_entry - 1;
   // find first entry greater or equal than key
   while (left <= right) {
     int middle = (left + right) / 2;
-    uint64_t mid_key = keys[sorted_array[middle]];
+    uint64_t mid_key = GetSortedKey_(middle);
     if (mid_key > key) { // TODO:
       right = middle - 1;
     } else if (mid_key <= key) {
       left = middle + 1;
     }
   }
+  return right == -1 ? child[0] : child[GetSortedEntry_(right) + 1];
+}
 
-  int child_idx = right == -1 ? 0 : sorted_array[right] + 1;
-  if (child_type == CLevel::NodeType::LEAF)
-    return leaf_child_(child_idx);
+CLevel::IndexNode* CLevel::IndexNode::FindParent(uint64_t key, Node child) const {
+  Node next_child = FindChild_(key);
+  if (next_child == child)
+    return const_cast<IndexNode*>(this);
+  assert(next_child.IsIndex());
+  return next_child.index()->FindParent(key, child);
+}
+
+CLevel::LeafNode* CLevel::IndexNode::FindLeafNode_(uint64_t key) const {
+  assert(nr_entry > 0);
+  Node child = FindChild_(key);
+  if (child.IsLeaf())
+    return child.leaf();
   else
-    return index_child_(child_idx)->FindLeafNode_(key);
+    return child.index()->FindLeafNode_(key);
 }
 
-void CLevel::IndexNode::AdoptChild_(pool_base& pop) {
-  for (int i = 0; i <= nr_entry; ++i) {
-    if (child_type == NodeType::INDEX) {
-      index_child_(i)->parent = this;
-      pop.persist(&index_child_(i)->parent, sizeof(index_child_(i)->parent));
-    } else {
-      leaf_child_(i)->parent = this;
-      pop.persist(&leaf_child_(i)->parent, sizeof(leaf_child_(i)->parent));
-    }
-  }
-}
+CLevel::IndexNode* CLevel::IndexNode::Split_(MemoryManagement* mem, Node* root) {
+  assert(nr_entry == INDEX_ENTRYS);
 
-bool CLevel::IndexNode::Split_(pool_base& pop, void*& root) {
-  // LOG(Debug::INFO, "IndexNode Split");
-  assert(nr_entry == INDEX_ENTRYS + 1);
-
-  if (parent == nullptr) {
-    persistent_ptr<IndexNode> tmp;
-    make_persistent_atomic<IndexNode>(pop, tmp);
-    parent = tmp.get();
-    parent->child_type = NodeType::INDEX;
+  // get parent
+  IndexNode* parent;
+  if (root->index() == this) {
+    // allocate new root
+    parent = mem->NewIndexNode();
     parent->child[0] = this;
-    root = parent;
+    mem->persist(parent, sizeof(*parent));
+  } else {
+    parent = root->index()->FindParent(GetSortedKey_(0), this);
   }
 
-  persistent_ptr<IndexNode> new_node;
-  make_persistent_atomic<IndexNode>(pop, new_node);
-  uint8_t new_sorted_array[INDEX_ENTRYS];
-  new_node->child_type = child_type;
   // copy bigger half to new node
+  IndexNode* new_node = mem->NewIndexNode();
+  new_node->child[0] = child[GetSortedEntry_(INDEX_ENTRYS / 2) + 1];
   for (int i = 0; i < INDEX_ENTRYS / 2; ++i) {
-    new_node->keys[i] = keys[sorted_array[i + INDEX_ENTRYS / 2 + 1]];
-    new_node->child[i + 1] = child[sorted_array[i + INDEX_ENTRYS / 2 + 1] + 1];
-    new_sorted_array[i] = i;
+    int idx = GetSortedEntry_(i + INDEX_ENTRYS - INDEX_ENTRYS / 2);
+    new_node->keys[i] = keys[idx];
+    new_node->child[i + 1] = child[idx + 1];
   }
-  new_node->child[0] = child[sorted_array[INDEX_ENTRYS / 2] + 1];
-  new_node->parent = parent;
   new_node->nr_entry = INDEX_ENTRYS / 2;
-  new_node->next_entry = INDEX_ENTRYS / 2;
-  memcpy(new_node->sorted_array, new_sorted_array, sizeof(uint8_t) * new_node->nr_entry);
-  // change children's parent
-  new_node->AdoptChild_(pop);
-  new_node.persist();
+  mem->persist(new_node, sizeof(*new_node));
 
+  // insert new node to parent
+  parent->InsertChild(mem, GetSortedKey_(INDEX_ENTRYS / 2), new_node, root);
+
+  // change root
+  if (root->index() == this) {
+    Node new_root(parent);
+    mem->memcpy_persist(root, &new_root, sizeof(new_root));
+  }
+
+  // change metadata
   nr_entry = INDEX_ENTRYS / 2;
-  parent->InsertChild(pop, keys[sorted_array[INDEX_ENTRYS / 2]], new_node.get(), root);
-  return true;
+  mem->persist(&meta_data, sizeof(meta_data));
+
+  return new_node;
 }
 
-bool CLevel::IndexNode::InsertChild(pool_base& pop, uint64_t child_key,
-                                    void* new_child,
-                                    void*& root) {
+bool CLevel::IndexNode::InsertChild(MemoryManagement* mem, uint64_t child_key,
+                                    Node new_child, Node* root) {
+  if (nr_entry >= INDEX_ENTRYS) {
+    uint64_t mid_key = GetSortedKey_(INDEX_ENTRYS / 2);
+    IndexNode* new_node = Split_(mem, root);
+    assert(child_key != mid_key);
+    if (child_key > mid_key)
+      return new_node->InsertChild(mem, child_key, new_child, root);
+  }
+
   int left = 0;
   int right = nr_entry - 1;
-
   while (left <= right) {
     int middle = (left + right) / 2;
-    uint64_t mid_key = keys[sorted_array[middle]];
+    uint64_t mid_key = GetSortedKey_(middle);
     if (mid_key == child_key) {
       assert(0);
     } else if (mid_key < child_key) {
@@ -408,63 +400,41 @@ bool CLevel::IndexNode::InsertChild(pool_base& pop, uint64_t child_key,
   }
 
   // left is the first entry bigger than leaf
-  uint8_t new_sorted_array[INDEX_ENTRYS + 1];
-  int entry_idx = (next_entry != INDEX_ENTRYS + 1) ? next_entry : sorted_array[nr_entry];
-  memcpy(new_sorted_array, sorted_array, sizeof(sorted_array));
-  for (int i = nr_entry; i > left; --i)
-    new_sorted_array[i] = new_sorted_array[i - 1];
-  new_sorted_array[left] = entry_idx;
-
-  // TODO: persist
-  keys[entry_idx] = child_key;
-  child[entry_idx + 1] = new_child;
-  memcpy(sorted_array, new_sorted_array, sizeof(sorted_array));
-  if (child_type == NodeType::INDEX)
-    index_child_(entry_idx + 1)->parent = this;
-  else
-    leaf_child_(entry_idx + 1)->parent = this;
-  nr_entry++;
-  if (entry_idx == next_entry) next_entry++;
-
-  if (nr_entry == INDEX_ENTRYS + 1) {
-    // full, split first
-    Split_(pop, root);
-  }
+  uint64_t new_sorted_array;
+  int entry_idx = GetFreeEntry_();
+  PutChild_(mem, entry_idx, child_key, new_child);
+  PutSortedArray_(mem, left, entry_idx);
 
   return true;
 }
 
-Status CLevel::IndexNode::Insert(pool_base& pop, Slab<LeafNode>* leaf_slab,
-                                 uint64_t key, uint64_t value, void*& root) {
+Status CLevel::IndexNode::Insert(MemoryManagement* mem, Mutex& mutex,
+                                 uint64_t key, uint64_t value, Node* root) {
   auto leaf = FindLeafNode_(key);
-  return leaf->Insert(pop, leaf_slab, key, value, root);
+  return leaf->Insert(mem, mutex, key, value, root);
 }
 
-Status CLevel::IndexNode::Update(pool_base& pop, uint64_t key, uint64_t value, void*& root) {
+Status CLevel::IndexNode::Update(MemoryManagement* mem, Mutex& mutex,
+                                 uint64_t key, uint64_t value, Node* root) {
   auto leaf = FindLeafNode_(key);
-  return leaf->Update(pop, key, value, root);
+  return leaf->Update(mem, mutex, key, value, root);
 }
 
-Status CLevel::IndexNode::Get(uint64_t key, uint64_t& value) const {
+Status CLevel::IndexNode::Get(MemoryManagement* mem, uint64_t key, uint64_t& value) const {
   auto leaf = FindLeafNode_(key);
-  return leaf->Get(key, value);
+  return leaf->Get(mem, key, value);
 }
 
-Status CLevel::IndexNode::Delete(pool_base& pop, uint64_t key) {
+Status CLevel::IndexNode::Delete(MemoryManagement* mem, Mutex& mutex, uint64_t key) {
   auto leaf = FindLeafNode_(key);
-  return leaf->Delete(pop, key);
+  return leaf->Delete(mem, mutex, key);
 }
 
-Iterator* CLevel::begin() {
-  Iterator* iter = new Iter(this);
-  iter->SeekToFirst();
-  return iter;
-}
-
-Iterator* CLevel::end() {
-  Iterator* iter = new Iter(this);
-  iter->SeekToLast();
-  return iter;
+bool CLevel::IndexNode::Scan(MemoryManagement* mem, uint64_t min_key,
+                             uint64_t max_key, size_t max_size, size_t& size,
+                             std::function<void(uint64_t,uint64_t)> callback) {
+  auto leaf = FindLeafNode_(min_key);
+  return leaf->Scan(mem, min_key, max_key, max_size, size, callback);
 }
 
 } // namespace combotree

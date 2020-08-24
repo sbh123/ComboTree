@@ -4,14 +4,12 @@
 #include <map>
 #include <memory>
 #include "alevel.h"
-#include "combotree/iterator.h"
-#include "std_map_iterator.h"
 #include "random.h"
 
 using namespace std;
 using combotree::Status;
 
-#define TEST_SIZE 200000
+#define TEST_SIZE 40000000
 
 #define POOL_PATH   "/mnt/pmem0/persistent"
 #define POOL_LAYOUT "Combo Tree"
@@ -21,52 +19,40 @@ int main(void) {
   std::filesystem::remove(POOL_PATH);
   auto pop = pmem::obj::pool_base::create(POOL_PATH, POOL_LAYOUT, POOL_SIZE, 0666);
 
-  std::map<uint64_t, uint64_t> kv;
+  std::vector<std::pair<uint64_t, uint64_t>> kv;
   std::map<uint64_t, uint64_t> right_kv;
   combotree::RandomUniformUint64 rnd;
 
   fstream f("/home/qyzhang/Projects/ComboTree/build/workload.txt", ios::in);
+  fstream f_op("/home/qyzhang/Projects/ComboTree/build/workload1.txt", ios::in);
 
   uint64_t key;
-  for (int i = 0; i < 1024; ++i) {
-    f >> key;
-    kv.emplace(key, key);
+  for (int i = 0; i < 1000000; ++i) {
+    // f >> key;
+    key = rnd.Next();
+    if (right_kv.count(key)) {
+      i--;
+      continue;
+    }
+    kv.emplace_back(key, key);
     right_kv.emplace(key, key);
   }
 
-  combotree::Iterator* iter = new combotree::MapIterator(&kv);
-  iter->SeekToFirst();
-  shared_ptr<combotree::BLevel> blevel = make_shared<combotree::BLevel>(pop, iter, kv.size());
+  std::sort(kv.begin(), kv.end());
+  shared_ptr<combotree::BLevel> blevel = make_shared<combotree::BLevel>(pop, kv);
   shared_ptr<combotree::ALevel> db = make_shared<combotree::ALevel>(blevel);
 
-  // for (int i = 100; i < TEST_SIZE; ++i) {
-  //   f >> key;
-  //   bool res = db->Insert(key, key);
-  //   assert(res);
-  // }
-
-  // f.seekg(0);
-  // for (int i = 0; i < TEST_SIZE; ++i) {
-  //   f >> key;
-  //   bool res = db->Get(key, value);
-  //   assert(res && value == key);
-  // }
-
-  // for (int i = 0; i < 70000 - TEST_SIZE; ++i) {
-  //   uint64_t key;
-  //   f >> key;
-  //   uint64_t value;
-  //   bool res = db->Get(key, value);
-  //   assert(!res);
-  // }
-
   for (int i = 0; i < TEST_SIZE; ++i) {
-    int op = rnd.Next();
-    uint64_t key = rnd.Next();
+    int op;
+    uint64_t key;
     uint64_t value;
     uint64_t right_value;
     Status s;
-    switch (op % 4) {
+    // f >> key;
+    // f_op >> op;
+    op = rnd.Next();
+    key = rnd.Next();
+    switch (op % 3) {
       case 0: // PUT
         value = rnd.Next();
         if (right_kv.count(key)) {
@@ -89,16 +75,14 @@ int main(void) {
         }
         break;
       case 2: // DELETE
-        // if (right_kv.count(key)) {
-        //   right_kv.erase(key);
-        //   res = db->Delete(key);
-        //   assert(res);
-        // } else {
-        //   res = db->Delete(key);
-        //   assert(!res);
-        // }
-        // break;
-      case 3: // UPDATE
+        if (right_kv.count(key)) {
+          right_kv.erase(key);
+          s = db->Delete(key);
+          assert(s == Status::OK);
+        } else {
+          s = db->Delete(key);
+          assert(s == Status::DOES_NOT_EXIST);
+        }
         break;
     }
   }

@@ -52,6 +52,10 @@ class Slab {
     }
   }
 
+  uint64_t BaseAddr() const {
+    return (uint64_t)data_.back().get() - data_.back().raw().off;
+  }
+
  private:
   pmem::obj::pool_base pop_;
   std::vector<pmem::obj::persistent_ptr<T[]>> data_;

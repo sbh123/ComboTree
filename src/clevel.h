@@ -2,8 +2,10 @@
 
 #include <cstdint>
 #include <libpmemobj++/persistent_ptr.hpp>
-#include <libpmemobj.h>
-#include "combotree/iterator.h"
+#include <libpmemobj++/make_persistent_atomic.hpp>
+#include <vector>
+#include <mutex>
+#include <atomic>
 #include "slab.h"
 #include "status.h"
 #include "combotree_config.h"
@@ -18,80 +20,209 @@ class BLevel;
 
 class CLevel {
  public:
-  struct Entry;
-  struct LeafNode;
-  struct IndexNode;
+  class MemoryManagement;
 
- public:
-  void InitLeaf(pmem::obj::pool_base& pop, Slab<CLevel::LeafNode>* slab);
+  void InitLeaf(MemoryManagement* mem);
 
-  Status Insert(pmem::obj::pool_base& pop, Slab<CLevel::LeafNode>* slab, uint64_t key, uint64_t value);
-  Status Update(pmem::obj::pool_base& pop, uint64_t key, uint64_t value);
-  Status Delete(pmem::obj::pool_base& pop, uint64_t key);
-  Status Get(uint64_t key, uint64_t& value) const;
-  bool Scan(uint64_t max_key, size_t max_size, size_t& size,
+  Status Insert(MemoryManagement* mem, uint64_t key, uint64_t value);
+  Status Update(MemoryManagement* mem, uint64_t key, uint64_t value);
+  Status Delete(MemoryManagement* mem, uint64_t key);
+  Status Get(MemoryManagement* mem, uint64_t key, uint64_t& value) const;
+  bool Scan(MemoryManagement* mem, uint64_t min_key, uint64_t max_key, size_t max_size, size_t& size,
             std::function<void(uint64_t,uint64_t)> callback);
-
-  class Iter;
-
-  Iterator* begin();
-  Iterator* end();
+  bool Scan(MemoryManagement* mem, uint64_t max_key, size_t max_size,
+            size_t& size, std::function<void(uint64_t,uint64_t)> callback);
 
   friend BLevel;
 
+  struct LeafNode;
  private:
-  enum class NodeType {
-    LEAF,
-    INDEX,
+  struct IndexNode;
+
+  class Mutex {
+   private:
+    static const int GROUP_SIZE = 128;
+    std::vector<std::mutex*> leaf_mutex;
+    std::mutex global_mutex;
+    std::mutex expand_mutex;
+    std::atomic<uint64_t> id_pool;
+
+   public:
+    std::mutex& GetLeafMutex(uint64_t id) {
+      return leaf_mutex[id / GROUP_SIZE][id % GROUP_SIZE];
+    }
+
+    std::mutex& GetGlobalMutex() {
+      return global_mutex;
+    }
+
+    uint64_t AllocateId() {
+      uint64_t new_id = id_pool.fetch_add(1);
+      int dim1 = new_id / GROUP_SIZE;
+      if (dim1 + 1 > leaf_mutex.size()) {
+        std::lock_guard<std::mutex> lock(expand_mutex);
+        while (dim1 + 1 > leaf_mutex.size())
+          leaf_mutex.emplace_back(new std::mutex[GROUP_SIZE]);
+      }
+      return new_id;
+    }
   };
 
-  void* root_;
+  struct Node {
+    enum Type {
+      LEAF  = 0,
+      INDEX = 1,
+    };
+
+    union {
+      uint64_t data;
+      struct {
+        uint64_t ptr  : 63;
+        uint64_t type :  1;
+      };
+    };
+
+    Node() : data(0) {}
+    Node(Type type, void* ptr) : ptr(reinterpret_cast<uint64_t>(ptr)), type(type) {}
+    Node(IndexNode* ptr) : ptr(reinterpret_cast<uint64_t>(ptr)), type(Type::INDEX) {}
+    Node(LeafNode* ptr) : ptr(reinterpret_cast<uint64_t>(ptr)), type(Type::LEAF) {}
+
+    bool operator==(Node& b) const { return data == b.data; }
+    bool IsLeaf() const { return type == Type::LEAF; }
+    bool IsIndex() const { return type == Type::INDEX; }
+    IndexNode* index() const { return reinterpret_cast<IndexNode*>(ptr); }
+    LeafNode* leaf() const { return reinterpret_cast<LeafNode*>(ptr); }
+  };
+
+  Node root_;
   LeafNode* head_;
-  NodeType type_;
-
-  LeafNode* leaf_root_() const {
-    return static_cast<LeafNode*>(root_);
-  }
-
-  IndexNode* index_root_() const {
-    return static_cast<IndexNode*>(root_);
-  }
+  Mutex mutex_;
 };
 
-struct CLevel::Entry {
-  Entry() : key(0), value(0) {}
+// allocate and persist clevel node
+class CLevel::MemoryManagement {
+ public:
+  MemoryManagement(pmem::obj::pool_base pop, Slab<LeafNode>* leaf_slab)
+      : pop_(pop), leaf_slab_(leaf_slab), base_addr_(leaf_slab_->BaseAddr()) {}
 
-  uint64_t key;
-  union {
-    uint64_t value;
-    // pmem::obj::persistent_ptr<void> pvalue;
-  };
+  LeafNode* NewLeafNode() {
+    return leaf_slab_->Allocate();
+  }
+
+  IndexNode* NewIndexNode() {
+    pmem::obj::persistent_ptr<IndexNode> tmp;
+    pmem::obj::make_persistent_atomic<IndexNode>(pop_, tmp);
+    return tmp.get();
+  }
+
+  uint64_t BaseAddr() const {
+    return base_addr_;
+  }
+
+  void persist(const void* addr, size_t len) {
+    pop_.persist(addr, len);
+  }
+
+  void memcpy_persist(void* dest, const void* src, size_t len) {
+    pop_.memcpy_persist(dest, src, len);
+  }
+
+ private:
+  pmem::obj::pool_base pop_;
+  Slab<LeafNode>* leaf_slab_;
+  uint64_t base_addr_;
 };
 
 struct CLevel::LeafNode {
-  LeafNode() : prev(nullptr), next(nullptr), parent(nullptr),
-               sorted_array(0), nr_entry(0), next_entry(0) {}
+  LeafNode() : id(0), next(0), min_key(0), nr_entry(0),
+      sorted_array(0x0123456789ABCDEUL) {}
 
-  LeafNode* prev;
-  LeafNode* next;
-  IndexNode* parent;
-  uint64_t sorted_array;  // used as an array of uint4_t
-  uint32_t nr_entry;
-  uint32_t next_entry;
-  Entry entry[LEAF_ENTRYS];
+  uint64_t id;
+  uint64_t next;
+  uint64_t min_key;
 
-  Status Insert(pmem::obj::pool_base& pop, Slab<CLevel::LeafNode>* slab, uint64_t key, uint64_t value, void*& root);
-  Status Update(pmem::obj::pool_base& pop, uint64_t key, uint64_t value, void*& root);
-  Status Get(uint64_t key, uint64_t& value) const;
-  Status Delete(pmem::obj::pool_base& pop, uint64_t key);
+  union {
+    struct {
+      uint64_t nr_entry     :  4;
+      uint64_t sorted_array : 60;
+    };
+    uint64_t meta_data;
+  };
+
+  struct Entry {
+    Entry() : key(0), value(0) {}
+    uint64_t key;
+    uint64_t value;
+  } entry[LEAF_ENTRYS];
+
+  Status Insert(MemoryManagement* mem, Mutex& mutex, uint64_t key, uint64_t value, Node* root);
+  Status Update(MemoryManagement* mem, Mutex& mutex, uint64_t key, uint64_t value, Node* root);
+  Status Get(MemoryManagement* mem, uint64_t key, uint64_t& value) const;
+  Status Delete(MemoryManagement* mem, Mutex& mutex, uint64_t key);
+  bool Scan(MemoryManagement* mem, uint64_t min_key, uint64_t max_key,
+            size_t max_size, size_t& size, std::function<void(uint64_t,uint64_t)> callback);
+  bool Scan_(MemoryManagement* mem, uint64_t max_key, size_t max_size,
+             size_t& size, uint64_t last_seen, std::function<void(uint64_t,uint64_t)> callback);
 
   void PrintSortedArray() const;
 
-  friend Iter;
-  friend CLevel;
+  LeafNode* GetNext(uint64_t base_addr) const {
+    return next == 0x00UL ? nullptr :
+        reinterpret_cast<LeafNode*>((next & 0x7FFFFFFFFFFFFFFFUL) + base_addr);
+  }
+
+  void SetNext(uint64_t base_addr, LeafNode* next_ptr) {
+    next = (reinterpret_cast<uint64_t>(next_ptr) - base_addr) | 0x8000000000000000UL;
+  }
 
  private:
-  bool Split_(pmem::obj::pool_base& pop, Slab<CLevel::LeafNode>* slab, void*& root);
+  int GetFreeEntry_() const {
+    assert(nr_entry < LEAF_ENTRYS);
+    uint64_t mask = 0x0FUL << ((14 - nr_entry) * 4);
+    return (sorted_array & mask) >> ((14 - nr_entry) * 4);
+  }
+
+  void PutSortedArray_(MemoryManagement* mem, int position, int index) {
+    assert(position >= 0 && position < LEAF_ENTRYS);
+    assert(index >= 0 && index < LEAF_ENTRYS);
+    assert(nr_entry < LEAF_ENTRYS);
+    uint64_t unchange_mask = (~0x00UL << ((15 - position) * 4)) |
+                             ~(~0x00UL << ((14 - nr_entry) * 4));
+    uint64_t after_mask = (~unchange_mask << 4) & ~unchange_mask;
+
+    uint64_t unchange = unchange_mask & sorted_array;
+    uint64_t after = (after_mask & sorted_array) >> 4;
+    uint64_t new_item = (uint64_t)index << ((14 - position) * 4);
+
+    uint64_t new_sorted_array = unchange | after | new_item;
+    meta_data = (new_sorted_array << 4) | (nr_entry + 1);
+    mem->persist(&meta_data, sizeof(meta_data));
+  }
+
+  void DeleteSortedArray_(MemoryManagement* mem, int position, int index) {
+    assert(position >= 0 && position < LEAF_ENTRYS);
+    assert(nr_entry <= LEAF_ENTRYS);
+    uint64_t unchange_mask = (~0x00UL << ((15 - position) * 4)) |
+                             ~(~0x00UL << ((15 - nr_entry) * 4));
+    uint64_t after_mask = (~unchange_mask >> 4) & ~unchange_mask;
+
+    uint64_t unchange = unchange_mask & sorted_array;
+    uint64_t after = (after_mask & sorted_array) << 4;
+    uint64_t new_free = (uint64_t)index << ((15 - nr_entry) * 4);
+
+    uint64_t new_sorted_array = unchange | after | new_free;
+    meta_data = (new_sorted_array << 4) | (nr_entry - 1);
+    mem->persist(&meta_data, sizeof(meta_data));
+  }
+
+  void PutEntry_(MemoryManagement* mem, int index, uint64_t key, uint64_t value) {
+    Entry tmp;
+    tmp.key = key;
+    tmp.value = value;
+    mem->memcpy_persist(&entry[index], &tmp, sizeof(tmp));
+  }
+
+  LeafNode* Split_(MemoryManagement* mem, Mutex& mutex, Node* root);
 
   void Valid_();
 
@@ -103,199 +234,107 @@ struct CLevel::LeafNode {
    */
   int Find_(uint64_t key, bool& find) const;
 
-  uint64_t GetSortedArrayMask_(int index) const {
-    return (uint64_t)0x0FUL << ((15 - index) * 4);
+  /*
+   * get entry index in sorted array
+   */
+  int GetSortedEntry_(int sorted_index) const {
+    uint64_t mask = (uint64_t)0x0FUL << ((14 - sorted_index) * 4);
+    return (sorted_array & mask) >> ((14 - sorted_index) * 4);
+  }
+
+  uint64_t GetSortedKey_(int idx) const {
+    return entry[GetSortedEntry_(idx)].key;
+  }
+};
+
+// Index Node
+struct CLevel::IndexNode {
+  union {
+    struct {
+      uint64_t nr_entry     :  4;
+      uint64_t sorted_array : 60;
+    };
+    uint64_t meta_data;
+  };
+
+  uint64_t keys[INDEX_ENTRYS];
+  Node child[INDEX_ENTRYS + 1];
+
+  IndexNode() : nr_entry(0), sorted_array(0x0123456789ABCDEUL) {}
+
+  Status Insert(MemoryManagement* mem, Mutex& mutex, uint64_t key, uint64_t value, Node* root);
+  Status Update(MemoryManagement* mem, Mutex& mutex,uint64_t key, uint64_t value, Node* root);
+  Status Get(MemoryManagement* mem, uint64_t key, uint64_t& value) const;
+  Status Delete(MemoryManagement* mem, Mutex& mutex,uint64_t key);
+  bool Scan(MemoryManagement* mem, uint64_t min_key, uint64_t max_key,
+            size_t max_size, size_t& size, std::function<void(uint64_t,uint64_t)> callback);
+
+  bool InsertChild(MemoryManagement* mem, uint64_t child_key, Node child, Node* root);
+  IndexNode* FindParent(uint64_t key, Node child) const;
+
+ private:
+  IndexNode* Split_(MemoryManagement* mem, Node* root);
+
+  Node FindChild_(uint64_t key) const;
+  LeafNode* FindLeafNode_(uint64_t key) const;
+
+  void PutChild_(MemoryManagement* mem, int index, uint64_t key, Node new_child) {
+    keys[index] = key;
+    child[index + 1] = new_child;
+    mem->persist(&keys[index], sizeof(key));
+    mem->persist(&child[index + 1], sizeof(new_child));
+  }
+
+  void PutSortedArray_(MemoryManagement* mem, int position, int index) {
+    assert(position >= 0 && position < INDEX_ENTRYS);
+    assert(index >= 0 && index < INDEX_ENTRYS);
+    assert(nr_entry < INDEX_ENTRYS);
+    uint64_t unchange_mask = (~0x00UL << ((15 - position) * 4)) |
+                             ~(~0x00UL << ((14 - nr_entry) * 4));
+    uint64_t after_mask = (~unchange_mask << 4) & ~unchange_mask;
+
+    uint64_t unchange = unchange_mask & sorted_array;
+    uint64_t after = (after_mask & sorted_array) >> 4;
+    uint64_t new_item = (uint64_t)index << ((14 - position) * 4);
+
+    uint64_t new_sorted_array = unchange | after | new_item;
+    meta_data = (new_sorted_array << 4) | (nr_entry + 1);
+    mem->persist(&meta_data, sizeof(meta_data));
+  }
+
+  void DeleteSortedArray_(MemoryManagement* mem, int position, int index) {
+    assert(position >= 0 && position < INDEX_ENTRYS);
+    assert(nr_entry < INDEX_ENTRYS);
+    uint64_t unchange_mask = (~0x00UL << ((15 - position) * 4)) |
+                             ~(~0x00UL << ((15 - nr_entry) * 4));
+    uint64_t after_mask = (~unchange_mask >> 4) & ~unchange_mask;
+
+    uint64_t unchange = unchange_mask & sorted_array;
+    uint64_t after = (after_mask & sorted_array) << 4;
+    uint64_t new_free = (uint64_t)index << ((15 - nr_entry) * 4);
+
+    uint64_t new_sorted_array = unchange | after | new_free;
+    meta_data = (new_sorted_array << 4) | (nr_entry - 1);
+    mem->persist(&meta_data, sizeof(meta_data));
+  }
+
+  int GetFreeEntry_() const {
+    assert(nr_entry < INDEX_ENTRYS);
+    uint64_t mask = 0x0FUL << ((14 - nr_entry) * 4);
+    return (sorted_array & mask) >> ((14 - nr_entry) * 4);
   }
 
   /*
    * get entry index in sorted array
    */
   int GetSortedEntry_(int sorted_index) const {
-    uint64_t mask = GetSortedArrayMask_(sorted_index);
-    return (sorted_array & mask) >> ((15 - sorted_index) * 4);
+    uint64_t mask = (uint64_t)0x0FUL << ((14 - sorted_index) * 4);
+    return (sorted_array & mask) >> ((14 - sorted_index) * 4);
   }
 
-  int GetFreeIndex_() const {
-    assert(next_entry == LEAF_ENTRYS);
-    int nr_free = next_entry - nr_entry;
-    assert(nr_free > 0);
-    uint64_t mask = (uint64_t)0x0FUL << ((nr_free - 1) * 4);
-    return (sorted_array & mask) >> ((nr_free - 1) * 4);
+  uint64_t GetSortedKey_(int idx) const {
+    return keys[GetSortedEntry_(idx)];
   }
-
-  uint64_t GetEntryKey_(int entry_idx) const {
-    return entry[entry_idx].key;
-  }
-};
-
-struct CLevel::IndexNode {
-  IndexNode* parent;
-  NodeType child_type;
-  int nr_entry;
-  int next_entry;
-  uint64_t keys[INDEX_ENTRYS + 1];
-  void* child[INDEX_ENTRYS + 2];
-  uint8_t sorted_array[INDEX_ENTRYS + 1];
-
-  Status Insert(pmem::obj::pool_base& pop, Slab<LeafNode>* leaf_slab, uint64_t key, uint64_t value, void*& root);
-  Status Update(pmem::obj::pool_base& pop, uint64_t key, uint64_t value, void*& root);
-  Status Get(uint64_t key, uint64_t& value) const;
-  Status Delete(pmem::obj::pool_base& pop, uint64_t key);
-
-  bool InsertChild(pmem::obj::pool_base& pop, uint64_t child_key, void* child,
-                   void*& root);
-
-  friend Iter;
-
- private:
-  bool Split_(pmem::obj::pool_base& pop, void*& root);
-
-  void AdoptChild_(pmem::obj::pool_base& pop);
-
-  LeafNode* FindLeafNode_(uint64_t key) const;
-
-  LeafNode* leaf_child_(int index) const {
-    return static_cast<LeafNode*>(child[index]);
-  }
-
-  IndexNode* index_child_(int index) const {
-    return static_cast<IndexNode*>(child[index]);
-  }
-};
-
-// TODO: Begin(), End(), CLevel::begin(), CLevel::end()
-// is not the same.
-class CLevel::Iter : public Iterator {
- public:
-  Iter(CLevel* clevel)
-      : clevel_(clevel), leaf_(clevel_->head_), sorted_index_(0),
-        first_leaf_(clevel_->head_),
-        last_leaf_(clevel_->head_->prev),
-        is_first_leaf_(true), is_last_leaf_(false)  {}
-  ~Iter() {};
-
-  bool Begin() const {
-    return is_first_leaf_ && sorted_index_ == 0;
-  }
-
-  // leaf_ point to the last, sorted_index_ equals nr_entry
-  bool End() const {
-    return is_last_leaf_ && sorted_index_ == nr_entry_;
-  }
-
-  void SeekToFirst() {
-    leaf_ = clevel_->head_;
-    while (leaf_ != last_leaf_ &&
-           leaf_->nr_entry == 0) {
-      leaf_ = leaf_->next;
-    }
-    UpdateLeaf_();
-    sorted_index_ = 0;
-  }
-
-  void SeekToLast() {
-    leaf_ = clevel_->head_->prev;
-    while (leaf_ != first_leaf_ &&
-           leaf_->nr_entry == 0) {
-      leaf_ = leaf_->prev;
-    }
-    sorted_index_ = std::max<int>(0, leaf_->nr_entry - 1);
-  }
-
-  void Seek(uint64_t target) {
-    bool find;
-    if (clevel_->type_ == CLevel::NodeType::LEAF) {
-      leaf_ = clevel_->leaf_root_();
-      sorted_index_ = leaf_->Find_(target, find);
-    } else {
-      leaf_ = clevel_->index_root_()->FindLeafNode_(target);
-      sorted_index_ = leaf_->Find_(target, find);
-      if (sorted_index_ == leaf_->nr_entry) {
-        if (leaf_ != last_leaf_) {
-          do {
-            leaf_ = leaf_->next;
-          } while (leaf_ != last_leaf_ &&
-                  leaf_->nr_entry == 0);
-          sorted_index_ = 0;
-        }
-      }
-    }
-    UpdateLeaf_();
-  }
-
-  void Next() {
-    if (sorted_index_ < leaf_->nr_entry - 1) {
-      sorted_index_++;
-    } else if (is_last_leaf_) {
-      sorted_index_ = leaf_->nr_entry;
-    } else {
-      do {
-        leaf_ = leaf_->next;
-      } while (leaf_ != last_leaf_ &&
-               leaf_->nr_entry == 0);
-      UpdateLeaf_();
-      sorted_index_ = 0;
-    }
-  }
-
-  void Prev() {
-    if (sorted_index_ > 0) {
-      sorted_index_--;
-    } else if (is_first_leaf_) {
-      sorted_index_ = 0;
-    } else {
-      do {
-        leaf_ = leaf_->prev;
-      } while (leaf_ != first_leaf_ &&
-               leaf_->nr_entry == 0);
-      UpdateLeaf_();
-      sorted_index_ = std::max<int>(0, leaf_->nr_entry - 1);
-    }
-  }
-
-  uint64_t key() const {
-    int entry_idx = GetSortedEntry_();
-    return entry_[entry_idx].key;
-  }
-
-  uint64_t value() const {
-    int entry_idx = GetSortedEntry_();
-    return entry_[entry_idx].value;
-  }
-
- private:
-  CLevel* clevel_;
-  LeafNode* leaf_;
-  uint32_t sorted_index_;
-  // cache these information in RAM
-  LeafNode* first_leaf_;
-  LeafNode* last_leaf_;
-  uint64_t sorted_array_;
-  CLevel::Entry* entry_;
-  bool is_first_leaf_;
-  bool is_last_leaf_;
-  int nr_entry_;
-
-  void UpdateLeaf_() {
-    is_first_leaf_ = leaf_ == first_leaf_;
-    is_last_leaf_ = leaf_ == last_leaf_;
-    nr_entry_ = leaf_->nr_entry;
-    sorted_array_ = leaf_->sorted_array;
-    entry_ = leaf_->entry;
-  }
-
-  uint64_t GetSortedArrayMask_(int index) const {
-    return (uint64_t)0x0FUL << ((15 - index) * 4);
-  }
-
-  /*
-   * get entry index in sorted array
-   */
-  int GetSortedEntry_() const {
-    uint64_t mask = (uint64_t)0x0FUL << ((15 - sorted_index_) * 4);
-    return (sorted_array_ & mask) >> ((15 - sorted_index_) * 4);
-  }
-
 };
 
 } // namespace combotree

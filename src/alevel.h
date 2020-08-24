@@ -2,7 +2,6 @@
 
 #include <cstdint>
 #include <cassert>
-#include "combotree/iterator.h"
 #include "combotree_config.h"
 #include "status.h"
 #include "blevel.h"
@@ -41,14 +40,6 @@ class ALevel {
 
   size_t Size() const {
     return blevel_->Size();
-  }
-
-  Iterator* begin() {
-    return blevel_->begin();
-  }
-
-  Iterator* end() {
-    return blevel_->end();
   }
 
   friend ComboTree;

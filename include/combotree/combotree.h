@@ -5,7 +5,6 @@
 #include <memory>
 #include <vector>
 #include <libpmemobj++/persistent_ptr.hpp>
-#include "combotree/iterator.h"
 
 namespace combotree {
 
@@ -37,13 +36,8 @@ class ComboTree {
 
   size_t Size() const;
 
-  Iterator* begin();
-  Iterator* end();
-
  private:
   const std::string POOL_LAYOUT = "Combo Tree";
-
-  class Iter;
 
   enum class State {
     USING_PMEMKV,

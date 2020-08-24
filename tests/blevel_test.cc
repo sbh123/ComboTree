@@ -3,8 +3,6 @@
 #include <filesystem>
 #include <fstream>
 #include "blevel.h"
-#include "combotree/iterator.h"
-#include "std_map_iterator.h"
 #include "random.h"
 
 using namespace std;
@@ -23,20 +21,24 @@ int main(void) {
   fstream f("/home/qyzhang/Projects/ComboTree/build/workload.txt", ios::in);
   fstream f_op("/home/qyzhang/Projects/ComboTree/build/workload1.txt", ios::in);
 
-  std::map<uint64_t, uint64_t> kv;
   std::map<uint64_t, uint64_t> right_kv;
+  std::vector<std::pair<uint64_t,uint64_t>> kv;
   combotree::RandomUniformUint64 rnd;
 
   for (int i = 0; i < 1024; ++i) {
     uint64_t key;
-    f >> key;
-    kv.emplace(key, key);
+    // f >> key;
+    key = rnd.Next();
+    if (right_kv.count(key)) {
+      i--;
+      continue;
+    }
+    kv.emplace_back(key, key);
     right_kv.emplace(key, key);
   }
 
-  combotree::Iterator* iter = new combotree::MapIterator(&kv);
-  iter->SeekToFirst();
-  combotree::BLevel* db = new combotree::BLevel(pop, iter, kv.size());
+  std::sort(kv.begin(), kv.end());
+  combotree::BLevel* db = new combotree::BLevel(pop, kv);
 
   for (int i = 0; i < TEST_SIZE; ++i) {
     int op;
@@ -44,26 +46,31 @@ int main(void) {
     uint64_t value;
     uint64_t right_value;
     Status s;
-    f >> key;
-    f_op >> op;
+    // f >> key;
+    // f_op >> op;
+    key = rnd.Next();
+    op = rnd.Next();
     if (op % 100 == 0) {
       // SCAN
+      std::vector<std::pair<uint64_t,uint64_t>> scan_kv;
       auto right_iter = right_kv.lower_bound(key);
-      auto iter = db->begin();
-      iter->Seek(key);
+      size_t size = 0;
+      db->Scan(key, UINT64_MAX, UINT64_MAX, size, [&](uint64_t key, uint64_t value) {
+        scan_kv.emplace_back(key, value);
+      });
+      auto iter = scan_kv.begin();
       while (right_iter != right_kv.end()) {
         uint64_t right_key, right_value, get_key;
-        get_key = iter->key();
+        get_key = iter->first;
         right_key = right_iter->first;
-        value = iter->value();
+        value = iter->second;
         right_value = right_iter->second;
-        assert(right_iter->first == iter->key());
-        assert(right_iter->second == iter->value());
+        assert(right_iter->first == iter->first);
+        assert(right_iter->second == iter->second);
         right_iter++;
-        iter->Next();
+        iter++;
       }
-      assert(iter->End());
-      delete iter;
+      assert(iter == scan_kv.end());
     }
     switch (op % 3) {
       case 0: // PUT
@@ -98,6 +105,8 @@ int main(void) {
         }
         break;
     }
+    size_t cur_size = db->Size();
+    size_t right_size = right_kv.size();
     assert(db->Size() == right_kv.size());
   }
 

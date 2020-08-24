@@ -16,7 +16,7 @@ class ComboTreeV2<uint64_t, uint64_t> : public kvbench::DB<uint64_t, uint64_t> {
   ComboTreeV2() {
     std::filesystem::remove_all(COMBO_TREE_DIR);
     std::filesystem::create_directory(COMBO_TREE_DIR);
-    db_ = new ComboTree(COMBO_TREE_DIR, PMEMOBJ_MIN_POOL * 100);
+    db_ = new ComboTree(COMBO_TREE_DIR, PMEMOBJ_MIN_POOL * 128);
   }
 
   ~ComboTreeV2() {
