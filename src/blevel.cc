@@ -341,7 +341,7 @@ Status BLevel::Scan(uint64_t min_key, uint64_t max_key,
     end = EntrySize() - 1;
   uint64_t entry_index = Find_(min_key, 0, end);
   {
-    std::shared_lock<std::shared_mutex> lock(locks_[entry_index]);
+    // std::shared_lock<std::shared_mutex> lock(locks_[entry_index]);
     Entry* ent = GetEntry_(entry_index);
     uint64_t data = ent->value;
     CLevel* clevel;
@@ -370,7 +370,7 @@ Status BLevel::Scan(uint64_t min_key, uint64_t max_key,
 
   entry_index++;
   while (entry_index < EntrySize()) {
-    std::shared_lock<std::shared_mutex> lock(locks_[entry_index]);
+    // std::shared_lock<std::shared_mutex> lock(locks_[entry_index]);
     Entry* ent = GetEntry_(entry_index);
     uint64_t data = ent->value;
     bool finish;
@@ -380,7 +380,7 @@ Status BLevel::Scan(uint64_t min_key, uint64_t max_key,
         return Status::INVALID;
       case Entry::Type::ENTRY_VALUE:
         if (size >= max_size || ent->key > max_key)
-          break;
+          return Status::OK;
         callback(ent->key, Entry::GetValue(data), arg);
         size++;
         break;
