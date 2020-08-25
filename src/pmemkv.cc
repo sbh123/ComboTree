@@ -123,11 +123,11 @@ size_t PmemKV::Scan(uint64_t min_key, uint64_t max_key, uint64_t max_size,
 }
 
 size_t PmemKV::Scan(uint64_t min_key, uint64_t max_key, uint64_t max_size,
-                    std::function<void(uint64_t,uint64_t)> callback) const {
+                    void (*callback)(uint64_t,uint64_t,void*), void* arg) const {
   std::vector<std::pair<uint64_t,uint64_t>> kv;
   Scan(min_key, max_key, max_size, kv);
   for (auto& pair : kv)
-    callback(pair.first, pair.second);
+    callback(pair.first, pair.second, arg);
   return kv.size();
 }
 

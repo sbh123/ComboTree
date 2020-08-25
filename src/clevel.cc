@@ -71,17 +71,17 @@ Status CLevel::Delete(MemoryManagement* mem, uint64_t key) {
 }
 
 bool CLevel::Scan(MemoryManagement* mem, uint64_t max_key, size_t max_size,
-                  size_t& size, std::function<void(uint64_t,uint64_t)> callback) {
-  return head_->Scan_(mem, max_key, max_size, size, 0, callback);
+                  size_t& size, callback_t callback, void* arg) {
+  return head_->Scan_(mem, max_key, max_size, size, 0, callback, arg);
 }
 
 bool CLevel::Scan(MemoryManagement* mem, uint64_t min_key, uint64_t max_key,
-                  size_t max_size, size_t& size, std::function<void(uint64_t,uint64_t)> callback) {
+                  size_t max_size, size_t& size, callback_t callback, void* arg) {
   Node root = root_;
   if (root.IsLeaf())
-    return root.leaf()->Scan(mem, min_key, max_key, max_size, size, callback);
+    return root.leaf()->Scan(mem, min_key, max_key, max_size, size, callback, arg);
   else
-    return root.index()->Scan(mem, min_key, max_key, max_size, size, callback);
+    return root.index()->Scan(mem, min_key, max_key, max_size, size, callback, arg);
 }
 
 // find sorted index which is bigger or equal to key
@@ -250,7 +250,7 @@ Status CLevel::LeafNode::Get(MemoryManagement* mem, uint64_t key, uint64_t& valu
 
 bool CLevel::LeafNode::Scan(MemoryManagement* mem, uint64_t min_key,
                             uint64_t max_key, size_t max_size, size_t& size,
-                            std::function<void(uint64_t,uint64_t)> callback) {
+                            callback_t callback, void* arg) {
   bool find = false;
   uint64_t entry_key = 0;
   for (uint32_t i = 0; i < nr_entry; ++i) {
@@ -259,30 +259,30 @@ bool CLevel::LeafNode::Scan(MemoryManagement* mem, uint64_t min_key,
       continue;
     if (size >= max_size || entry_key > max_key)
       return true;
-    callback(entry_key, entry[GetSortedEntry_(i)].value);
+    callback(entry_key, entry[GetSortedEntry_(i)].value, arg);
     find = true;
     size++;
   }
   LeafNode* next_node = GetNext(mem->BaseAddr());
   if (find && next_node)
-    return next_node->Scan_(mem, max_key, max_size, size, entry_key, callback);
+    return next_node->Scan_(mem, max_key, max_size, size, entry_key, callback, arg);
   if (!find && next_node)
-    return next_node->Scan(mem, min_key, max_key, max_size, size, callback);
+    return next_node->Scan(mem, min_key, max_key, max_size, size, callback, arg);
   return false;
 }
 
 bool CLevel::LeafNode::Scan_(MemoryManagement* mem, uint64_t max_key,
                              size_t max_size, size_t& size, uint64_t last_seen,
-                             std::function<void(uint64_t,uint64_t)> callback) {
+                             callback_t callback, void* arg) {
   LeafNode* node = this;
-  while (true) {
+  while (node) {
     uint64_t entry_key = 0;
     if (node->GetSortedKey_(0) > last_seen) {
       for (uint32_t i = 0; i < node->nr_entry; ++i) {
         entry_key = node->GetSortedKey_(i);
         if (size >= max_size || entry_key > max_key)
           return true;
-        callback(entry_key, node->entry[node->GetSortedEntry_(i)].value);
+        callback(entry_key, node->entry[node->GetSortedEntry_(i)].value, arg);
         size++;
       }
     } else {
@@ -297,15 +297,14 @@ bool CLevel::LeafNode::Scan_(MemoryManagement* mem, uint64_t max_key,
           return true;
         if (entry_key <= last_seen)
           continue;
-        callback(entry_key, node->entry[node->GetSortedEntry_(i)].value);
+        callback(entry_key, node->entry[node->GetSortedEntry_(i)].value, arg);
         size++;
       }
     }
     node = node->GetNext(mem->BaseAddr());
     assert(node != this);
-    if (!node)
-      return false;
   }
+  return false;
 }
 
 // find sorted index which is bigger or equal to key
@@ -440,9 +439,9 @@ Status CLevel::IndexNode::Delete(MemoryManagement* mem, Mutex& mutex, uint64_t k
 
 bool CLevel::IndexNode::Scan(MemoryManagement* mem, uint64_t min_key,
                              uint64_t max_key, size_t max_size, size_t& size,
-                             std::function<void(uint64_t,uint64_t)> callback) {
+                             callback_t callback, void* arg) {
   auto leaf = FindLeafNode_(min_key);
-  return leaf->Scan(mem, min_key, max_key, max_size, size, callback);
+  return leaf->Scan(mem, min_key, max_key, max_size, size, callback, arg);
 }
 
 } // namespace combotree

@@ -31,7 +31,7 @@ class PmemKV {
   Status Get(uint64_t key, uint64_t& value) const;
   Status Delete(uint64_t key);
   size_t Scan(uint64_t min_key, uint64_t max_key, uint64_t max_size,
-              std::function<void(uint64_t,uint64_t)> callback) const;
+              void (*callback)(uint64_t,uint64_t,void*), void* arg) const;
   size_t Scan(uint64_t min_key, uint64_t max_key, uint64_t max_size,
               std::vector<std::pair<uint64_t,uint64_t>>& kv) const;
 

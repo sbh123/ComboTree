@@ -16,6 +16,10 @@ using namespace std;
 #define PATH        "/mnt/pmem0/persistent"
 #define TEST_SIZE   3000000
 
+void ScanCallback(uint64_t key, uint64_t value, void* arg) {
+  ((std::vector<std::pair<uint64_t,uint64_t>>*)arg)->emplace_back(key, value);
+}
+
 int main(void) {
   std::filesystem::remove(PATH);
   auto pop = pmem::obj::pool_base::create(PATH, "CLevel Test",
@@ -48,10 +52,7 @@ int main(void) {
       auto right_iter = right_kv.lower_bound(key);
       uint64_t size = 0;
       std::vector<std::pair<uint64_t,uint64_t>> kv_pair;
-      db->Scan(&mem, key, UINT64_MAX, UINT64_MAX, size,
-        [&](uint64_t key, uint64_t value) {
-          kv_pair.emplace_back(key, value);
-        });
+      db->Scan(&mem, key, UINT64_MAX, UINT64_MAX, size, ScanCallback, &kv_pair);
       int j = 0;
       while (right_iter != right_kv.end()) {
         assert(j < kv_pair.size());

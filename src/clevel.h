@@ -16,6 +16,8 @@ namespace combotree {
 #define LEAF_ENTRYS   CLEVEL_LEAF_ENTRY
 #define INDEX_ENTRYS  CLEVEL_INDEX_ENTRY
 
+typedef void (*callback_t)(uint64_t,uint64_t,void*);
+
 class BLevel;
 
 class CLevel {
@@ -29,9 +31,9 @@ class CLevel {
   Status Delete(MemoryManagement* mem, uint64_t key);
   Status Get(MemoryManagement* mem, uint64_t key, uint64_t& value) const;
   bool Scan(MemoryManagement* mem, uint64_t min_key, uint64_t max_key, size_t max_size, size_t& size,
-            std::function<void(uint64_t,uint64_t)> callback);
+            callback_t callback, void* arg);
   bool Scan(MemoryManagement* mem, uint64_t max_key, size_t max_size,
-            size_t& size, std::function<void(uint64_t,uint64_t)> callback);
+            size_t& size, callback_t callback, void* arg);
 
   friend BLevel;
 
@@ -160,9 +162,9 @@ struct CLevel::LeafNode {
   Status Get(MemoryManagement* mem, uint64_t key, uint64_t& value) const;
   Status Delete(MemoryManagement* mem, Mutex& mutex, uint64_t key);
   bool Scan(MemoryManagement* mem, uint64_t min_key, uint64_t max_key,
-            size_t max_size, size_t& size, std::function<void(uint64_t,uint64_t)> callback);
+            size_t max_size, size_t& size, callback_t callback, void* arg);
   bool Scan_(MemoryManagement* mem, uint64_t max_key, size_t max_size,
-             size_t& size, uint64_t last_seen, std::function<void(uint64_t,uint64_t)> callback);
+             size_t& size, uint64_t last_seen, callback_t callback, void* arg);
 
   void PrintSortedArray() const;
 
@@ -267,7 +269,7 @@ struct CLevel::IndexNode {
   Status Get(MemoryManagement* mem, uint64_t key, uint64_t& value) const;
   Status Delete(MemoryManagement* mem, Mutex& mutex,uint64_t key);
   bool Scan(MemoryManagement* mem, uint64_t min_key, uint64_t max_key,
-            size_t max_size, size_t& size, std::function<void(uint64_t,uint64_t)> callback);
+            size_t max_size, size_t& size, callback_t callback, void* arg);
 
   bool InsertChild(MemoryManagement* mem, uint64_t child_key, Node child, Node* root);
   IndexNode* FindParent(uint64_t key, Node child) const;

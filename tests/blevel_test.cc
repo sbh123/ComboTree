@@ -14,6 +14,10 @@ using combotree::Status;
 #define POOL_LAYOUT "Combo Tree"
 #define POOL_SIZE   (PMEMOBJ_MIN_POOL * 400)
 
+void ScanCallback(uint64_t key, uint64_t value, void* arg) {
+  ((std::vector<std::pair<uint64_t,uint64_t>>*)arg)->emplace_back(key, value);
+}
+
 int main(void) {
   std::filesystem::remove(POOL_PATH);
   auto pop = pmem::obj::pool_base::create(POOL_PATH, POOL_LAYOUT, POOL_SIZE, 0666);
@@ -55,9 +59,7 @@ int main(void) {
       std::vector<std::pair<uint64_t,uint64_t>> scan_kv;
       auto right_iter = right_kv.lower_bound(key);
       size_t size = 0;
-      db->Scan(key, UINT64_MAX, UINT64_MAX, size, [&](uint64_t key, uint64_t value) {
-        scan_kv.emplace_back(key, value);
-      });
+      db->Scan(key, UINT64_MAX, UINT64_MAX, size, ScanCallback, &scan_kv);
       auto iter = scan_kv.begin();
       while (right_iter != right_kv.end()) {
         uint64_t right_key, right_value, get_key;

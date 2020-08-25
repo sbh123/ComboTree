@@ -87,7 +87,7 @@ class BLevel {
   }
 
   Status Scan(uint64_t min_key, uint64_t max_key, size_t max_size, size_t& size,
-              std::function<void(uint64_t,uint64_t)> callback);
+              callback_t callback, void* arg);
 
   uint64_t MinEntryKey() const;
   uint64_t MaxEntryKey() const;
@@ -190,6 +190,9 @@ class BLevel {
   Entry* GetEntry_(int index) const { return &in_mem_entry_[index]; }
   uint64_t Find_(uint64_t key, uint64_t begin, uint64_t end) const;
   void ExpandAddEntry_(uint64_t key, uint64_t value, size_t& size);
+
+  static void ExpansionCallback1_(uint64_t key, uint64_t value, void* arg);
+  static void ExpansionCallback2_(uint64_t key, uint64_t value, void* arg);
 };
 
 } // namespace combotree

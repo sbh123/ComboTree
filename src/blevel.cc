@@ -100,6 +100,22 @@ void BLevel::ExpandAddEntry_(uint64_t key, uint64_t value, size_t& size) {
   }
 }
 
+void BLevel::ExpansionCallback1_(uint64_t key, uint64_t value, void* arg) {
+  Entry* ent = reinterpret_cast<Entry*>(((void**)arg)[0]);
+  CLevel::MemoryManagement* mem = reinterpret_cast<CLevel::MemoryManagement*>(((void**)arg)[1]);
+  size_t* size = reinterpret_cast<size_t*>(((void**)arg)[2]);
+
+  *size = *size + 1;
+  ent->SetValue(mem, value);
+}
+
+void BLevel::ExpansionCallback2_(uint64_t key, uint64_t value, void* arg) {
+  BLevel* blevel = reinterpret_cast<BLevel*>(((void**)arg)[0]);
+  size_t* size = reinterpret_cast<size_t*>(((void**)arg)[1]);
+
+  blevel->ExpandAddEntry_(key, value, *size);
+}
+
 void BLevel::Expansion(std::shared_ptr<BLevel> old_blevel, std::atomic<uint64_t>& min_key,
                         std::atomic<uint64_t>& max_key) {
   uint64_t old_index = 0;
@@ -118,6 +134,7 @@ void BLevel::Expansion(std::shared_ptr<BLevel> old_blevel, std::atomic<uint64_t>
     uint64_t old_data = old_ent->value;
     size_t scan_size = 0;
     CLevel* clevel;
+    void* callback_arg[3];
     switch (Entry::GetType(old_data)) {
       case Entry::Type::ENTRY_INVALID:
         assert(0);
@@ -129,11 +146,10 @@ void BLevel::Expansion(std::shared_ptr<BLevel> old_blevel, std::atomic<uint64_t>
         break;
       case Entry::Type::ENTRY_CLEVEL:
         clevel = Entry::GetClevel(old_blevel->clevel_mem_, old_data);
-        clevel->Scan(old_blevel->clevel_mem_, 0, 0, 1, scan_size,
-          [&](uint64_t key, uint64_t value) {
-            new_ent->SetValue(clevel_mem_, value);
-            size++;
-          });
+        callback_arg[0] = new_ent;
+        callback_arg[1] = clevel_mem_;
+        callback_arg[2] = &size;
+        clevel->Scan(old_blevel->clevel_mem_, 0, 0, 1, scan_size, BLevel::ExpansionCallback1_, callback_arg);
         if (scan_size == 1)
           clevel->Delete(old_blevel->clevel_mem_, 0);
         else
@@ -160,6 +176,7 @@ void BLevel::Expansion(std::shared_ptr<BLevel> old_blevel, std::atomic<uint64_t>
     uint64_t old_data = old_ent->value;
     size_t scan_size = 0;
     CLevel* clevel;
+    void* callback_arg[2];
     switch (Entry::GetType(old_data)) {
       case Entry::Type::ENTRY_INVALID:
         assert(0);
@@ -168,10 +185,10 @@ void BLevel::Expansion(std::shared_ptr<BLevel> old_blevel, std::atomic<uint64_t>
         break;
       case Entry::Type::ENTRY_CLEVEL:
         clevel = Entry::GetClevel(old_blevel->clevel_mem_, old_data);
+        callback_arg[0] = this;
+        callback_arg[1] = & size;
         clevel->Scan(old_blevel->clevel_mem_, 0, UINT64_MAX, UINT64_MAX, scan_size,
-          [&](uint64_t key, uint64_t value) {
-            ExpandAddEntry_(key, value, size);
-          });
+          BLevel::ExpansionCallback2_, callback_arg);
         break;
       case Entry::Type::ENTRY_NONE:
         break;
@@ -313,7 +330,7 @@ Status BLevel::Entry::Delete(std::shared_mutex* mutex, CLevel::MemoryManagement*
 
 Status BLevel::Scan(uint64_t min_key, uint64_t max_key,
                     size_t max_size, size_t& size,
-                    std::function<void(uint64_t,uint64_t)> callback) {
+                    callback_t callback, void* arg) {
   if (size >= max_size)
     return Status::OK;
 
@@ -334,13 +351,13 @@ Status BLevel::Scan(uint64_t min_key, uint64_t max_key,
         return Status::INVALID;
       case Entry::Type::ENTRY_VALUE:
         if (ent->key >= min_key) {
-          callback(ent->key, Entry::GetValue(data));
+          callback(ent->key, Entry::GetValue(data), arg);
           size++;
         }
         break;
       case Entry::Type::ENTRY_CLEVEL:
         clevel = Entry::GetClevel(clevel_mem_, data);
-        finish = clevel->Scan(clevel_mem_, min_key, max_key, max_size, size, callback);
+        finish = clevel->Scan(clevel_mem_, min_key, max_key, max_size, size, callback, arg);
         if (finish)
           return Status::OK;
         break;
@@ -364,12 +381,12 @@ Status BLevel::Scan(uint64_t min_key, uint64_t max_key,
       case Entry::Type::ENTRY_VALUE:
         if (size >= max_size || ent->key > max_key)
           break;
-        callback(ent->key, Entry::GetValue(data));
+        callback(ent->key, Entry::GetValue(data), arg);
         size++;
         break;
       case Entry::Type::ENTRY_CLEVEL:
         clevel = Entry::GetClevel(clevel_mem_, data);
-        finish = clevel->Scan(clevel_mem_, max_key, max_size, size, callback);
+        finish = clevel->Scan(clevel_mem_, max_key, max_size, size, callback, arg);
         if (finish)
           return Status::OK;
         break;

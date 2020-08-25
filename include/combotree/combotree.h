@@ -63,7 +63,7 @@ class ComboTree {
   void ChangeToComboTree_();
   void ExpandComboTree_();
   size_t Scan_(uint64_t min_key, uint64_t max_key, size_t max_size,
-      size_t& count, std::function<void(uint64_t,uint64_t)> callback,
+      size_t& count, void (*callback)(uint64_t,uint64_t,void*), void* arg,
       std::function<uint64_t()> cur_max_key);
 };
 

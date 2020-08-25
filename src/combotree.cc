@@ -255,16 +255,16 @@ bool ComboTree::Delete(uint64_t key) {
 }
 
 size_t ComboTree::Scan_(uint64_t min_key, uint64_t max_key, size_t max_size,
-                        size_t& count, std::function<void(uint64_t,uint64_t)> callback,
+                        size_t& count, callback_t callback, void* arg,
                         std::function<uint64_t()> cur_max_key) {
   while (true) {
     if (status_.load() == State::USING_PMEMKV) {
-      return pmemkv_->Scan(min_key, max_key, max_size, callback);
+      return pmemkv_->Scan(min_key, max_key, max_size, callback, arg);
     } else if (status_.load() == State::PMEMKV_TO_COMBO_TREE) {
       std::this_thread::sleep_for(std::chrono::microseconds(5));
       continue;
     } else if (status_.load() == State::USING_COMBO_TREE) {
-      Status s = blevel_->Scan(min_key, max_key, max_size, count, callback);
+      Status s = blevel_->Scan(min_key, max_key, max_size, count, callback, arg);
       if (s == Status::OK)
         return count;
       if (s == Status::INVALID) {
@@ -273,7 +273,7 @@ size_t ComboTree::Scan_(uint64_t min_key, uint64_t max_key, size_t max_size,
       }
     } else if (status_.load() == State::COMBO_TREE_EXPANDING) {
       if (min_key < expand_min_key_.load()) {
-        Status s = blevel_->Scan(min_key, max_key, max_size, count, callback);
+        Status s = blevel_->Scan(min_key, max_key, max_size, count, callback, arg);
         if (s == Status::OK)
           return count;
         if (s == Status::INVALID) {
@@ -281,7 +281,7 @@ size_t ComboTree::Scan_(uint64_t min_key, uint64_t max_key, size_t max_size,
           continue;
         }
       } else if (min_key >= expand_max_key_.load()) {
-        Status s = alevel_->blevel_->Scan(min_key, max_key, max_size, count, callback);
+        Status s = alevel_->blevel_->Scan(min_key, max_key, max_size, count, callback, arg);
         if (s == Status::OK)
           return count;
         if (s == Status::INVALID) {
@@ -296,40 +296,55 @@ size_t ComboTree::Scan_(uint64_t min_key, uint64_t max_key, size_t max_size,
   }
 }
 
+void VectorCallback_(uint64_t key, uint64_t value, void* arg) {
+  ((std::vector<std::pair<uint64_t, uint64_t>>*)arg)->emplace_back(key, value);
+}
+
 size_t ComboTree::Scan(uint64_t min_key, uint64_t max_key, size_t max_size,
                        std::vector<std::pair<uint64_t, uint64_t>>& results) {
   size_t count = 0;
-  return Scan_(min_key, max_key, max_size, count,
-    [&](uint64_t key, uint64_t value) {
-      results.emplace_back(key, value);
-    },
+  return Scan_(min_key, max_key, max_size, count, VectorCallback_, &results,
     [&]() {
       return results.empty() ? min_key : results.back().first;
     });
 }
 
+void PairCallback_(uint64_t key, uint64_t value, void* arg) {
+  Pair* pair = reinterpret_cast<Pair*>(((void**)arg)[0]);
+  size_t* count = reinterpret_cast<size_t*>(((void**)arg)[1]);
+  pair[*count].key = key;
+  pair[*count].value = value;
+}
+
 size_t ComboTree::Scan(uint64_t min_key, uint64_t max_key, size_t max_size,
                        Pair* results) {
   size_t count = 0;
-  return Scan_(min_key, max_key, max_size, count,
-    [&](uint64_t key, uint64_t value) {
-      results[count].key = key;
-      results[count].value = value;
-    },
+  void* callback_arg[2];
+  callback_arg[0] = results;
+  callback_arg[1] = &count;
+  return Scan_(min_key, max_key, max_size, count, PairCallback_, callback_arg,
     [&]() {
       return count == 0 ? min_key : results[count - 1].key;
     });
+}
+
+void ArrayCallback_(uint64_t key, uint64_t value, void* arg) {
+  uint64_t* results = reinterpret_cast<uint64_t*>(((void**)arg)[0]);
+  size_t* count = reinterpret_cast<size_t*>(((void**)arg)[1]);
+  uint64_t* last_key = reinterpret_cast<uint64_t*>(((void**)arg)[2]);
+  results[*count] = value;
+  *last_key = key;
 }
 
 size_t ComboTree::Scan(uint64_t min_key, uint64_t max_key, size_t max_size,
                        uint64_t* results) {
   uint64_t last_key;
   size_t count = 0;
-  return Scan_(min_key, max_key, max_size, count,
-    [&](uint64_t key, uint64_t value) {
-      last_key = key;
-      results[count] = value;
-    },
+  void* callback_arg[3];
+  callback_arg[0] = results;
+  callback_arg[1] = &count;
+  callback_arg[2] = &last_key;
+  return Scan_(min_key, max_key, max_size, count, ArrayCallback_, callback_arg,
     [&]() {
       return count == 0 ? min_key : last_key;
     });
