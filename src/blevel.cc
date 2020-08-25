@@ -131,7 +131,7 @@ void BLevel::Expansion(std::shared_ptr<BLevel> old_blevel, std::atomic<uint64_t>
     Entry* new_ent = GetEntry_(0);
     new_ent->SetKey(clevel_mem_, 0);
     in_mem_key_[0] = 0;
-    uint64_t old_data = old_ent->value;
+    volatile uint64_t old_data = old_ent->value;
     size_t scan_size = 0;
     CLevel* clevel;
     void* callback_arg[3];
@@ -173,7 +173,7 @@ void BLevel::Expansion(std::shared_ptr<BLevel> old_blevel, std::atomic<uint64_t>
     max_key.store(old_index + 1 == old_blevel->EntrySize() ? UINT64_MAX
                                   : old_blevel->GetKey(old_index + 1));
     Entry* old_ent = old_blevel->GetEntry_(old_index);
-    uint64_t old_data = old_ent->value;
+    volatile uint64_t old_data = old_ent->value;
     size_t scan_size = 0;
     CLevel* clevel;
     void* callback_arg[2];
@@ -232,7 +232,7 @@ BLevel::~BLevel() {
 Status BLevel::Entry::Get(std::shared_mutex* mutex, CLevel::MemoryManagement* mem,
                           uint64_t pkey, uint64_t& pvalue) const {
   // std::shared_lock<std::shared_mutex> lock(*mutex);
-  uint64_t data = value;
+  volatile uint64_t data = value;
   switch (GetType(data)) {
     case Type::ENTRY_INVALID:
       return Status::INVALID;
@@ -257,7 +257,7 @@ Status BLevel::Entry::Insert(std::shared_mutex* mutex, CLevel::MemoryManagement*
                              Slab<CLevel>* clevel_slab, uint64_t pkey, uint64_t pvalue) {
   // TODO: lock scope too large. https://stackoverflow.com/a/34995051/7640227
   // std::lock_guard<std::shared_mutex> lock(*mutex);
-  uint64_t data = value;
+  volatile uint64_t data = value;
   [[maybe_unused]] Status debug_status;
   CLevel* new_clevel;
   switch (GetType(data)) {
@@ -302,12 +302,13 @@ Status BLevel::Entry::Insert(std::shared_mutex* mutex, CLevel::MemoryManagement*
 Status BLevel::Entry::Update(std::shared_mutex* mutex, CLevel::MemoryManagement* mem,
                              uint64_t pkey, uint64_t pvalue) {
   assert(0);
+  return Status::OK;
 }
 
 Status BLevel::Entry::Delete(std::shared_mutex* mutex, CLevel::MemoryManagement* mem,
                              uint64_t pkey) {
   // std::lock_guard<std::shared_mutex> lock(*mutex);
-  uint64_t data = value;
+  volatile uint64_t data = value;
   switch (GetType(data)) {
     case Type::ENTRY_INVALID:
       return Status::INVALID;
@@ -343,7 +344,7 @@ Status BLevel::Scan(uint64_t min_key, uint64_t max_key,
   {
     // std::shared_lock<std::shared_mutex> lock(locks_[entry_index]);
     Entry* ent = GetEntry_(entry_index);
-    uint64_t data = ent->value;
+    volatile uint64_t data = ent->value;
     CLevel* clevel;
     bool finish;
     switch (Entry::GetType(data)) {
@@ -372,7 +373,7 @@ Status BLevel::Scan(uint64_t min_key, uint64_t max_key,
   while (entry_index < EntrySize()) {
     // std::shared_lock<std::shared_mutex> lock(locks_[entry_index]);
     Entry* ent = GetEntry_(entry_index);
-    uint64_t data = ent->value;
+    volatile uint64_t data = ent->value;
     bool finish;
     CLevel* clevel;
     switch (Entry::GetType(data)) {

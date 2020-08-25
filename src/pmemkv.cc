@@ -18,7 +18,7 @@ PmemKV::PmemKV(std::string path, size_t size,
 {
   std::filesystem::remove(path);
   config cfg;
-  auto s = cfg.put_string("path", path);
+  [[maybe_unused]] auto s = cfg.put_string("path", path);
   assert(s == status::OK);
   s = cfg.put_uint64("size", size);
   assert(s == status::OK);
@@ -66,6 +66,7 @@ Status PmemKV::Insert(uint64_t key, uint64_t value) {
 
 Status PmemKV::Update(uint64_t key, uint64_t value) {
   assert(0);
+  return Status::OK;
 }
 
 Status PmemKV::Get(uint64_t key, uint64_t& value) const {

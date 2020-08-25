@@ -89,11 +89,11 @@ class CLevel {
     Node(IndexNode* ptr) : ptr(reinterpret_cast<uint64_t>(ptr)), type(Type::INDEX) {}
     Node(LeafNode* ptr) : ptr(reinterpret_cast<uint64_t>(ptr)), type(Type::LEAF) {}
 
-    bool operator==(Node& b) const { return data == b.data; }
-    bool IsLeaf() const { return type == Type::LEAF; }
-    bool IsIndex() const { return type == Type::INDEX; }
-    IndexNode* index() const { return reinterpret_cast<IndexNode*>(ptr); }
-    LeafNode* leaf() const { return reinterpret_cast<LeafNode*>(ptr); }
+    bool operator==(Node& b) const volatile { return data == b.data; }
+    bool IsLeaf() const volatile { return type == Type::LEAF; }
+    bool IsIndex() const volatile { return type == Type::INDEX; }
+    IndexNode* index() const volatile { return reinterpret_cast<IndexNode*>(ptr); }
+    LeafNode* leaf() const volatile { return reinterpret_cast<LeafNode*>(ptr); }
   };
 
   Node root_;

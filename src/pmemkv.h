@@ -40,7 +40,7 @@ class PmemKV {
     if (!read_valid_.load(std::memory_order_acquire))
       return -1;
     size_t size;
-    auto s = db_->count_all(size);
+    [[maybe_unused]] auto s = db_->count_all(size);
     assert(s == status::OK);
     ReadUnRef_();
     return size;

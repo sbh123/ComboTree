@@ -17,12 +17,12 @@ using pmem::obj::pool_base;
 
 void CLevel::LeafNode::Valid_() {
   std::set<int> idx;
-  for (uint32_t i = 0; i < nr_entry; ++i) {
+  for (int i = 0; i < nr_entry; ++i) {
     int index = GetSortedEntry_(i);
     assert(idx.count(index) == 0);
     idx.emplace(index);
   }
-  for (uint32_t i = 0; i < LEAF_ENTRYS - nr_entry; ++i) {
+  for (int i = 0; i < LEAF_ENTRYS - nr_entry; ++i) {
     int index = GetSortedEntry_(15 - i);
     assert(idx.count(index) == 0);
     idx.emplace(index);
@@ -39,7 +39,7 @@ void CLevel::InitLeaf(MemoryManagement* mem) {
 }
 
 Status CLevel::Insert(MemoryManagement* mem, uint64_t key, uint64_t value) {
-  Node root = root_;
+  volatile Node root = root_;
   if (root.IsLeaf())
     return root.leaf()->Insert(mem, mutex_, key, value, &root_);
   else
@@ -47,7 +47,7 @@ Status CLevel::Insert(MemoryManagement* mem, uint64_t key, uint64_t value) {
 }
 
 Status CLevel::Update(MemoryManagement* mem, uint64_t key, uint64_t value) {
-  Node root = root_;
+  volatile Node root = root_;
   if (root.IsLeaf())
     return root.leaf()->Update(mem, mutex_, key, value, &root_);
   else
@@ -55,7 +55,7 @@ Status CLevel::Update(MemoryManagement* mem, uint64_t key, uint64_t value) {
 }
 
 Status CLevel::Get(MemoryManagement* mem, uint64_t key, uint64_t& value) const {
-  Node root = root_;
+  volatile Node root = root_;
   if (root.IsLeaf())
     return root.leaf()->Get(mem, key, value);
   else
@@ -63,7 +63,7 @@ Status CLevel::Get(MemoryManagement* mem, uint64_t key, uint64_t& value) const {
 }
 
 Status CLevel::Delete(MemoryManagement* mem, uint64_t key) {
-  Node root = root_;
+  volatile Node root = root_;
   if (root.IsLeaf())
     return root.leaf()->Delete(mem, mutex_, key);
   else
@@ -77,7 +77,7 @@ bool CLevel::Scan(MemoryManagement* mem, uint64_t max_key, size_t max_size,
 
 bool CLevel::Scan(MemoryManagement* mem, uint64_t min_key, uint64_t max_key,
                   size_t max_size, size_t& size, callback_t callback, void* arg) {
-  Node root = root_;
+  volatile Node root = root_;
   if (root.IsLeaf())
     return root.leaf()->Scan(mem, min_key, max_key, max_size, size, callback, arg);
   else
@@ -226,6 +226,7 @@ Status CLevel::LeafNode::Delete(MemoryManagement* mem, Mutex& mutex, uint64_t ke
 Status CLevel::LeafNode::Update(MemoryManagement* mem, Mutex& mutex,
                                 uint64_t key, uint64_t value, Node* root) {
   assert(0);
+  return Status::OK;
 }
 
 Status CLevel::LeafNode::Get(MemoryManagement* mem, uint64_t key, uint64_t& value) const {
