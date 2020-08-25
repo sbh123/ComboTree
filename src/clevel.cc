@@ -79,7 +79,7 @@ bool CLevel::Scan(MemoryManagement* mem, uint64_t min_key, uint64_t max_key,
                   size_t max_size, size_t& size, std::function<void(uint64_t,uint64_t)> callback) {
   Node root = root_;
   if (root.IsLeaf())
-    return head_->Scan(mem, min_key, max_key, max_size, size, callback);
+    return root.leaf()->Scan(mem, min_key, max_key, max_size, size, callback);
   else
     return root.index()->Scan(mem, min_key, max_key, max_size, size, callback);
 }
@@ -149,7 +149,8 @@ CLevel::LeafNode* CLevel::LeafNode::Split_(MemoryManagement* mem, Mutex& mutex,
   // change root
   if (root->IsLeaf()) {
     Node new_root(parent);
-    mem->memcpy_persist(root, &new_root, sizeof(new_root));
+    *root = new_root;
+    mem->persist(root, sizeof(*root));
   }
 
   // change next ptr
@@ -372,7 +373,8 @@ CLevel::IndexNode* CLevel::IndexNode::Split_(MemoryManagement* mem, Node* root) 
   // change root
   if (root->index() == this) {
     Node new_root(parent);
-    mem->memcpy_persist(root, &new_root, sizeof(new_root));
+    *root = new_root;
+    mem->persist(root, sizeof(*root));
   }
 
   // change metadata

@@ -130,7 +130,8 @@ class BLevel {
     Status Delete(std::shared_mutex* mutex, CLevel::MemoryManagement* mem, uint64_t pkey);
 
     void SetKey(CLevel::MemoryManagement* mem, uint64_t new_key) {
-      mem->memcpy_persist(&key, &new_key, sizeof(key));
+      key = new_key;
+      mem->persist(&key, sizeof(key));
     }
 
     void SetValue(CLevel::MemoryManagement* mem, uint64_t new_value) {
