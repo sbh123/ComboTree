@@ -17,7 +17,7 @@ int main(void) {
   std::filesystem::create_directory(COMBO_TREE_DIR);
 
   combotree::ComboTree* db;
-  db = new combotree::ComboTree(COMBO_TREE_DIR, PMEMOBJ_MIN_POOL * 128);
+  db = new combotree::ComboTree(COMBO_TREE_DIR, PMEMOBJ_MIN_POOL * 100);
 
   combotree::RandomUniformUint64 rnd;
   map<uint64_t, uint64_t> right_kv;

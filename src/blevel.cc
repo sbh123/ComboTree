@@ -139,7 +139,7 @@ void BLevel::Expansion(std::shared_ptr<BLevel> old_blevel, std::atomic<uint64_t>
       case Entry::Type::ENTRY_INVALID:
         assert(0);
       case Entry::Type::ENTRY_VALUE:
-        new_ent->SetValue(clevel_mem_, Entry::GetValue(old_ent->value));
+        new_ent->SetValue(clevel_mem_, Entry::GetValue(old_data));
         size++;
         old_ent->SetInvalid(old_blevel->clevel_mem_);
         old_index++;

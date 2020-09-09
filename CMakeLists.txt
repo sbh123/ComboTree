@@ -46,6 +46,17 @@ find_package(PkgConfig QUIET)
 #   find_package(LIBPMEMOBJ REQUIRED)
 # endif()
 
+set(COMBO_TREE_SRC
+      src/pmemkv.cc
+      src/alevel.cc
+      src/blevel.cc
+      src/clevel.cc
+      src/combotree.cc
+)
+
+add_library(combotree SHARED ${COMBO_TREE_SRC})
+target_link_libraries(combotree pmem pmemkv pthread)
+
 ## Test
 enable_testing()
 
@@ -91,22 +102,14 @@ add_executable(generate_workload tests/generate_workload.cc)
 add_executable(pmemkv_test tests/pmemkv_test.cc src/pmemkv.cc)
 target_link_libraries(pmemkv_test pmemkv)
 
-set(COMBO_TREE_SRC
-      src/pmemkv.cc
-      src/alevel.cc
-      src/blevel.cc
-      src/clevel.cc
-      src/combotree.cc
-)
-
 # combotree test
-add_executable(combotree_test tests/combotree_test.cc ${COMBO_TREE_SRC})
-target_link_libraries(combotree_test pmemkv pmemobj pthread)
+add_executable(combotree_test tests/combotree_test.cc)
+target_link_libraries(combotree_test combotree)
 
 # kvbench test
 include_directories(/home/qyzhang/Projects/kvbench/include)
-add_executable(kvbench_combo_tree_v2 tests/kvbench_combo_tree.cc ${COMBO_TREE_SRC})
-target_link_libraries(kvbench_combo_tree_v2 pmemkv pmemobj protobuf pthread)
+add_executable(kvbench_combo_tree_v2 tests/kvbench_combo_tree.cc)
+target_link_libraries(kvbench_combo_tree_v2 protobuf combotree)
 
 add_test(alevel_test alevel_test)
 add_test(blevel_test blevel_test)

@@ -36,6 +36,10 @@ class ComboTree {
 
   size_t Size() const;
 
+  bool IsExpanding() const {
+    return permit_delete_.load() == false;
+  }
+
  private:
   const std::string POOL_LAYOUT = "Combo Tree";
 
