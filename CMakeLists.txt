@@ -3,7 +3,7 @@ project(ComboTree)
 
 ## Combo Tree Configuration
 set(DEFAULT_SPAN        2)
-set(PMEMKV_THRESHOLD    1024)
+set(PMEMKV_THRESHOLD    512)
 set(CLEVEL_LEAF_ENTRY   14)      # must <= 14
 set(CLEVEL_INDEX_ENTRY  15)      # must be old and <= 15
 set(EXPANSION_FACTOR    8)

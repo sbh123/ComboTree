@@ -1,6 +1,8 @@
 #include <filesystem>
 #include <thread>
 #include <memory>
+#include <iostream>
+#include <unistd.h>
 #include <libpmemobj++/persistent_ptr.hpp>
 #include <libpmemobj++/make_persistent_atomic.hpp>
 #include "combotree/combotree.h"
@@ -100,6 +102,9 @@ void ComboTree::ExpandComboTree_() {
   blevel_ = std::make_shared<BLevel>(new_pool, old_blevel);
 
   std::thread expandion_thread([&,new_pool,old_pool_path,old_alevel,old_blevel]() mutable {
+    int old_nice = nice(0);
+    int ret = nice(-old_nice);
+    assert(ret >= 0);
     blevel_->Expansion(old_blevel, expand_min_key_, expand_max_key_);
 
     std::shared_ptr<ALevel> new_alevel = std::make_shared<ALevel>(blevel_);
@@ -131,45 +136,66 @@ void ComboTree::ExpandComboTree_() {
 
 bool ComboTree::Insert(uint64_t key, uint64_t value) {
   Status s;
+  int invalid = 0;
+  int wait = 0;
+  int is_expanding = 0;
+  int wait_expanding_finish = 0;
   while (true) {
     // the order of comparison should not be changed
     if (status_.load() == State::USING_PMEMKV) {
       s = pmemkv_->Insert(key, value);
-      if (s == Status::INVALID)
+      if (s == Status::INVALID) {
+        invalid++;
         continue;
+      }
       if (Size() >= PMEMKV_THRESHOLD)
         ChangeToComboTree_();
       break;
     } else if (status_.load() == State::PMEMKV_TO_COMBO_TREE) {
       std::this_thread::sleep_for(std::chrono::microseconds(5));
+      wait++;
       continue;
     } else if (status_.load() == State::USING_COMBO_TREE) {
       s = alevel_->Insert(key, value);
-      if (s == Status::INVALID)
+      if (s == Status::INVALID) {
+        invalid++;
         continue;
+      }
       if (Size() >= EXPANSION_FACTOR * blevel_->EntrySize())
         ExpandComboTree_();
       break;
     } else if (status_.load() == State::COMBO_TREE_EXPANDING) {
       if (blevel_->Size() >= EXPANSION_FACTOR * blevel_->EntrySize()) {
         std::this_thread::sleep_for(std::chrono::microseconds(5));
+        wait++;
+        wait_expanding_finish++;
         continue;
       } else if (key < expand_min_key_.load()) {
         s = blevel_->Insert(key, value);
-        if (s == Status::INVALID)
+        if (s == Status::INVALID) {
+          invalid++;
           continue;
+        }
       } else if (key >= expand_max_key_.load()) {
         s = alevel_->Insert(key, value);
-        if (s == Status::INVALID)
+        if (s == Status::INVALID) {
+          invalid++;
           continue;
+        }
       } else {
         std::this_thread::sleep_for(std::chrono::microseconds(5));
+        is_expanding++;
+        wait++;
         continue;
       }
       break;
     }
   }
   assert(s != Status::INVALID);
+  if (invalid >= 5)
+    std::cout << "invalid: " << invalid << std::endl;
+  if (wait >= 5)
+    std::cout << "wait: " << wait << ", wait finish: " << wait_expanding_finish << ", is expanding: " << is_expanding << std::endl;
   return s == Status::OK;
 }
 
