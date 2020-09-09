@@ -107,9 +107,14 @@ add_executable(combotree_test tests/combotree_test.cc)
 target_link_libraries(combotree_test combotree)
 
 # kvbench test
-include_directories(/home/qyzhang/Projects/kvbench/include)
 add_executable(kvbench_combo_tree_v2 tests/kvbench_combo_tree.cc)
-target_link_libraries(kvbench_combo_tree_v2 protobuf combotree)
+target_include_directories(kvbench_combo_tree_v2 PUBLIC /home/qyzhang/Projects/kvbench/include)
+target_link_libraries(kvbench_combo_tree_v2 combotree protobuf)
+
+# kvbench-golang test
+add_executable(kvbench_combo_tree_golang tests/kvbench_combo_tree_golang.cc)
+target_include_directories(kvbench_combo_tree_golang PUBLIC /home/qyzhang/Projects/kvbench-golang/include)
+target_link_libraries(kvbench_combo_tree_golang combotree)
 
 add_test(alevel_test alevel_test)
 add_test(blevel_test blevel_test)
