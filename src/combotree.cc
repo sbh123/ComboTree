@@ -193,9 +193,9 @@ bool ComboTree::Insert(uint64_t key, uint64_t value) {
   }
   assert(s != Status::INVALID);
   if (invalid >= 5)
-    std::cout << "invalid: " << invalid << std::endl;
+    LOG(Debug::WARNING, "invalid: %d", invalid);
   if (wait >= 5)
-    std::cout << "wait: " << wait << ", wait finish: " << wait_expanding_finish << ", is expanding: " << is_expanding << std::endl;
+    LOG(Debug::WARNING, "wait: %d, wait finish: %d, is expanding: %d", wait, wait_expanding_finish, is_expanding);
   return s == Status::OK;
 }
 

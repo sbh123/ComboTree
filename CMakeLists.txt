@@ -47,6 +47,7 @@ find_package(PkgConfig QUIET)
 # endif()
 
 set(COMBO_TREE_SRC
+      src/debug.cc
       src/pmemkv.cc
       src/alevel.cc
       src/blevel.cc
@@ -85,34 +86,34 @@ add_executable(pmem_vs_pmemobj tests/pmem_vs_pmemobj.cc)
 target_link_libraries(pmem_vs_pmemobj pmemobj pmem)
 
 # clevel test
-add_executable(clevel_test tests/clevel_test.cc src/clevel.cc)
+add_executable(clevel_test tests/clevel_test.cc src/clevel.cc src/debug.cc)
 target_link_libraries(clevel_test pmemobj)
 
 # blevel test
-add_executable(blevel_test tests/blevel_test.cc src/blevel.cc src/clevel.cc)
+add_executable(blevel_test tests/blevel_test.cc src/blevel.cc src/clevel.cc src/debug.cc)
 target_link_libraries(blevel_test pmemobj)
 
 # alevel test
-add_executable(alevel_test tests/alevel_test.cc src/alevel.cc src/blevel.cc src/clevel.cc)
+add_executable(alevel_test tests/alevel_test.cc src/alevel.cc src/blevel.cc src/clevel.cc src/debug.cc)
 target_link_libraries(alevel_test pmemobj)
 
 add_executable(generate_workload tests/generate_workload.cc)
 
 # pmemkv test
-add_executable(pmemkv_test tests/pmemkv_test.cc src/pmemkv.cc)
+add_executable(pmemkv_test tests/pmemkv_test.cc src/pmemkv.cc src/debug.cc)
 target_link_libraries(pmemkv_test pmemkv)
 
 # combotree test
-add_executable(combotree_test tests/combotree_test.cc)
+add_executable(combotree_test tests/combotree_test.cc src/debug.cc)
 target_link_libraries(combotree_test combotree)
 
 # kvbench test
-add_executable(kvbench_combo_tree_v2 tests/kvbench_combo_tree.cc)
+add_executable(kvbench_combo_tree_v2 tests/kvbench_combo_tree.cc src/debug.cc)
 target_include_directories(kvbench_combo_tree_v2 PUBLIC /home/qyzhang/Projects/kvbench/include)
 target_link_libraries(kvbench_combo_tree_v2 combotree protobuf)
 
 # kvbench-golang test
-add_executable(kvbench_combo_tree_golang tests/kvbench_combo_tree_golang.cc)
+add_executable(kvbench_combo_tree_golang tests/kvbench_combo_tree_golang.cc src/debug.cc)
 target_include_directories(kvbench_combo_tree_golang PUBLIC /home/qyzhang/Projects/kvbench-golang/include)
 target_link_libraries(kvbench_combo_tree_golang combotree)
 
