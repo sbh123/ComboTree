@@ -111,11 +111,14 @@ void BLevel::ExpansionCallback_(uint64_t key, uint64_t value, void* arg) {
 
 void BLevel::Expansion(std::shared_ptr<BLevel> old_blevel, std::atomic<uint64_t>& min_key,
                         std::atomic<uint64_t>& max_key) {
+#ifndef NDEBUG
   Timer total_timer;
   Timer scan_timer;
   double scan_total = 0.0;
+  size_t scan_size = 0;
 
   total_timer.Start();
+#endif // NDEBUG
 
   uint64_t old_index = 0;
   expanding_entry_index_.store(0, std::memory_order_release);
@@ -188,14 +191,19 @@ void BLevel::Expansion(std::shared_ptr<BLevel> old_blevel, std::atomic<uint64_t>
       case Entry::Type::ENTRY_CLEVEL:
         clevel = Entry::GetClevel(old_blevel->clevel_mem_, old_data);
 
+#ifndef NDEBUG
         scan_timer.Start();
-
+        scan_size = 0;
+#endif // NDEBUG
         node = clevel->head_;
         while (node) {
           if (node->GetSortedKey_(0) > last_seen) {
             for (i = 0; i < node->nr_entry; ++i) {
               ent = &node->entry[node->GetSortedEntry_(i)];
               ExpandAddEntry_(ent->key, ent->value, size);
+#ifndef NDEBUG
+              scan_size++;
+#endif // NDEBUG
             }
           } else {
             // key[0] <= last_seen, special situation
@@ -208,12 +216,19 @@ void BLevel::Expansion(std::shared_ptr<BLevel> old_blevel, std::atomic<uint64_t>
               if (ent->key <= last_seen)
                 continue;
               ExpandAddEntry_(ent->key, ent->value, size);
+#ifndef NDEBUG
+              scan_size++;
+#endif // NDEBUG
             }
           }
           node = node->GetNext(old_blevel->clevel_mem_->BaseAddr());
         }
 
+#ifndef NDEBUG
         scan_total += scan_timer.End();
+        if (scan_size > 100)
+          LOG(Debug::INFO, "Expand Scan Size: %ld, index: %ld, total %ld", scan_size, old_index, old_blevel->EntrySize());
+#endif // NDEBUG
         break;
       case Entry::Type::ENTRY_NONE:
         break;

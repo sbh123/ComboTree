@@ -3,7 +3,6 @@
 namespace combotree {
 
 #ifndef NDEBUG
-#define NDEBUG
 
 std::mutex log_mutex;
 

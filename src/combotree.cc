@@ -166,7 +166,7 @@ bool ComboTree::Insert(uint64_t key, uint64_t value) {
       break;
     } else if (status_.load() == State::COMBO_TREE_EXPANDING) {
       if (blevel_->Size() >= EXPANSION_FACTOR * blevel_->EntrySize()) {
-        std::this_thread::sleep_for(std::chrono::microseconds(5));
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
         wait++;
         wait_expanding_finish++;
         continue;
@@ -192,9 +192,9 @@ bool ComboTree::Insert(uint64_t key, uint64_t value) {
     }
   }
   assert(s != Status::INVALID);
-  if (invalid >= 5)
+  if (invalid >= 50)
     LOG(Debug::WARNING, "invalid: %d", invalid);
-  if (wait >= 5)
+  if (wait >= 50)
     LOG(Debug::WARNING, "wait: %d, wait finish: %d, is expanding: %d", wait, wait_expanding_finish, is_expanding);
   return s == Status::OK;
 }
