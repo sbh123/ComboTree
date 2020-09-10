@@ -100,20 +100,13 @@ void BLevel::ExpandAddEntry_(uint64_t key, uint64_t value, size_t& size) {
   }
 }
 
-void BLevel::ExpansionCallback1_(uint64_t key, uint64_t value, void* arg) {
+void BLevel::ExpansionCallback_(uint64_t key, uint64_t value, void* arg) {
   Entry* ent = reinterpret_cast<Entry*>(((void**)arg)[0]);
   CLevel::MemoryManagement* mem = reinterpret_cast<CLevel::MemoryManagement*>(((void**)arg)[1]);
   size_t* size = reinterpret_cast<size_t*>(((void**)arg)[2]);
 
   *size = *size + 1;
   ent->SetValue(mem, value);
-}
-
-void BLevel::ExpansionCallback2_(uint64_t key, uint64_t value, void* arg) {
-  BLevel* blevel = reinterpret_cast<BLevel*>(((void**)arg)[0]);
-  size_t* size = reinterpret_cast<size_t*>(((void**)arg)[1]);
-
-  blevel->ExpandAddEntry_(key, value, *size);
 }
 
 void BLevel::Expansion(std::shared_ptr<BLevel> old_blevel, std::atomic<uint64_t>& min_key,
@@ -155,7 +148,7 @@ void BLevel::Expansion(std::shared_ptr<BLevel> old_blevel, std::atomic<uint64_t>
         callback_arg[0] = new_ent;
         callback_arg[1] = clevel_mem_;
         callback_arg[2] = &size;
-        clevel->Scan(old_blevel->clevel_mem_, 0, 0, 1, scan_size, BLevel::ExpansionCallback1_, callback_arg);
+        clevel->Scan(old_blevel->clevel_mem_, 0, 0, 1, scan_size, BLevel::ExpansionCallback_, callback_arg);
         if (scan_size == 1)
           clevel->Delete(old_blevel->clevel_mem_, 0);
         else
@@ -180,9 +173,12 @@ void BLevel::Expansion(std::shared_ptr<BLevel> old_blevel, std::atomic<uint64_t>
                                   : old_blevel->GetKey(old_index + 1));
     Entry* old_ent = old_blevel->GetEntry_(old_index);
     volatile uint64_t old_data = old_ent->value;
-    size_t scan_size = 0;
     CLevel* clevel;
-    void* callback_arg[2];
+
+    uint64_t last_seen = 0;
+    CLevel::LeafNode* node;
+    CLevel::LeafNode::Entry* ent;
+    int i;
     switch (Entry::GetType(old_data)) {
       case Entry::Type::ENTRY_INVALID:
         assert(0);
@@ -191,11 +187,32 @@ void BLevel::Expansion(std::shared_ptr<BLevel> old_blevel, std::atomic<uint64_t>
         break;
       case Entry::Type::ENTRY_CLEVEL:
         clevel = Entry::GetClevel(old_blevel->clevel_mem_, old_data);
-        callback_arg[0] = this;
-        callback_arg[1] = & size;
+
         scan_timer.Start();
-        clevel->Scan(old_blevel->clevel_mem_, 0, UINT64_MAX, UINT64_MAX, scan_size,
-          BLevel::ExpansionCallback2_, callback_arg);
+
+        node = clevel->head_;
+        while (node) {
+          if (node->GetSortedKey_(0) > last_seen) {
+            for (i = 0; i < node->nr_entry; ++i) {
+              ent = &node->entry[node->GetSortedEntry_(i)];
+              ExpandAddEntry_(ent->key, ent->value, size);
+            }
+          } else {
+            // key[0] <= last_seen, special situation
+#ifndef NDEBUG
+            if (node->nr_entry != 0)
+              LOG(Debug::WARNING, "scan special situation");
+#endif // NDEBUG
+            for (i = 0; i < node->nr_entry; ++i) {
+              ent = &node->entry[node->GetSortedEntry_(i)];
+              if (ent->key <= last_seen)
+                continue;
+              ExpandAddEntry_(ent->key, ent->value, size);
+            }
+          }
+          node = node->GetNext(old_blevel->clevel_mem_->BaseAddr());
+        }
+
         scan_total += scan_timer.End();
         break;
       case Entry::Type::ENTRY_NONE:

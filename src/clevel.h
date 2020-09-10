@@ -177,6 +177,8 @@ struct CLevel::LeafNode {
     next = (reinterpret_cast<uint64_t>(next_ptr) - base_addr) | 0x8000000000000000UL;
   }
 
+  friend BLevel;
+
  private:
   int GetFreeEntry_() const {
     assert(nr_entry < LEAF_ENTRYS);

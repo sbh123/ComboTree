@@ -191,8 +191,7 @@ class BLevel {
   uint64_t Find_(uint64_t key, uint64_t begin, uint64_t end) const;
   void ExpandAddEntry_(uint64_t key, uint64_t value, size_t& size);
 
-  static void ExpansionCallback1_(uint64_t key, uint64_t value, void* arg);
-  static void ExpansionCallback2_(uint64_t key, uint64_t value, void* arg);
+  static void ExpansionCallback_(uint64_t key, uint64_t value, void* arg);
 };
 
 } // namespace combotree
