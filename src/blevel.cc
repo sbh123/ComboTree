@@ -118,6 +118,12 @@ void BLevel::ExpansionCallback2_(uint64_t key, uint64_t value, void* arg) {
 
 void BLevel::Expansion(std::shared_ptr<BLevel> old_blevel, std::atomic<uint64_t>& min_key,
                         std::atomic<uint64_t>& max_key) {
+  Timer total_timer;
+  Timer scan_timer;
+  double scan_total = 0.0;
+
+  total_timer.Start();
+
   uint64_t old_index = 0;
   expanding_entry_index_.store(0, std::memory_order_release);
   size_t size = 0;
@@ -187,8 +193,10 @@ void BLevel::Expansion(std::shared_ptr<BLevel> old_blevel, std::atomic<uint64_t>
         clevel = Entry::GetClevel(old_blevel->clevel_mem_, old_data);
         callback_arg[0] = this;
         callback_arg[1] = & size;
+        scan_timer.Start();
         clevel->Scan(old_blevel->clevel_mem_, 0, UINT64_MAX, UINT64_MAX, scan_size,
           BLevel::ExpansionCallback2_, callback_arg);
+        scan_total += scan_timer.End();
         break;
       case Entry::Type::ENTRY_NONE:
         break;
@@ -206,6 +214,8 @@ void BLevel::Expansion(std::shared_ptr<BLevel> old_blevel, std::atomic<uint64_t>
   root_->nr_entry.store(expanding_entry_index_.load(std::memory_order_acquire));
   root_.persist();
   is_expanding_.store(false);
+
+  LOG(Debug::INFO, "Expansion finished, total time: %lf, scan time: %lf", total_timer.End(), scan_total);
 }
 
 BLevel::BLevel(pmem::obj::pool_base pop)

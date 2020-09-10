@@ -3,6 +3,7 @@
 #include <cassert>
 #include <cstdio>
 #include <mutex>
+#include <chrono>
 
 namespace combotree {
 
@@ -48,9 +49,32 @@ inline const char* level_string__(Debug level) {
            level_string__(level), __FUNCTION__, ##__VA_ARGS__);        \
   } while (0)
 
+// microseconds timer
+class Timer {
+ public:
+  void Start() { start_ = std::chrono::high_resolution_clock::now(); }
+
+  double End() {
+    end_ = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> duration = end_ - start_;
+    return duration.count() * 1000000;
+  }
+
+ private:
+  std::chrono::time_point<std::chrono::high_resolution_clock> start_;
+  std::chrono::time_point<std::chrono::high_resolution_clock> end_;
+};
+
 #elif defined(NDEBUG)
 
 #define LOG(level, format, ...)
+
+// microseconds timer
+class Timer {
+ public:
+  void Start() {}
+  double End() { return 0.0; }
+};
 
 #endif  // NDEBUG
 
