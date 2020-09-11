@@ -116,6 +116,7 @@ void BLevel::Expansion(std::shared_ptr<BLevel> old_blevel, std::atomic<uint64_t>
   Timer scan_timer;
   double scan_total = 0.0;
   size_t scan_size = 0;
+  std::vector<size_t> scan_sizes;
 
   total_timer.Start();
 #endif // NDEBUG
@@ -226,6 +227,7 @@ void BLevel::Expansion(std::shared_ptr<BLevel> old_blevel, std::atomic<uint64_t>
 
 #ifndef NDEBUG
         scan_total += scan_timer.End();
+        scan_sizes.push_back(scan_size);
         if (scan_size > 100)
           LOG(Debug::INFO, "Expand Scan Size: %ld, index: %ld, total %ld", scan_size, old_index, old_blevel->EntrySize());
 #endif // NDEBUG
@@ -246,6 +248,24 @@ void BLevel::Expansion(std::shared_ptr<BLevel> old_blevel, std::atomic<uint64_t>
   root_->nr_entry.store(expanding_entry_index_.load(std::memory_order_acquire));
   root_.persist();
   is_expanding_.store(false);
+
+#ifndef NDEBUG
+  size_t less_than_16 = 0;
+  size_t between_16_and_64 = 0;
+  size_t between_64_and_128 = 0;
+  size_t beyond_128 = 0;
+  for (auto x : scan_sizes) {
+    if (x <= 16)
+      less_than_16++;
+    else if (x <= 64)
+      between_16_and_64++;
+    else if (x <= 128)
+      between_64_and_128++;
+    else
+      beyond_128++;
+  }
+  LOG(Debug::INFO, "<= 16: %ld, <= 64: %ld, <= 128: %ld, > 128: %ld.", less_than_16, between_16_and_64, between_64_and_128, beyond_128);
+#endif // NDEBUG
 
   LOG(Debug::INFO, "Expansion finished, total time: %lf, scan time: %lf", total_timer.End(), scan_total);
 }
