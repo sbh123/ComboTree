@@ -89,6 +89,10 @@ target_link_libraries(pmem_vs_pmemobj pmemobj pmem)
 add_executable(clevel_test tests/clevel_test.cc src/clevel.cc src/debug.cc)
 target_link_libraries(clevel_test pmemobj)
 
+# clevel performance test
+add_executable(clevel_perf tests/clevel_perf_test.cc src/clevel.cc src/debug.cc)
+target_link_libraries(clevel_perf pmemobj)
+
 # blevel test
 add_executable(blevel_test tests/blevel_test.cc src/blevel.cc src/clevel.cc src/debug.cc)
 target_link_libraries(blevel_test pmemobj)
