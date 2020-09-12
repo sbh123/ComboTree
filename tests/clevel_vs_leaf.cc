@@ -6,10 +6,8 @@
 #include "random.h"
 
 using combotree::CLevel;
-using combotree::CLevel::Mutex;
 using combotree::Status;
 using combotree::Slab;
-using combotree::CLevel::LeafNode;
 using namespace std;
 
 #define PATH      "/mnt/pmem0/persistent"
@@ -39,7 +37,7 @@ int main(void) {
 
   CLevel** db = new CLevel*[TREE_NUM];
   CLevel::LeafNode** nodes = new CLevel::LeafNode*[TREE_NUM];
-  CLevel::Mutex mutex* = new CLevel::Mutex[TREE_NUM]
+  CLevel::Mutex* mutex = new CLevel::Mutex[TREE_NUM];
   Node* arr;
   std::mutex* arr_mutex = new std::mutex[TREE_NUM];
 
@@ -49,13 +47,12 @@ int main(void) {
     db[i]->mutex_.GetLeafMutex(0);
 
     nodes[i] = mem.NewLeafNode();
-    nodes[i].id = 0;
+    nodes[i]->id = 0;
     mutex[i].GetLeafMutex(0);
-
-    pmem::obj::persistent_ptr<Node[]> data;
-    pmem::obj::make_persistent_atomic<Node[]>(pop, data, TREE_NUM);
-    arr = data.get();
   }
+  pmem::obj::persistent_ptr<Node[]> data;
+  pmem::obj::make_persistent_atomic<Node[]>(pop, data, TREE_NUM);
+  arr = data.get();
 
   combotree::RandomUniformUint64 rnd;
   uint64_t key[TREE_SIZE];
@@ -76,7 +73,7 @@ int main(void) {
   timer.Start();
   for (int i = 0; i < TREE_NUM; ++i) {
     for (int j = 0; j < TREE_SIZE; ++j) {
-      nodes[i]->Insert(&mem, mutex[i], key[j], key[j]);
+      nodes[i]->Insert(&mem, mutex[i], key[j], key[j], nullptr);
     }
   }
   std::cout << "LeafNode elapsed time: " << timer.End() << std::endl;
