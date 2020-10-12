@@ -38,12 +38,12 @@ void CLevel::InitLeaf(MemoryManagement* mem) {
   assert(head_);
 }
 
-Status CLevel::Insert(MemoryManagement* mem, uint64_t key, uint64_t value) {
+Status CLevel::Put(MemoryManagement* mem, uint64_t key, uint64_t value) {
   volatile Node root = root_;
   if (root.IsLeaf())
-    return root.leaf()->Insert(mem, mutex_, key, value, &root_);
+    return root.leaf()->Put(mem, mutex_, key, value, &root_);
   else
-    return root.index()->Insert(mem, mutex_, key, value, &root_);
+    return root.index()->Put(mem, mutex_, key, value, &root_);
 }
 
 Status CLevel::Update(MemoryManagement* mem, uint64_t key, uint64_t value) {
@@ -164,7 +164,7 @@ CLevel::LeafNode* CLevel::LeafNode::Split_(MemoryManagement* mem, Mutex& mutex,
   return new_node;
 }
 
-Status CLevel::LeafNode::Insert(MemoryManagement* mem, Mutex& mutex, uint64_t key,
+Status CLevel::LeafNode::Put(MemoryManagement* mem, Mutex& mutex, uint64_t key,
                                 uint64_t value, Node* root) {
   std::lock_guard<std::mutex> lock(mutex.GetLeafMutex(id));
 
@@ -174,7 +174,7 @@ Status CLevel::LeafNode::Insert(MemoryManagement* mem, Mutex& mutex, uint64_t ke
     LeafNode* new_node = Split_(mem, mutex, root);
     // key should insert to the newly split node
     if (key >= new_node->min_key)
-      return new_node->Insert(mem, mutex, key, value, root);
+      return new_node->Put(mem, mutex, key, value, root);
   }
 
   bool find;
@@ -186,7 +186,7 @@ Status CLevel::LeafNode::Insert(MemoryManagement* mem, Mutex& mutex, uint64_t ke
   if (sorted_index == nr_entry) {
     LeafNode* next = GetNext(mem->BaseAddr());
     if (next && key >= next->min_key)
-      return next->Insert(mem, mutex, key, value, root);
+      return next->Put(mem, mutex, key, value, root);
   }
 
   int free_index = GetFreeEntry_();
@@ -416,10 +416,10 @@ bool CLevel::IndexNode::InsertChild(MemoryManagement* mem, uint64_t child_key,
   return true;
 }
 
-Status CLevel::IndexNode::Insert(MemoryManagement* mem, Mutex& mutex,
+Status CLevel::IndexNode::Put(MemoryManagement* mem, Mutex& mutex,
                                  uint64_t key, uint64_t value, Node* root) {
   auto leaf = FindLeafNode_(key);
-  return leaf->Insert(mem, mutex, key, value, root);
+  return leaf->Put(mem, mutex, key, value, root);
 }
 
 Status CLevel::IndexNode::Update(MemoryManagement* mem, Mutex& mutex,

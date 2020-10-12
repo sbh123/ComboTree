@@ -10,8 +10,8 @@ uint64_t Config::base_addr_;
 
 class Test : TestBase {
  public:
-  Test(std::string pmem_file, size_t file_size)
-    :TestBase(pmem_file, file_size) {}
+  Test(std::string pmem_file, size_t pmem_size, std::string pmemobj_file, size_t pmemobj_size)
+    :TestBase(pmem_file, pmem_size, pmemobj_file, pmemobj_size) {}
 
   int Run() {
     BLevel::Entry* ent;
@@ -65,6 +65,7 @@ class Test : TestBase {
 }
 
 int main() {
-  combotree::Test test(TEST_PMEM_FILE, 1024);
+  combotree::Test test(TEST_PMEM_FILE, 1024*1024*1024*2,
+                       TEST_PMEMOBJ_FILE, 1024*1024*512);
   return test.Run();
 }

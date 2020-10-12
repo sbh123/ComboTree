@@ -26,7 +26,7 @@ class CLevel {
 
   void InitLeaf(MemoryManagement* mem);
 
-  Status Insert(MemoryManagement* mem, uint64_t key, uint64_t value);
+  Status Put(MemoryManagement* mem, uint64_t key, uint64_t value);
   Status Update(MemoryManagement* mem, uint64_t key, uint64_t value);
   Status Delete(MemoryManagement* mem, uint64_t key);
   Status Get(MemoryManagement* mem, uint64_t key, uint64_t& value) const;
@@ -157,7 +157,7 @@ struct CLevel::LeafNode {
     uint64_t value;
   } entry[LEAF_ENTRYS];
 
-  Status Insert(MemoryManagement* mem, Mutex& mutex, uint64_t key, uint64_t value, Node* root);
+  Status Put(MemoryManagement* mem, Mutex& mutex, uint64_t key, uint64_t value, Node* root);
   Status Update(MemoryManagement* mem, Mutex& mutex, uint64_t key, uint64_t value, Node* root);
   Status Get(MemoryManagement* mem, uint64_t key, uint64_t& value) const;
   Status Delete(MemoryManagement* mem, Mutex& mutex, uint64_t key);
@@ -266,7 +266,7 @@ struct CLevel::IndexNode {
 
   IndexNode() : nr_entry(0), sorted_array(0x0123456789ABCDEUL) {}
 
-  Status Insert(MemoryManagement* mem, Mutex& mutex, uint64_t key, uint64_t value, Node* root);
+  Status Put(MemoryManagement* mem, Mutex& mutex, uint64_t key, uint64_t value, Node* root);
   Status Update(MemoryManagement* mem, Mutex& mutex,uint64_t key, uint64_t value, Node* root);
   Status Get(MemoryManagement* mem, uint64_t key, uint64_t& value) const;
   Status Delete(MemoryManagement* mem, Mutex& mutex,uint64_t key);

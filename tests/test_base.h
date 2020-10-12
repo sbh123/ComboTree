@@ -7,10 +7,13 @@ namespace combotree {
 
 class TestBase {
  public:
-  TestBase(std::string pmem_file, size_t file_size) {
+  TestBase(std::string pmem_file, size_t pmem_size,
+           std::string pmemobj_file, size_t pmemobj_size) {
     system((std::string("rm -rf ")+pmem_file).c_str());
+    system((std::string("rm -rf ")+pmemobj_file).c_str());
+
     int is_pmem;
-    pmemaddr_ = pmem_map_file(pmem_file.c_str(), file_size+64,
+    pmemaddr_ = pmem_map_file(pmem_file.c_str(), pmem_size+64,
                 PMEM_FILE_CREATE | PMEM_FILE_EXCL, 0666, &mapped_len, &is_pmem);
     assert(is_pmem == 1);
     if (pmemaddr_ == NULL) {
@@ -26,6 +29,7 @@ class TestBase {
     }
 
     Config::SetBaseAddr(addr);
+    Config::SetPmemObjFile(pmemobj_file, pmemobj_size);
 
     std::cout << "flush method : " << FLUSH_METHOD << std::endl;
     std::cout << "pmem addr    : " << pmemaddr_ << std::endl;

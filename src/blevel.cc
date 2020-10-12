@@ -1,5 +1,6 @@
 #include <cstring>
 #include <cassert>
+#include <vector>
 #include "blevel.h"
 #include "config.h"
 
@@ -77,7 +78,7 @@ uint64_t BLevel::Entry::Value(int index) const {
 }
 
 CLevel* BLevel::Entry::clevel_() const {
-  return (CLevel*)Config::PmemAddr(clevel);
+  return (CLevel*)(clevel + Config::CLevelSlab()->BaseAddr());
 }
 
 void BLevel::Entry::SetKey_(int index, uint64_t key) {
@@ -147,8 +148,7 @@ bool BLevel::Entry::Get(uint64_t key, uint64_t& value) const {
     return true;
   }
   if (clevel) {
-    assert(0);
-    // return clevel_()->Get(key, value) == Status::OK;
+    return clevel_()->Get(Config::CLevelMem(), key, value) == Status::OK;
   } else {
     return false;
   }
@@ -157,8 +157,11 @@ bool BLevel::Entry::Get(uint64_t key, uint64_t& value) const {
 bool BLevel::Entry::Delete(uint64_t key, uint64_t* value) {
   bool exist;
   int index = BinarySearch_(key, exist);
-  if (!exist)
+  if (!exist) {
+    if (clevel)
+      return clevel_()->Delete(Config::CLevelMem(), key) == Status::OK;
     return false;
+  }
   if (value)
     *value = *value_(index);
   if (index != buf_entries-1) {
@@ -177,10 +180,15 @@ bool BLevel::Entry::Delete(uint64_t key, uint64_t* value) {
 
 bool BLevel::Entry::WriteToCLevel_() {
   // TODO: let anothor thread do this? e.g. a little thread pool
-  assert(0);
-  for (int i = 0; i < buf_entries; ++i) {
-    // clevel_()->Put(KeyAt_(i), *value_(i));
+  if (clevel == 0) {
+    CLevel* tmp = Config::CLevelSlab()->Allocate();
+    tmp->InitLeaf(Config::CLevelMem());
+    clevel = (uint64_t)tmp - Config::CLevelSlab()->BaseAddr();
+    // flush and fence will be done by ClearBuf_()
   }
+  for (int i = 0; i < buf_entries; ++i)
+    clevel_()->Put(Config::CLevelMem(), KeyAt_(i), *value_(i));
+  return true;
 }
 
 void BLevel::Entry::ClearBuf_() {
@@ -240,13 +248,54 @@ void BLevel::Expansion(BLevel* old_blevel) {
 
   size_ = 0;
 
+  std::vector<std::pair<uint64_t,uint64_t>> clevel_scan;
+
   // first non-empty entry
   while (old_index < old_blevel->Entries()) {
     Entry* old_entry = &old_blevel->entries_[old_index];
     if (old_entry->clevel) {
-      assert(0);
-      old_index++;
-      break;
+      clevel_scan.clear();
+      size_t scan_size = 0;
+      old_entry->clevel_()->Scan(Config::CLevelMem(), UINT64_MAX, UINT64_MAX, scan_size,
+        [](uint64_t key, uint64_t value, void* arg) {
+          std::vector<std::pair<uint64_t,uint64_t>>* result = (std::vector<std::pair<uint64_t,uint64_t>>*)arg;
+          result->emplace_back(key, value);
+        }, &clevel_scan);
+
+      assert(scan_size == clevel_scan.size());
+
+      if (clevel_scan.size() != 0 || old_entry->buf_entries != 0) {
+        int vec_idx = 0;
+        int buf_idx = 0;
+        if (clevel_scan.size() == 0 || (old_entry->buf_entries != 0 && old_entry->Key(0) < clevel_scan[0].first)) {
+          last_key = old_entry->Key(0);
+          last_value = old_entry->Value(0);
+          vec_idx++;
+        } else {
+          last_key = clevel_scan[0].first;
+          last_value = clevel_scan[0].second;
+          buf_idx++;
+        }
+        while (vec_idx != clevel_scan.size() || buf_idx != old_entry->buf_entries) {
+          if (vec_idx == clevel_scan.size() || (buf_idx != old_entry->buf_entries && old_entry->Key(buf_idx) < clevel_scan[vec_idx].first)) {
+            cur_key = old_entry->Key(buf_idx);
+            prefix_len = CommonPrefixBytes(last_key, cur_key);
+            AddEntry();
+            last_key = cur_key;
+            last_value = old_entry->Value(buf_idx);
+            buf_idx++;
+          } else {
+            cur_key = clevel_scan[vec_idx].first;
+            prefix_len = CommonPrefixBytes(last_key, cur_key);
+            AddEntry();
+            last_key = cur_key;
+            last_value = clevel_scan[vec_idx].second;
+            vec_idx++;
+          }
+        }
+        old_index++;
+        break;
+      }
     } else if (old_entry->buf_entries != 0) {
       last_key = old_entry->Key(0);
       last_value = old_entry->Value(0);
@@ -270,7 +319,37 @@ void BLevel::Expansion(BLevel* old_blevel) {
   while (old_index < old_blevel->Entries()) {
     Entry* old_entry = &old_blevel->entries_[old_index];
     if (old_entry->clevel) {
-      assert(0);
+      clevel_scan.clear();
+      size_t scan_size = 0;
+      old_entry->clevel_()->Scan(Config::CLevelMem(), UINT64_MAX, UINT64_MAX, scan_size,
+        [](uint64_t key, uint64_t value, void* arg) {
+          std::vector<std::pair<uint64_t,uint64_t>>* result = (std::vector<std::pair<uint64_t,uint64_t>>*)arg;
+          result->emplace_back(key, value);
+        }, &clevel_scan);
+
+      assert(scan_size == clevel_scan.size());
+
+      if (clevel_scan.size() != 0 || old_entry->buf_entries != 0) {
+        int vec_idx = 0;
+        int buf_idx = 0;
+        while (vec_idx != clevel_scan.size() || buf_idx != old_entry->buf_entries) {
+          if (vec_idx == clevel_scan.size() || (buf_idx != old_entry->buf_entries && old_entry->Key(buf_idx) < clevel_scan[vec_idx].first)) {
+            cur_key = old_entry->Key(buf_idx);
+            prefix_len = CommonPrefixBytes(last_key, cur_key);
+            AddEntry();
+            last_key = cur_key;
+            last_value = old_entry->Value(buf_idx);
+            buf_idx++;
+          } else {
+            cur_key = clevel_scan[vec_idx].first;
+            prefix_len = CommonPrefixBytes(last_key, cur_key);
+            AddEntry();
+            last_key = cur_key;
+            last_value = clevel_scan[vec_idx].second;
+            vec_idx++;
+          }
+        }
+      }
     } else if (old_entry->buf_entries != 0) {
       for (uint64_t i = 0; i < old_entry->buf_entries; ++i) {
         cur_key = old_entry->Key(i);
@@ -287,19 +366,59 @@ void BLevel::Expansion(BLevel* old_blevel) {
   prefix_len = CommonPrefixBytes(last_key, 0xFFFFFFFFFFFFFFFFUL);
   AddEntry();
 
-#undef AddEntry()
+#undef AddEntry
+}
+
+uint64_t BLevel::Find_(uint64_t key, uint64_t begin, uint64_t end) const {
+  assert(begin < Entries());
+  assert(end < Entries());
+  int_fast32_t left = begin;
+  int_fast32_t right = end;
+  // binary search
+  while (left <= right) {
+    int middle = (left + right) / 2;
+    uint64_t mid_key = entries_[middle].entry_key;
+    if (mid_key == key) {
+      return middle;
+    } else if (mid_key < key) {
+      left = middle + 1;
+    } else {
+      right = middle - 1;
+    }
+  }
+  return right;
 }
 
 bool BLevel::Put(uint64_t key, uint64_t value, uint64_t begin, uint64_t end) {
-  assert(0);
+  uint64_t idx = Find_(key, begin, end);
+  if (entries_[idx].Put(key, value)) {
+    size_++;
+    return true;
+  }
+  return false;
 }
 
 bool BLevel::Get(uint64_t key, uint64_t& value, uint64_t begin, uint64_t end) const {
-  assert(0);
+  uint64_t idx = Find_(key, begin, end);
+  return entries_[idx].Get(key, value);
 }
 
 bool BLevel::Delete(uint64_t key, uint64_t* value, uint64_t begin, uint64_t end) {
-  assert(0);
+  uint64_t idx = Find_(key, begin, end);
+  if (entries_[idx].Delete(key, value)) {
+    size_--;
+    return true;
+  }
+  return false;
+}
+
+size_t BLevel::CountCLevel() const {
+  size_t cnt = 0;
+  for (int i = 0; i < Entries(); ++i) {
+    if (entries_[i].clevel)
+      cnt++;
+  }
+  return cnt;
 }
 
 }

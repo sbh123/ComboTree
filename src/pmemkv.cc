@@ -37,7 +37,7 @@ inline void int2char(uint64_t integer, char* buf) {
 
 } // anonymous namespace
 
-Status PmemKV::Insert(uint64_t key, uint64_t value) {
+Status PmemKV::Put(uint64_t key, uint64_t value) {
   WriteRef_();
   if (!write_valid_.load(std::memory_order_acquire))
     return Status::INVALID;

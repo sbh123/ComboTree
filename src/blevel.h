@@ -19,6 +19,10 @@ class BLevel {
   bool Get(uint64_t key, uint64_t& value, uint64_t begin, uint64_t end) const;
   bool Delete(uint64_t key, uint64_t* value, uint64_t begin, uint64_t end);
 
+  void Expansion(BLevel* old_blevel);
+  void Expansion(std::vector<std::pair<uint64_t,uint64_t>>& data);
+
+  size_t CountCLevel() const;
   inline __attribute__((always_inline)) size_t Size() const { return size_; }
   inline __attribute__((always_inline)) size_t Entries() const { return nr_entries_; }
   inline __attribute__((always_inline)) uint64_t EntryKey(int index) const { return entries_[index].entry_key; }
@@ -50,6 +54,7 @@ class BLevel {
     inline __attribute__((always_inline)) uint64_t Key(int index) const;
     inline __attribute__((always_inline)) uint64_t Value(int index) const;
 
+    friend BLevel;
     friend Test;
 
    private:
@@ -74,8 +79,7 @@ class BLevel {
   std::atomic<size_t> size_;
 
   // function
-  void Expansion(BLevel* old_blevel);
-  void Expansion(std::vector<std::pair<uint64_t,uint64_t>>& data);
+  uint64_t Find_(uint64_t key, uint64_t begin, uint64_t end) const;
 };
 
 }

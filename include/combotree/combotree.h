@@ -4,6 +4,7 @@
 #include <atomic>
 #include <memory>
 #include <vector>
+#include <functional>
 
 namespace combotree {
 
@@ -22,7 +23,7 @@ class ComboTree {
   ComboTree(std::string pool_dir, size_t pool_size, bool create = true);
   ~ComboTree();
 
-  bool Insert(uint64_t key, uint64_t value);
+  bool Put(uint64_t key, uint64_t value);
   bool Update(uint64_t key, uint64_t value);
   bool Get(uint64_t key, uint64_t& value) const;
   bool Delete(uint64_t key);
@@ -34,6 +35,8 @@ class ComboTree {
       uint64_t* results);
 
   size_t Size() const;
+  size_t CLevelCount() const;
+  size_t BLevelEntries() const;
 
   bool IsExpanding() const {
     return permit_delete_.load() == false;
@@ -51,7 +54,7 @@ class ComboTree {
 
   std::string pool_dir_;
   size_t pool_size_;
-  pmem::obj::pool_base pop_;
+  // pmem::obj::pool_base pop_;
   std::shared_ptr<ALevel> alevel_;
   std::shared_ptr<BLevel> blevel_;
   std::shared_ptr<PmemKV> pmemkv_;
