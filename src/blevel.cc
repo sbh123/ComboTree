@@ -1,6 +1,7 @@
 #include <cstring>
 #include <cassert>
 #include <vector>
+#include <iostream>
 #include "blevel.h"
 #include "config.h"
 
@@ -34,11 +35,10 @@ uint64_t suffix_mask[9] = {
 
 // require: little endian
 uint64_t CommonPrefixBytes(uint64_t a, uint64_t b) {
-  uint64_t diff = a ^ b;
   for (int i = 0; i < 8; ++i)
-    if (((char*)&diff)[i] == 0)
-      return 8 - i;
-  return 0;
+    if (((char*)&a)[7-i] != ((char*)&b)[7-i])
+      return i;
+  return 8;
 }
 
 } // anonymous namespace
@@ -51,6 +51,13 @@ BLevel::Entry::Entry(uint64_t key, uint64_t value, int prefix_len)
 {
   CalcMaxEntries_();
   Put(key, value);
+}
+
+BLevel::Entry::Entry(uint64_t key, int prefix_len)
+  : entry_key(key), prefix_bytes(prefix_len),
+    suffix_bytes(8-prefix_len), buf_entries(0)
+{
+  CalcMaxEntries_();
 }
 
 uint64_t BLevel::Entry::KeyAt_(int index) const {
@@ -200,7 +207,7 @@ void BLevel::Entry::ClearBuf_() {
 
 /****************************** BLevel ******************************/
 BLevel::BLevel(size_t entries)
-  : nr_entries_(entries), size_(0)
+  : nr_entries_(entries+1), size_(0)
 {
   entries_ = (Entry*)Config::Allocate(sizeof(Entry)*nr_entries_);
   entries_offset_ = (uint64_t)entries_ - Config::GetBaseAddr();
@@ -216,6 +223,7 @@ void BLevel::Expansion(std::vector<std::pair<uint64_t,uint64_t>>& data) {
 
 #define AddEntry()                                                        \
   do {                                                                    \
+    assert(prefix_len != 8);                                              \
     new (&entries_[new_index++]) Entry(last_key, last_value, prefix_len); \
     size_++;                                                              \
   } while (0)
@@ -225,6 +233,14 @@ void BLevel::Expansion(std::vector<std::pair<uint64_t,uint64_t>>& data) {
 
   last_key = data[0].first;
   last_value = data[0].second;
+
+  if (last_key != 0) {
+    // add zero entry
+    prefix_len = CommonPrefixBytes(0UL, last_key);
+    new (&entries_[new_index++]) Entry(0, prefix_len);
+  } else {
+    nr_entries_--;
+  }
 
   for (int i = 1; i < data.size(); ++i) {
     cur_key = data[i].first;
@@ -270,11 +286,18 @@ void BLevel::Expansion(BLevel* old_blevel) {
         if (clevel_scan.size() == 0 || (old_entry->buf_entries != 0 && old_entry->Key(0) < clevel_scan[0].first)) {
           last_key = old_entry->Key(0);
           last_value = old_entry->Value(0);
-          vec_idx++;
+          buf_idx++;
         } else {
           last_key = clevel_scan[0].first;
           last_value = clevel_scan[0].second;
-          buf_idx++;
+          vec_idx++;
+        }
+        if (last_key != 0) {
+          // add zero entry
+          prefix_len = CommonPrefixBytes(0UL, last_key);
+          new (&entries_[new_index++]) Entry(0, prefix_len);
+        } else {
+          nr_entries_--;
         }
         while (vec_idx != clevel_scan.size() || buf_idx != old_entry->buf_entries) {
           if (vec_idx == clevel_scan.size() || (buf_idx != old_entry->buf_entries && old_entry->Key(buf_idx) < clevel_scan[vec_idx].first)) {
@@ -299,6 +322,13 @@ void BLevel::Expansion(BLevel* old_blevel) {
     } else if (old_entry->buf_entries != 0) {
       last_key = old_entry->Key(0);
       last_value = old_entry->Value(0);
+      if (last_key != 0) {
+        // add zero entry
+        prefix_len = CommonPrefixBytes(0UL, last_key);
+        new (&entries_[new_index++]) Entry(0, prefix_len);
+      } else {
+        nr_entries_--;
+      }
       for (uint64_t i = 1; i < old_entry->buf_entries; ++i) {
         cur_key = old_entry->Key(i);
         prefix_len = CommonPrefixBytes(last_key, cur_key);
@@ -415,8 +445,9 @@ bool BLevel::Delete(uint64_t key, uint64_t* value, uint64_t begin, uint64_t end)
 size_t BLevel::CountCLevel() const {
   size_t cnt = 0;
   for (int i = 0; i < Entries(); ++i) {
-    if (entries_[i].clevel)
+    if (entries_[i].clevel) {
       cnt++;
+    }
   }
   return cnt;
 }

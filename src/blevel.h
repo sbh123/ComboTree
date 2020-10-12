@@ -26,7 +26,7 @@ class BLevel {
   inline __attribute__((always_inline)) size_t Size() const { return size_; }
   inline __attribute__((always_inline)) size_t Entries() const { return nr_entries_; }
   inline __attribute__((always_inline)) uint64_t EntryKey(int index) const { return entries_[index].entry_key; }
-  inline __attribute__((always_inline)) uint64_t MinEntryKey() const { return entries_[0].entry_key; }
+  inline __attribute__((always_inline)) uint64_t MinEntryKey() const { return entries_[1].entry_key; }
   inline __attribute__((always_inline)) uint64_t MaxEntryKey() const { return entries_[Entries()-1].entry_key; }
 
   friend Test;
@@ -47,6 +47,7 @@ class BLevel {
     uint8_t  buf[48+64];        // two stack: |key-->      <--value|
 
     Entry(uint64_t key, uint64_t value, int prefix_len);
+    Entry(uint64_t key, int prefix_len);
 
     bool Put(uint64_t key, uint64_t value);
     bool Get(uint64_t key, uint64_t& value) const;

@@ -4,7 +4,7 @@
 #include "../include/combotree/combotree.h"
 #include "random.h"
 
-#define TEST_SIZE   5000000
+#define TEST_SIZE   10000000
 
 using combotree::ComboTree;
 using combotree::Random;
@@ -12,13 +12,14 @@ using combotree::Random;
 int main(void) {
   ComboTree* tree = new ComboTree("/mnt/pmem0/combotree/", (1024*1024*1024*1UL), true);
 
-  std::set<uint64_t> key_set;
-  Random rnd(0, 100000000);
+  std::vector<uint64_t> key;
+  Random rnd(0, TEST_SIZE-1);
 
   for (int i = 0; i < TEST_SIZE; ++i)
-    key_set.emplace(rnd.Next());
+    key.push_back(i);
 
-  std::vector<uint64_t> key(key_set.begin(), key_set.end());
+  for (int i = 0; i < TEST_SIZE/2; ++i)
+    std::swap(key[i],key[rnd.Next()]);
 
   uint64_t value;
 
@@ -31,9 +32,8 @@ int main(void) {
     assert(tree->Get(k, value) == true);
     assert(value == k);
   }
-  for (int i = 0; i < 10000000; ++i) {
-    if (key_set.count(i) == 0)
-      assert(tree->Get(i, value) == false);
+  for (uint64_t i = TEST_SIZE; i < TEST_SIZE+100000; ++i) {
+    assert(tree->Get(i, value) == false);
   }
 
   // Delete
