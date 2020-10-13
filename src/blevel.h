@@ -62,13 +62,16 @@ class BLevel {
    private:
     inline __attribute__((always_inline)) uint64_t KeyAt_(int index) const;
     inline __attribute__((always_inline)) void SetKey_(int index, uint64_t key);
-    int BinarySearch_(uint64_t key, bool& find) const;
+    int Find_(uint64_t key, bool& find) const;
     inline __attribute__((always_inline)) uint8_t* key_(int index) const;
     inline __attribute__((always_inline)) uint64_t* value_(int index) const;
     bool WriteToCLevel_();
     void ClearBuf_();
     inline __attribute__((always_inline)) CLevel* clevel_() const;
     void CalcMaxEntries_() { max_entries = sizeof(buf) / (suffix_bytes + 8); }
+#ifndef BENTRY_SORT
+    void SortedIndex_(int* sorted_index);
+#endif
   }; // Entry
 
   static_assert(sizeof(BLevel::Entry) == 128, "sizeof(BLevel::Entry) != 128");

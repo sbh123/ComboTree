@@ -93,7 +93,33 @@ void BLevel::Entry::SetKey_(int index, uint64_t key) {
   memcpy(key_(index), &key, suffix_bytes);
 }
 
-int BLevel::Entry::BinarySearch_(uint64_t key, bool& find) const {
+#ifndef BENTRY_SORT
+void BLevel::Entry::SortedIndex_(int* sorted_index) {
+  for (int i = 0; i < buf_entries; ++i) {
+    uint64_t cur_key = KeyAt_(i);
+    int idx = 0;
+    for (idx = 0; idx < i; ++idx)
+      if (KeyAt_(sorted_index[idx]) > cur_key)
+        break;
+    memmove(&sorted_index[idx+1], &sorted_index[idx], sizeof(int)*(i-idx));
+    sorted_index[idx] = i;
+  }
+
+  for (int i = 0; i < buf_entries-1; ++i) {
+    if (KeyAt_(sorted_index[i]) >= KeyAt_(sorted_index[i+1])) {
+      for (int j = 0; j < buf_entries; ++j) {
+        std::cout << sorted_index[j] << " " << KeyAt_(sorted_index[j]) << std::endl;
+      }
+      std::cout << buf_entries << std::endl;
+      std::cout << entry_key << std::endl;
+      assert(KeyAt_(sorted_index[i]) < KeyAt_(sorted_index[i+1]));
+    }
+  }
+}
+#endif
+
+int BLevel::Entry::Find_(uint64_t key, bool& find) const {
+#ifdef BENTRY_SORT
   int left = 0;
   int right = buf_entries - 1;
   while (left <= right) {
@@ -110,6 +136,16 @@ int BLevel::Entry::BinarySearch_(uint64_t key, bool& find) const {
   }
   find = false;
   return left;
+#else
+  for (int i = 0; i < buf_entries; ++i) {
+    if (KeyAt_(i) == key) {
+      find = true;
+      return i;
+    }
+  }
+  find = false;
+  return 0;
+#endif
 }
 
 bool BLevel::Entry::Put(uint64_t key, uint64_t value) {
@@ -122,7 +158,7 @@ bool BLevel::Entry::Put(uint64_t key, uint64_t value) {
   }
 
   bool exist;
-  int index = BinarySearch_(key, exist);
+  int index = Find_(key, exist);
   // already in, update
   if (exist) {
     *value_(index) = value;
@@ -131,6 +167,7 @@ bool BLevel::Entry::Put(uint64_t key, uint64_t value) {
     return true;
   }
   // not exist
+#ifdef BENTRY_SORT
   if (index != buf_entries) {
     // move key
     memmove(key_(index+1), key_(index), (buf_entries-index)*suffix_bytes);
@@ -139,6 +176,10 @@ bool BLevel::Entry::Put(uint64_t key, uint64_t value) {
   }
   SetKey_(index, key);
   *value_(index) = value;
+#else
+  SetKey_(buf_entries, key);
+  *value_(buf_entries) = value;
+#endif
   buf_entries++;
 
   flush(&meta);
@@ -149,9 +190,9 @@ bool BLevel::Entry::Put(uint64_t key, uint64_t value) {
 
 bool BLevel::Entry::Get(uint64_t key, uint64_t& value) const {
   bool exist;
-  int index = BinarySearch_(key, exist);
+  int index = Find_(key, exist);
   if (exist) {
-    value = *value_(index);
+    value = Value(index);
     return true;
   }
   if (clevel) {
@@ -163,7 +204,7 @@ bool BLevel::Entry::Get(uint64_t key, uint64_t& value) const {
 
 bool BLevel::Entry::Delete(uint64_t key, uint64_t* value) {
   bool exist;
-  int index = BinarySearch_(key, exist);
+  int index = Find_(key, exist);
   if (!exist) {
     if (clevel)
       return clevel_()->Delete(Config::CLevelMem(), key) == Status::OK;
@@ -171,7 +212,7 @@ bool BLevel::Entry::Delete(uint64_t key, uint64_t* value) {
   }
   if (value)
     *value = *value_(index);
-  if (index != buf_entries-1) {
+  if (index != buf_entries - 1) {
     // move key
     memmove(key_(index), key_(index+1), (buf_entries-index-1)*suffix_bytes);
     // move value
@@ -194,7 +235,7 @@ bool BLevel::Entry::WriteToCLevel_() {
     // flush and fence will be done by ClearBuf_()
   }
   for (int i = 0; i < buf_entries; ++i)
-    clevel_()->Put(Config::CLevelMem(), KeyAt_(i), *value_(i));
+    clevel_()->Put(Config::CLevelMem(), Key(i), Value(i));
   return true;
 }
 
@@ -269,6 +310,10 @@ void BLevel::Expansion(BLevel* old_blevel) {
   // first non-empty entry
   while (old_index < old_blevel->Entries()) {
     Entry* old_entry = &old_blevel->entries_[old_index];
+#ifndef BENTRY_SORT
+    int sorted_index[sizeof(old_entry->buf)/(8+1)];
+    old_entry->SortedIndex_(sorted_index);
+#endif
     if (old_entry->clevel) {
       clevel_scan.clear();
       size_t scan_size = 0;
@@ -283,9 +328,16 @@ void BLevel::Expansion(BLevel* old_blevel) {
       if (clevel_scan.size() != 0 || old_entry->buf_entries != 0) {
         int vec_idx = 0;
         int buf_idx = 0;
-        if (clevel_scan.size() == 0 || (old_entry->buf_entries != 0 && old_entry->Key(0) < clevel_scan[0].first)) {
+        if (clevel_scan.size() == 0 || (old_entry->buf_entries != 0 &&
+#ifdef BENTRY_SORT
+            old_entry->Key(0) < clevel_scan[0].first)) {
           last_key = old_entry->Key(0);
           last_value = old_entry->Value(0);
+#else
+            old_entry->Key(sorted_index[0]) < clevel_scan[0].first)) {
+          last_key = old_entry->Key(sorted_index[0]);
+          last_value = old_entry->Value(sorted_index[0]);
+#endif
           buf_idx++;
         } else {
           last_key = clevel_scan[0].first;
@@ -300,12 +352,22 @@ void BLevel::Expansion(BLevel* old_blevel) {
           nr_entries_--;
         }
         while (vec_idx != clevel_scan.size() || buf_idx != old_entry->buf_entries) {
-          if (vec_idx == clevel_scan.size() || (buf_idx != old_entry->buf_entries && old_entry->Key(buf_idx) < clevel_scan[vec_idx].first)) {
+          if (vec_idx == clevel_scan.size() || (buf_idx != old_entry->buf_entries
+#ifdef BENTRY_SORT
+              && old_entry->Key(buf_idx) < clevel_scan[vec_idx].first)) {
             cur_key = old_entry->Key(buf_idx);
+#else
+              && old_entry->Key(sorted_index[buf_idx]) < clevel_scan[vec_idx].first)) {
+            cur_key = old_entry->Key(sorted_index[buf_idx]);
+#endif
             prefix_len = CommonPrefixBytes(last_key, cur_key);
             AddEntry();
             last_key = cur_key;
+#ifdef BENTRY_SORT
             last_value = old_entry->Value(buf_idx);
+#else
+            last_value = old_entry->Value(sorted_index[buf_idx]);
+#endif
             buf_idx++;
           } else {
             cur_key = clevel_scan[vec_idx].first;
@@ -320,8 +382,13 @@ void BLevel::Expansion(BLevel* old_blevel) {
         break;
       }
     } else if (old_entry->buf_entries != 0) {
+#ifdef BENTRY_SORT
       last_key = old_entry->Key(0);
       last_value = old_entry->Value(0);
+#else
+      last_key = old_entry->Key(sorted_index[0]);
+      last_value = old_entry->Value(sorted_index[0]);
+#endif
       if (last_key != 0) {
         // add zero entry
         prefix_len = CommonPrefixBytes(0UL, last_key);
@@ -330,11 +397,19 @@ void BLevel::Expansion(BLevel* old_blevel) {
         nr_entries_--;
       }
       for (uint64_t i = 1; i < old_entry->buf_entries; ++i) {
+#ifdef BENTRY_SORT
         cur_key = old_entry->Key(i);
+#else
+        cur_key = old_entry->Key(sorted_index[i]);
+#endif
         prefix_len = CommonPrefixBytes(last_key, cur_key);
         AddEntry();
         last_key = cur_key;
+#ifdef BENTRY_SORT
         last_value = old_entry->Value(i);
+#else
+        last_value = old_entry->Value(sorted_index[i]);
+#endif
       }
       old_index++;
       break;
@@ -348,6 +423,10 @@ void BLevel::Expansion(BLevel* old_blevel) {
 
   while (old_index < old_blevel->Entries()) {
     Entry* old_entry = &old_blevel->entries_[old_index];
+#ifndef BENTRY_SORT
+    int sorted_index[sizeof(old_entry->buf)/(8+1)];
+    old_entry->SortedIndex_(sorted_index);
+#endif
     if (old_entry->clevel) {
       clevel_scan.clear();
       size_t scan_size = 0;
@@ -363,12 +442,22 @@ void BLevel::Expansion(BLevel* old_blevel) {
         int vec_idx = 0;
         int buf_idx = 0;
         while (vec_idx != clevel_scan.size() || buf_idx != old_entry->buf_entries) {
-          if (vec_idx == clevel_scan.size() || (buf_idx != old_entry->buf_entries && old_entry->Key(buf_idx) < clevel_scan[vec_idx].first)) {
+          if (vec_idx == clevel_scan.size() || (buf_idx != old_entry->buf_entries
+#ifdef BENTRY_SORT
+              && old_entry->Key(buf_idx) < clevel_scan[vec_idx].first)) {
             cur_key = old_entry->Key(buf_idx);
+#else
+              && old_entry->Key(sorted_index[buf_idx]) < clevel_scan[vec_idx].first)) {
+            cur_key = old_entry->Key(sorted_index[buf_idx]);
+#endif
             prefix_len = CommonPrefixBytes(last_key, cur_key);
             AddEntry();
             last_key = cur_key;
+#ifdef BENTRY_SORT
             last_value = old_entry->Value(buf_idx);
+#else
+            last_value = old_entry->Value(sorted_index[buf_idx]);
+#endif
             buf_idx++;
           } else {
             cur_key = clevel_scan[vec_idx].first;
@@ -382,11 +471,19 @@ void BLevel::Expansion(BLevel* old_blevel) {
       }
     } else if (old_entry->buf_entries != 0) {
       for (uint64_t i = 0; i < old_entry->buf_entries; ++i) {
+#ifdef BENTRY_SORT
         cur_key = old_entry->Key(i);
+#else
+        cur_key = old_entry->Key(sorted_index[i]);
+#endif
         prefix_len = CommonPrefixBytes(last_key, cur_key);
         AddEntry();
         last_key = cur_key;
+#ifdef BENTRY_SORT
         last_value = old_entry->Value(i);
+#else
+        last_value = old_entry->Value(sorted_index[i]);
+#endif
       }
     }
     old_index++;
