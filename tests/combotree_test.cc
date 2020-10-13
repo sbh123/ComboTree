@@ -12,7 +12,11 @@ using combotree::Random;
 using combotree::Timer;
 
 int main(void) {
+#ifdef SERVER
+  ComboTree* tree = new ComboTree("/mnt/pmem0/combotree/", (1024*1024*1024*100UL), true);
+#else
   ComboTree* tree = new ComboTree("/mnt/pmem0/combotree/", (1024*1024*1024*1UL), true);
+#endif
 
   std::vector<uint64_t> key;
   Random rnd(0, TEST_SIZE-1);

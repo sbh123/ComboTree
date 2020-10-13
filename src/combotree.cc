@@ -64,6 +64,10 @@ size_t ComboTree::BLevelEntries() const {
   return blevel_->Entries();
 }
 
+void ComboTree::BLevelCompression() const {
+  blevel_->PrefixCompression();
+}
+
 void ComboTree::ChangeToComboTree_() {
   State tmp = State::USING_PMEMKV;
   // must change status first
