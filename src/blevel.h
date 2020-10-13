@@ -23,6 +23,7 @@ class BLevel {
   void Expansion(std::vector<std::pair<uint64_t,uint64_t>>& data);
 
   size_t CountCLevel() const;
+  void PrefixCompression() const;
   inline __attribute__((always_inline)) size_t Size() const { return size_; }
   inline __attribute__((always_inline)) size_t Entries() const { return nr_entries_; }
   inline __attribute__((always_inline)) uint64_t EntryKey(int index) const { return entries_[index].entry_key; }

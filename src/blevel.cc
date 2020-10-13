@@ -444,12 +444,20 @@ bool BLevel::Delete(uint64_t key, uint64_t* value, uint64_t begin, uint64_t end)
 
 size_t BLevel::CountCLevel() const {
   size_t cnt = 0;
-  for (int i = 0; i < Entries(); ++i) {
-    if (entries_[i].clevel) {
+  for (uint64_t i = 0; i < Entries(); ++i)
+    if (entries_[i].clevel)
       cnt++;
-    }
-  }
   return cnt;
+}
+
+void BLevel::PrefixCompression() const {
+  uint64_t cnt[9];
+  for (int i = 0; i < 9; ++i)
+    cnt[i] = 0;
+  for (uint64_t i = 0; i < Entries(); ++i)
+    cnt[entries_[i].suffix_bytes]++;
+  for (int i = 1; i < 9; ++i)
+    std::cout << "sufix " << i << " count: " << cnt[i] << std::endl;
 }
 
 }

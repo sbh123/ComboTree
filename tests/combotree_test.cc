@@ -45,6 +45,7 @@ int main(void) {
 
   std::cout << "entries: " << tree->BLevelEntries() << std::endl;
   std::cout << "clevels: " << tree->CLevelCount() << std::endl;
+  tree->BLevelCompression();
 
   // Get
   timer.Record("start");
