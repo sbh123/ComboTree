@@ -38,6 +38,7 @@ class ComboTree {
   size_t CLevelCount() const;
   size_t BLevelEntries() const;
   void BLevelCompression() const;
+  int64_t CLevelTime() const;
 
   bool IsExpanding() const {
     return permit_delete_.load() == false;

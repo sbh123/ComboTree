@@ -2,12 +2,15 @@
 #include <cassert>
 #include <vector>
 #include <iostream>
+#include <chrono>
 #include "blevel.h"
 #include "config.h"
 
 namespace combotree {
 
 namespace { // anonymous namespace
+
+int64_t clevel_time = 0;
 
 uint64_t prefix_mask[9] = {
   0x0000000000000000UL,
@@ -41,10 +44,31 @@ uint64_t CommonPrefixBytes(uint64_t a, uint64_t b) {
   return 8;
 }
 
+#ifdef STREAMING_STORE
+void stream_load_entry(void* dest, void* source) {
+  uint8_t* dst = (uint8_t*)dest;
+  uint8_t* src = (uint8_t*)source;
+#if __SSE2__
+  for (int i = 0; i < 8; ++i)
+    *(__m128i*)(dst+16*i) = _mm_stream_load_si128((__m128i*)(src+16*i));
+#elif __AVX2__
+  for (int i = 0; i < 4; ++i)
+    *(__m256i*)(dst+32*i) = _mm256_stream_load_si256((__m256i*)(src+32*i));
+#elif __AVX512VL__
+  *(__m512i*)dst = _mm512_stream_load_si512((__m512i*)src);
+  *(__m512i*)(dst+64) = _mm512_stream_load_si512((__m512i*)(src+64));
+#else
+  static_assert(0, "stream_load_entry");
+#endif
+}
+#endif // STREAMING_STORE
+
 } // anonymous namespace
 
 
 /************************** BLevel::Entry ***************************/
+BLevel::Entry::Entry() : entry_key(0), meta(0) {}
+
 BLevel::Entry::Entry(uint64_t key, uint64_t value, int prefix_len)
   : entry_key(key), prefix_bytes(prefix_len),
     suffix_bytes(8-prefix_len), buf_entries(0)
@@ -234,8 +258,14 @@ bool BLevel::Entry::WriteToCLevel_() {
     clevel = (uint64_t)tmp - Config::CLevelSlab()->BaseAddr();
     // flush and fence will be done by ClearBuf_()
   }
+
+  auto start = std::chrono::high_resolution_clock::now();
+
   for (int i = 0; i < buf_entries; ++i)
     clevel_()->Put(Config::CLevelMem(), Key(i), Value(i));
+
+  auto stop = std::chrono::high_resolution_clock::now();
+  clevel_time += std::chrono::duration_cast<std::chrono::microseconds>(stop-start).count();
   return true;
 }
 
@@ -307,9 +337,20 @@ void BLevel::Expansion(BLevel* old_blevel) {
 
   std::vector<std::pair<uint64_t,uint64_t>> clevel_scan;
 
+  Entry* old_entry;
+#ifdef STREAMING_STORE
+  Entry in_mem_entry;
+  old_entry = &in_mem_entry;
+#endif
+
   // first non-empty entry
   while (old_index < old_blevel->Entries()) {
-    Entry* old_entry = &old_blevel->entries_[old_index];
+#ifdef STREAMING_STORE
+    stream_load_entry(&in_mem_entry, &old_blevel->entries_[old_index]);
+#else
+    old_entry = &old_blevel->entries_[old_index];
+#endif
+
 #ifndef BENTRY_SORT
     int sorted_index[sizeof(old_entry->buf)/(8+1)];
     old_entry->SortedIndex_(sorted_index);
@@ -422,7 +463,12 @@ void BLevel::Expansion(BLevel* old_blevel) {
     return;
 
   while (old_index < old_blevel->Entries()) {
-    Entry* old_entry = &old_blevel->entries_[old_index];
+#ifdef STREAMING_STORE
+    stream_load_entry(&in_mem_entry, &old_blevel->entries_[old_index]);
+#else
+    old_entry = &old_blevel->entries_[old_index];
+#endif
+
 #ifndef BENTRY_SORT
     int sorted_index[sizeof(old_entry->buf)/(8+1)];
     old_entry->SortedIndex_(sorted_index);
@@ -555,6 +601,10 @@ void BLevel::PrefixCompression() const {
     cnt[entries_[i].suffix_bytes]++;
   for (int i = 1; i < 9; ++i)
     std::cout << "sufix " << i << " count: " << cnt[i] << std::endl;
+}
+
+int64_t BLevel::CLevelTime() const {
+  return clevel_time;
 }
 
 }

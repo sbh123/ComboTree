@@ -68,6 +68,10 @@ void ComboTree::BLevelCompression() const {
   blevel_->PrefixCompression();
 }
 
+int64_t ComboTree::CLevelTime() const {
+  return blevel_->CLevelTime();
+}
+
 void ComboTree::ChangeToComboTree_() {
   State tmp = State::USING_PMEMKV;
   // must change status first

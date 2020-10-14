@@ -45,6 +45,8 @@ int main(void) {
   uint64_t mid_time = timer.Microsecond("stop", "mid");
   std::cout << "put: " << mid_time/1000000.0 << " " << (double)(TEST_SIZE-last_expand)/(double)mid_time*1000000 << std::endl;
 
+  std::cout << "clevel time: " << tree->CLevelTime()/1000000.0 << std::endl;
+
   timer.Clear();
 
   std::cout << "entries: " << tree->BLevelEntries() << std::endl;
