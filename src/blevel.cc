@@ -61,6 +61,23 @@ void stream_load_entry(void* dest, void* source) {
   static_assert(0, "stream_load_entry");
 #endif
 }
+
+void stream_store_entry(void* dest, void* source) {
+  uint8_t* dst = (uint8_t*)dest;
+  uint8_t* src = (uint8_t*)source;
+#if __SSE2__
+  for (int i = 0; i < 8; ++i)
+    _mm_stream_si128((__m128i*)(dst+16*i), *(__m128i*)(src+16*i));
+#elif __AVX2__
+  for (int i = 0; i < 4; ++i)
+    _mm256_stream_si256((__m256i*)(dst+32*i), *(__m256i*)(src+32*i));
+#elif __AVX512VL__
+  _mm512_stream_si512((__m512i*)dst, *(__m512i*)src);
+  _mm512_stream_si512((__m512i*)(dst+64), *(__m512i*)(src+64));
+#else
+  static_assert(0, "stream_load_entry");
+#endif
+}
 #endif // STREAMING_STORE
 
 } // anonymous namespace
@@ -292,12 +309,23 @@ void BLevel::Expansion(std::vector<std::pair<uint64_t,uint64_t>>& data) {
 
   size_ = 0;
 
+#ifdef STREAMING_STORE
+  Entry new_entry;
+#define AddEntry()                                                        \
+  do {                                                                    \
+    assert(prefix_len != 8);                                              \
+    new (&new_entry) Entry(last_key, last_value, prefix_len);             \
+    stream_store_entry(&entries_[new_index++], &new_entry);               \
+    size_++;                                                              \
+  } while (0)
+#else
 #define AddEntry()                                                        \
   do {                                                                    \
     assert(prefix_len != 8);                                              \
     new (&entries_[new_index++]) Entry(last_key, last_value, prefix_len); \
     size_++;                                                              \
   } while (0)
+#endif
 
   if (data.empty())
     return;
@@ -340,6 +368,7 @@ void BLevel::Expansion(BLevel* old_blevel) {
   Entry* old_entry;
 #ifdef STREAMING_STORE
   Entry in_mem_entry;
+  Entry new_entry;
   old_entry = &in_mem_entry;
 #endif
 
