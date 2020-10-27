@@ -18,7 +18,7 @@ namespace combotree {
 uint64_t Config::base_addr_;
 uint64_t Config::cur_addr_;
 
-CLevel::MemoryManagement* Config::clevel_mem_;
+CLevel::MemControl* Config::clevel_mem_;
 Slab<CLevel::LeafNode>* Config::clevel_leaf_slab_;
 Slab<CLevel>* Config::clevel_slab_;
 pmem::obj::pool_base Config::pop_;
@@ -174,7 +174,7 @@ void ComboTree::ExpandComboTree_() {
     old_alevel.reset();
     old_blevel.reset();
 
-    LOG(Debug::INFO, "finish expanding combotree. current size is %ld", Size());
+    LOG(Debug::INFO, "finish expanding combotree. current size is %ld, current entry count is %ld", Size(), blevel_->Entries());
     permit_delete_.store(true);
   // });
   // expandion_thread.detach();
@@ -371,6 +371,7 @@ size_t ComboTree::Scan_(uint64_t min_key, uint64_t max_key, size_t max_size,
   //     }
   //   }
   // }
+  return -1;
 }
 
 void VectorCallback_(uint64_t key, uint64_t value, void* arg) {

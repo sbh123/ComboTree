@@ -5,7 +5,8 @@
 #include "random.h"
 #include "timer.h"
 
-#define TEST_SIZE   10000000
+#define TEST_SIZE   2000000
+#define LAST_EXPAND 1520000
 
 using combotree::ComboTree;
 using combotree::Random;
@@ -29,21 +30,20 @@ int main(void) {
 
   uint64_t value;
   Timer timer;
-  size_t last_expand = 1700000;
 
   // Put
   timer.Record("start");
-  for (size_t i = 0; i < last_expand; ++i)
+  for (size_t i = 0; i < LAST_EXPAND; ++i)
     assert(tree->Put(key[i], key[i]) == true);
   timer.Record("mid");
-  for (size_t i = last_expand; i < TEST_SIZE; ++i)
+  for (size_t i = LAST_EXPAND; i < TEST_SIZE; ++i)
     assert(tree->Put(key[i], key[i]) == true);
   timer.Record("stop");
 
   uint64_t total_time = timer.Microsecond("stop", "start");
   std::cout << "put: " << total_time/1000000.0 << " " << (double)TEST_SIZE/(double)total_time*1000000 << std::endl;
   uint64_t mid_time = timer.Microsecond("stop", "mid");
-  std::cout << "put: " << mid_time/1000000.0 << " " << (double)(TEST_SIZE-last_expand)/(double)mid_time*1000000 << std::endl;
+  std::cout << "put: " << mid_time/1000000.0 << " " << (double)(TEST_SIZE-LAST_EXPAND)/(double)mid_time*1000000 << std::endl;
 
   std::cout << "clevel time: " << tree->CLevelTime()/1000000.0 << std::endl;
 

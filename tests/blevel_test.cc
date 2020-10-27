@@ -13,7 +13,7 @@ namespace combotree {
 uint64_t Config::base_addr_;
 uint64_t Config::cur_addr_;
 
-CLevel::MemoryManagement* Config::clevel_mem_;
+CLevel::MemControl* Config::clevel_mem_;
 Slab<CLevel::LeafNode>* Config::clevel_leaf_slab_;
 Slab<CLevel>* Config::clevel_slab_;
 pmem::obj::pool_base Config::pop_;

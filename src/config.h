@@ -23,7 +23,7 @@ class Config {
 
   static uint64_t GetBaseAddr() { return base_addr_; }
 
-  static CLevel::MemoryManagement* CLevelMem() { return clevel_mem_; }
+  static CLevel::MemControl* CLevelMem() { return clevel_mem_; }
   static pmem::obj::pool_base* PoolBase() { return &pop_; }
   static Slab<CLevel::LeafNode>* CLevelLeafSlab() { return clevel_leaf_slab_; }
   static Slab<CLevel>* CLevelSlab() { return clevel_slab_; }
@@ -34,14 +34,14 @@ class Config {
                                         file_size, 0666);
     clevel_leaf_slab_ = new Slab<CLevel::LeafNode>(pop_, 256);
     clevel_slab_ = new Slab<CLevel>(pop_, 256);
-    clevel_mem_ = new CLevel::MemoryManagement(pop_, clevel_leaf_slab_);
+    clevel_mem_ = new CLevel::MemControl(pop_, clevel_leaf_slab_);
   }
 
  private:
   static uint64_t base_addr_;
   static uint64_t cur_addr_;
 
-  static CLevel::MemoryManagement* clevel_mem_;
+  static CLevel::MemControl* clevel_mem_;
   static Slab<CLevel::LeafNode>* clevel_leaf_slab_;
   static Slab<CLevel>* clevel_slab_;
   static pmem::obj::pool_base pop_;

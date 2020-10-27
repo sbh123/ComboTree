@@ -19,3 +19,5 @@ static_assert(0, "cache line flush not supported!");
 // memory fence
 #define fence _mm_sfence
 #define FENCE_METHOD  "_mm_sfence"
+
+#define ALWAYS_INLINE inline __attribute__((always_inline))

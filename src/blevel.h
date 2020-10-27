@@ -4,8 +4,10 @@
 #include <cstdint>
 #include <cstddef>
 #include <vector>
+#include "kvbuffer.h"
 #include "clevel.h"
 #include "pmem.h"
+#include "combotree_config.h"
 
 namespace combotree {
 
@@ -27,68 +29,57 @@ class BLevel {
   void PrefixCompression() const;
   int64_t CLevelTime() const;
 
-  inline __attribute__((always_inline)) size_t Size() const { return size_; }
-  inline __attribute__((always_inline)) size_t Entries() const { return nr_entries_; }
-  inline __attribute__((always_inline)) uint64_t EntryKey(int index) const { return entries_[index].entry_key; }
-  inline __attribute__((always_inline)) uint64_t MinEntryKey() const { return entries_[1].entry_key; }
-  inline __attribute__((always_inline)) uint64_t MaxEntryKey() const { return entries_[Entries()-1].entry_key; }
+  ALWAYS_INLINE size_t Size() const { return size_; }
+  ALWAYS_INLINE size_t Entries() const { return nr_entries_; }
+  ALWAYS_INLINE uint64_t EntryKey(int index) const { return entries_[index].entry_key; }
+  ALWAYS_INLINE uint64_t MinEntryKey() const { return entries_[1].entry_key; }
+  ALWAYS_INLINE uint64_t MaxEntryKey() const { return entries_[Entries()-1].entry_key; }
 
   friend Test;
 
  private:
   struct __attribute__((aligned(64))) Entry {
     uint64_t entry_key;
-    union {
-      uint64_t meta;
-      struct {
-        uint64_t clevel       : 48;   // LSB
-        uint64_t prefix_bytes : 4;
-        uint64_t suffix_bytes : 4;
-        uint64_t buf_entries  : 4;
-        uint64_t max_entries  : 4;    // MSB
-      };
-    };
-    uint8_t  buf[48+64];        // two stack: |key-->      <--value|
+    CLevel clevel;
+    KVBuffer<48+64,8> buf;  // contains 2 bytes meta
 
-    Entry();
     Entry(uint64_t key, int prefix_len);
     Entry(uint64_t key, uint64_t value, int prefix_len);
 
-    bool Put(uint64_t key, uint64_t value);
-    bool Get(uint64_t key, uint64_t& value) const;
-    bool Delete(uint64_t key, uint64_t* value);
-    inline __attribute__((always_inline)) uint64_t Key(int index) const;
-    inline __attribute__((always_inline)) uint64_t Value(int index) const;
-
-    friend BLevel;
-    friend Test;
+    bool Put(CLevel::MemControl* mem, uint64_t key, uint64_t value);
+    bool Get(CLevel::MemControl* mem, uint64_t key, uint64_t& value) const;
+    bool Delete(CLevel::MemControl* mem, uint64_t key, uint64_t* value);
 
    private:
-    inline __attribute__((always_inline)) uint64_t KeyAt_(int index) const;
-    inline __attribute__((always_inline)) void SetKey_(int index, uint64_t key);
-    int Find_(uint64_t key, bool& find) const;
-    inline __attribute__((always_inline)) uint8_t* key_(int index) const;
-    inline __attribute__((always_inline)) uint64_t* value_(int index) const;
-    bool WriteToCLevel_();
-    void ClearBuf_();
-    inline __attribute__((always_inline)) CLevel* clevel_() const;
-    void CalcMaxEntries_() { max_entries = sizeof(buf) / (suffix_bytes + 8); }
+    void WriteToCLevel_(CLevel::MemControl* mem);
+
 #ifndef BENTRY_SORT
     void SortedIndex_(int* sorted_index);
 #endif
   }; // Entry
 
   static_assert(sizeof(BLevel::Entry) == 128, "sizeof(BLevel::Entry) != 128");
-  static_assert((sizeof(BLevel::Entry::buf) % 8) == 0, "BLevel::Entry::buf");
 
   // member
   uint64_t entries_offset_;                     // pmem file offset
   Entry* __attribute__((aligned(64))) entries_; // current mmaped address
   size_t nr_entries_;
   std::atomic<size_t> size_;
+  CLevel::MemControl clevel_mem_;
+
+  struct ExpandData {
+    Entry* new_addr;
+    uint64_t key_buf[BLEVEL_EXPAND_BUF_KEY];
+    uint64_t value_buf[BLEVEL_EXPAND_BUF_KEY];
+    int buf_count;
+    bool zero_entry;
+  };
 
   // function
   uint64_t Find_(uint64_t key, uint64_t begin, uint64_t end) const;
+  void ExpandSetup_(ExpandData& data);
+  void ExpandPut_(ExpandData& data, uint64_t key, uint64_t value);
+  void ExpandFinish_(ExpandData& data);
 };
 
 }
