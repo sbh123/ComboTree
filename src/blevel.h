@@ -45,7 +45,6 @@ class BLevel {
     CLevel clevel;
     KVBuffer<48+64,8> buf;  // contains 2 bytes meta
 
-    Entry();
     Entry(uint64_t key, int prefix_len);
     Entry(uint64_t key, uint64_t value, int prefix_len);
 
@@ -79,21 +78,7 @@ class BLevel {
       zero_entry = true;
     }
 
-    void FlushToEntry(Entry* entry, int prefix_len) {
-      // copy value
-      memcpy(entry->buf.pvalue(buf_count-1),
-             &value_buf[BLEVEL_EXPAND_BUF_KEY-buf_count], 8*buf_count);
-      // copy key
-      for (int i = 0; i < buf_count; ++i)
-        memcpy(entry->buf.pkey(i), &key_buf[i], 8 - prefix_len);
-      entry->buf.entries = buf_count;
-
-      flush(entry);
-      flush((uint8_t*)entry+64);
-      fence();
-
-      buf_count = 0;
-    }
+    void FlushToEntry(Entry* entry, int prefix_len);
   };
 
   // member

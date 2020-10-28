@@ -20,7 +20,7 @@ uint64_t CommonPrefixBytes(uint64_t a, uint64_t b) {
   return 8;
 }
 
-#ifdef STREAMING_STORE
+#ifdef STREAMING_LOAD
 void stream_load_entry(void* dest, void* source) {
   uint8_t* dst = (uint8_t*)dest;
   uint8_t* src = (uint8_t*)source;
@@ -37,7 +37,9 @@ void stream_load_entry(void* dest, void* source) {
   static_assert(0, "stream_load_entry");
 #endif
 }
+#endif // STREAMING_LOAD
 
+#ifdef STREAMING_STORE
 void stream_store_entry(void* dest, void* source) {
   uint8_t* dst = (uint8_t*)dest;
   uint8_t* src = (uint8_t*)source;
@@ -51,17 +53,42 @@ void stream_store_entry(void* dest, void* source) {
   _mm512_stream_si512((__m512i*)dst, *(__m512i*)src);
   _mm512_stream_si512((__m512i*)(dst+64), *(__m512i*)(src+64));
 #else
-  static_assert(0, "stream_load_entry");
+  static_assert(0, "stream_store_entry");
 #endif
 }
 #endif // STREAMING_STORE
 
 } // anonymous namespace
 
+void BLevel::ExpandData::FlushToEntry(Entry* entry, int prefix_len) {
+#ifdef STREAMING_STORE
+  Entry in_mem(entry->entry_key, prefix_len);
+  // copy value
+  memcpy(in_mem.buf.pvalue(buf_count-1),
+          &value_buf[BLEVEL_EXPAND_BUF_KEY-buf_count], 8*buf_count);
+  // copy key
+  for (int i = 0; i < buf_count; ++i)
+    memcpy(in_mem.buf.pkey(i), &key_buf[i], 8 - prefix_len);
+  in_mem.buf.entries = buf_count;
+  stream_store_entry(entry, &in_mem);
+#else
+  // copy value
+  memcpy(entry->buf.pvalue(buf_count-1),
+          &value_buf[BLEVEL_EXPAND_BUF_KEY-buf_count], 8*buf_count);
+  // copy key
+  for (int i = 0; i < buf_count; ++i)
+    memcpy(entry->buf.pkey(i), &key_buf[i], 8 - prefix_len);
+  entry->buf.entries = buf_count;
+  flush(entry);
+  flush((uint8_t*)entry+64);
+  fence();
+#endif // STREAMING_STORE
+
+  buf_count = 0;
+}
+
 
 /************************** BLevel::Entry ***************************/
-BLevel::Entry::Entry() {}
-
 BLevel::Entry::Entry(uint64_t key, uint64_t value, int prefix_len)
   : entry_key(key)
 {
@@ -180,26 +207,12 @@ void BLevel::ExpandPut_(ExpandData& data, uint64_t key, uint64_t value) {
     // buf full, add a new entry
     if (data.zero_entry && data.key_buf[0] != 0) {
       int prefix_len = CommonPrefixBytes(0UL, key);
-#ifdef STREAMING_STORE
-      Entry new_entry;
-      new (&new_entry) Entry(0UL, prefix_len);
-      data.FlushToEntry(&new_entry, prefix_len);
-      stream_store_entry(data.new_addr, &new_entry);
-#else
       Entry* new_entry = new (data.new_addr) Entry(0UL, prefix_len);
       data.FlushToEntry(new_entry, prefix_len);
-#endif
     } else {
       int prefix_len = CommonPrefixBytes(data.key_buf[0], key);
-#ifdef STREAMING_STORE
-      Entry new_entry;
-      new (&new_entry) Entry(data.key_buf[0], prefix_len);
-      data.FlushToEntry(&new_entry, prefix_len);
-      stream_store_entry(data.new_addr, &new_entry);
-#else
       Entry* new_entry = new (data.new_addr) Entry(data.key_buf[0], prefix_len);
       data.FlushToEntry(new_entry, prefix_len);
-#endif
     }
     data.new_addr++;
     data.zero_entry = false;
@@ -215,15 +228,8 @@ void BLevel::ExpandFinish_(ExpandData& data) {
   assert(data.zero_entry != true);
   if (data.buf_count != 0) {
     int prefix_len = CommonPrefixBytes(data.key_buf[0], 0xFFFFFFFFFFFFFFFFUL);
-#ifdef STREAMING_STORE
-    Entry new_entry;
-    new (&new_entry) Entry(data.key_buf[0], prefix_len);
-    data.FlushToEntry(&new_entry, prefix_len);
-    stream_store_entry(data.new_addr, &new_entry);
-#else
     Entry* new_entry = new (data.new_addr) Entry(data.key_buf[0], prefix_len);
     data.FlushToEntry(new_entry, prefix_len);
-#endif
     data.new_addr++;
     nr_entries_++;
   }
@@ -249,13 +255,13 @@ void BLevel::Expansion(BLevel* old_blevel) {
 
   size_ = 0;
 
-#ifdef STREAMING_STORE
-  Entry in_mem_entry;
+#ifdef STREAMING_LOAD
+  Entry in_mem_entry(0,0);
   old_entry = &in_mem_entry;
 #endif
 
   while (old_index < old_blevel->Entries()) {
-#ifdef STREAMING_STORE
+#ifdef STREAMING_LOAD
     stream_load_entry(&in_mem_entry, &old_blevel->entries_[old_index]);
 #else
     old_entry = &old_blevel->entries_[old_index];

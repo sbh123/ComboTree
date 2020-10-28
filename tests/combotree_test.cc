@@ -6,8 +6,8 @@
 #include "random.h"
 #include "timer.h"
 
-#define TEST_SIZE   60000000
-#define LAST_EXPAND 40000000
+#define TEST_SIZE   10000000
+#define LAST_EXPAND 1000000
 
 using combotree::ComboTree;
 using combotree::Random;
@@ -65,8 +65,6 @@ int main(void) {
     assert(tree->Put(key[i], key[i]) == true);
   timer.Record("stop");
 
-  std::cout << std::fixed << std::setprecision(2);
-
   uint64_t total_time = timer.Microsecond("stop", "start");
   std::cout << "put: " << total_time/1000000.0 << " " << (double)TEST_SIZE/(double)total_time*1000000 << std::endl;
   uint64_t mid_time = timer.Microsecond("stop", "mid");
@@ -75,6 +73,8 @@ int main(void) {
   std::cout << "clevel time:    " << tree->CLevelTime()/1000000.0 << std::endl;
 
   timer.Clear();
+
+  std::cout << std::fixed << std::setprecision(2);
 
   std::cout << "entries:        " << tree->BLevelEntries() << std::endl;
   std::cout << "clevels:        " << tree->CLevelCount() << std::endl;
