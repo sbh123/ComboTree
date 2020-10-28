@@ -3,6 +3,8 @@
 
 namespace combotree {
 
+int CLevel::MemControl::file_id_ = 0;
+
 // TODO: flush and fence
 // always success (if no exception)
 CLevel::Node* CLevel::Node::Put(MemControl* mem, uint64_t key, uint64_t value, Node* parent) {
@@ -26,15 +28,21 @@ CLevel::Node* CLevel::Node::Put(MemControl* mem, uint64_t key, uint64_t value, N
       memcpy(new_node->next, next, sizeof(next));
       SetNext(mem->BaseAddr(), new_node);
 
-      // insert new pair
-      if (key > new_node->leaf_buf.key(0, key))
+      // insert new pair, Put will do fence
+      if (key > new_node->leaf_buf.key(0, key)) {
+        flush(this);
         new_node->Put(mem, key, value, nullptr);
-      else
+      } else {
+        flush(new_node);
+        flush((uint8_t*)new_node+64);
         Put(mem, key, value, nullptr);
+      }
 
       if (parent == nullptr) {
         Node* new_root = mem->NewNode(Type::INDEX, leaf_buf.suffix_bytes);
         uint64_t tmp = (uint64_t)this - mem->BaseAddr();
+        // set first_child before Put, beacause Put will do flush,
+        // which contains first_child
         memcpy(new_root->first_child, &tmp, sizeof(new_root->first_child));
         new_root->index_buf.Put(0, new_node->leaf_buf.pkey(0),
                                 (uint64_t)new_node-mem->BaseAddr());
@@ -69,14 +77,19 @@ CLevel::Node* CLevel::Node::Put(MemControl* mem, uint64_t key, uint64_t value, N
         index_buf.MoveData(&new_node->index_buf, (index_buf.entries+1)/2, index_buf.entries/2);
         memcpy(new_node->first_child, index_buf.pvalue(index_buf.entries-1),
                sizeof(new_node->first_child));
+        flush(this);
+        flush(new_node);
+        flush((uint8_t*)new_node+64);
+        fence();
 
         if (parent == nullptr) {
           Node* new_root = mem->NewNode(Type::INDEX, index_buf.suffix_bytes);
           uint64_t tmp = (uint64_t)this - mem->BaseAddr();
           memcpy(new_root->first_child, &tmp, sizeof(new_root->first_child));
+          index_buf.entries--;
+          flush(this);
           new_root->index_buf.Put(0, index_buf.pkey(index_buf.entries-1),
                                   (uint64_t)new_node-mem->BaseAddr());
-          index_buf.entries--;
           return new_root;
         } else {
           // store middle key in new_node.buf.key[entries] temporally
@@ -140,6 +153,8 @@ void CLevel::Setup(MemControl* mem, int suffix_len) {
 void CLevel::Setup(MemControl* mem, KVBuffer<48+64,8>& blevel_buf) {
   Node* new_root = mem->NewNode(Node::Type::LEAF, blevel_buf.suffix_bytes);
   blevel_buf.MoveData(&new_root->leaf_buf, 0, blevel_buf.entries);
+  flush(new_root);
+  flush((uint8_t*)new_root+64);
 
   // set next to NULL: set LSB to 1
   new_root->next[0] |= 1;

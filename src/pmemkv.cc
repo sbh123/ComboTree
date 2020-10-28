@@ -37,70 +37,43 @@ inline void int2char(uint64_t integer, char* buf) {
 
 } // anonymous namespace
 
-Status PmemKV::Put(uint64_t key, uint64_t value) {
+bool PmemKV::Put(uint64_t key, uint64_t value) {
   WriteRef_();
   if (!write_valid_.load(std::memory_order_acquire))
-    return Status::INVALID;
+    return false;
   char key_buf[sizeof(uint64_t)];
   char value_buf[sizeof(uint64_t)];
   int2char(key, key_buf);
   int2char(value, value_buf);
 
-  // FIXME: remove exist test?
-  auto s = db_->exists(string_view(key_buf, sizeof(uint64_t)));
-  if (s == status::OK) {
-    WriteUnRef_();
-    return Status::ALREADY_EXISTS;
-  }
-  if (s != status::NOT_FOUND)
-    return Status::INVALID;
-
-  s = db_->put(string_view(key_buf, sizeof(uint64_t)),
+  auto s = db_->put(string_view(key_buf, sizeof(uint64_t)),
                     string_view(value_buf, sizeof(uint64_t)));
   WriteUnRef_();
-  if (s == status::OK)
-    return Status::OK;
-  else
-    return Status::INVALID;
+  return s == status::OK;
 }
 
-Status PmemKV::Update(uint64_t key, uint64_t value) {
-  assert(0);
-  return Status::OK;
-}
-
-Status PmemKV::Get(uint64_t key, uint64_t& value) const {
+bool PmemKV::Get(uint64_t key, uint64_t& value) const {
   ReadRef_();
   if (!read_valid_.load(std::memory_order_acquire))
-    return Status::INVALID;
+    return false;
   char key_buf[sizeof(uint64_t)];
   int2char(key, key_buf);
 
   auto s = db_->get(string_view(key_buf, sizeof(uint64_t)),
       [&](string_view value_str){ value = *(uint64_t*)value_str.data(); });
   ReadUnRef_();
-  if (s == status::OK)
-    return Status::OK;
-  else if (s == status::NOT_FOUND)
-    return Status::DOES_NOT_EXIST;
-  else
-    return Status::INVALID;
+  return s == status::OK;
 }
 
-Status PmemKV::Delete(uint64_t key) {
+bool PmemKV::Delete(uint64_t key) {
   WriteRef_();
   if (!write_valid_.load(std::memory_order_acquire))
-    return Status::INVALID;
+    return false;
   char key_buf[sizeof(uint64_t)];
   int2char(key, key_buf);
   auto s = db_->remove(string_view(key_buf, sizeof(uint64_t)));
   WriteUnRef_();
-  if (s == status::OK)
-    return Status::OK;
-  else if (s == status::NOT_FOUND)
-    return Status::DOES_NOT_EXIST;
-  else
-    return Status::INVALID;
+  return s == status::OK || s == status::NOT_FOUND;
 }
 
 size_t PmemKV::Scan(uint64_t min_key, uint64_t max_key, uint64_t max_size,

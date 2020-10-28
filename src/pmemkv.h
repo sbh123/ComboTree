@@ -8,7 +8,6 @@
 #include <mutex>
 #include <algorithm>
 #include <vector>
-#include "status.h"
 
 namespace combotree {
 
@@ -26,10 +25,10 @@ class PmemKV {
   explicit PmemKV(std::string path, size_t size = SIZE,
                   std::string engine = "cmap", bool force_create = true);
 
-  Status Put(uint64_t key, uint64_t value);
-  Status Update(uint64_t key, uint64_t value);
-  Status Get(uint64_t key, uint64_t& value) const;
-  Status Delete(uint64_t key);
+  bool Put(uint64_t key, uint64_t value);
+  bool Update(uint64_t key, uint64_t value);
+  bool Get(uint64_t key, uint64_t& value) const;
+  bool Delete(uint64_t key);
   size_t Scan(uint64_t min_key, uint64_t max_key, uint64_t max_size,
               void (*callback)(uint64_t,uint64_t,void*), void* arg) const;
   size_t Scan(uint64_t min_key, uint64_t max_key, uint64_t max_size,

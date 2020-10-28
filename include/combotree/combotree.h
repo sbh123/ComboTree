@@ -39,6 +39,7 @@ class ComboTree {
   size_t BLevelEntries() const;
   void BLevelCompression() const;
   int64_t CLevelTime() const;
+  uint64_t Usage() const;
 
   bool IsExpanding() const {
     return permit_delete_.load() == false;

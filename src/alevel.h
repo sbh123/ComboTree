@@ -3,7 +3,6 @@
 #include <cstdint>
 #include <cassert>
 #include "combotree_config.h"
-#include "status.h"
 #include "blevel.h"
 
 namespace combotree {

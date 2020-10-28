@@ -26,6 +26,8 @@ struct KVBuffer {
 
   ALWAYS_INLINE bool Full() const { return entries >= max_entries; }
 
+  ALWAYS_INLINE bool Empty() const { return entries == 0; }
+
   ALWAYS_INLINE void* pkey(int idx) const {
     return (void*)&buf[idx*suffix_bytes];
   }
@@ -97,7 +99,6 @@ struct KVBuffer {
   }
 
   ALWAYS_INLINE bool Put(int pos, void* new_key, uint64_t value) {
-    // TODO: flush and fence
     memmove(pkey(pos+1), pkey(pos), suffix_bytes*(entries-pos));
     memmove(pvalue(entries), pvalue(entries-1), value_size*(entries-pos));
 
@@ -105,6 +106,10 @@ struct KVBuffer {
     memcpy(pkey(pos), new_key, suffix_bytes);
 
     entries++;
+
+    flush(&meta);
+    flush(pvalue(pos));
+    fence();
     return true;
   }
 
@@ -113,16 +118,17 @@ struct KVBuffer {
   }
 
   ALWAYS_INLINE bool Delete(int pos) {
-    // TODO: flush and fence
     assert(pos < entries && pos >= 0);
     memmove(pkey(pos), pkey(pos+1), suffix_bytes*(entries-pos-1));
     memmove(pvalue(entries-2), pvalue(entries-1), value_size*(entries-pos-1));
     entries--;
+    flush(&meta);
+    flush(pvalue(pos));
+    fence();
     return true;
   }
 
   void MoveData(KVBuffer<buf_size, value_size>* dest, int start_pos, int entry_count) {
-    // TODO: flush and fence
     memcpy(dest->pkey(0), pkey(start_pos), suffix_bytes*entry_count);
     memcpy(dest->pvalue(entry_count-1), pvalue(start_pos+entry_count-1), value_size*entry_count);
     entries -= entry_count;

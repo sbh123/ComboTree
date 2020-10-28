@@ -17,15 +17,15 @@ enum class Debug {
 
 namespace {
 
-#define ANSI_COLOR_RED "\x1b[31m"
-#define ANSI_COLOR_GREEN "\x1b[32m"
-#define ANSI_COLOR_YELLOW "\x1b[33m"
-#define ANSI_COLOR_BLUE "\x1b[34m"
-#define ANSI_COLOR_MAGENTA "\x1b[35m"
-#define ANSI_COLOR_CYAN "\x1b[36m"
-#define ANSI_COLOR_RESET "\x1b[0m"
+#define ANSI_COLOR_RED      "\x1b[31m"
+#define ANSI_COLOR_GREEN    "\x1b[32m"
+#define ANSI_COLOR_YELLOW   "\x1b[33m"
+#define ANSI_COLOR_BLUE     "\x1b[34m"
+#define ANSI_COLOR_MAGENTA  "\x1b[35m"
+#define ANSI_COLOR_CYAN     "\x1b[36m"
+#define ANSI_COLOR_RESET    "\x1b[0m"
 
-inline const char* level_string__(Debug level) {
+inline __attribute__((always_inline)) const char* level_string__(Debug level) {
   switch (level) {
     case Debug::INFO:
       return ANSI_COLOR_BLUE "INFO" ANSI_COLOR_RESET;
@@ -54,10 +54,9 @@ class Timer {
  public:
   void Start() { start_ = std::chrono::high_resolution_clock::now(); }
 
-  double End() {
+  int64_t End() {
     end_ = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<double> duration = end_ - start_;
-    return duration.count() * 1000000;
+    return std::chrono::duration_cast<std::chrono::microseconds>(end_-start_).count();
   }
 
  private:

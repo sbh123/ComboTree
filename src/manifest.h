@@ -2,7 +2,6 @@
 #include <libpmem.h>
 #include <libpmemobj++/persistent_ptr.hpp>
 #include <libpmemobj++/make_persistent_atomic.hpp>
-#include "config.h"
 
 namespace combotree {
 
@@ -56,7 +55,6 @@ class Manifest {
     std::filesystem::remove(CLevelPath());
     root_->combo_tree_seq++;
     std::filesystem::remove(CLevelPath());
-    Config::SetPmemObjFile(CLevelPath(), clevel_size);
   }
 
   bool IsComboTree() const {

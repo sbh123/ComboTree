@@ -1,22 +1,47 @@
 #include <iostream>
 #include <cassert>
-#include <set>
+#include <iomanip>
+#include <sstream>
 #include "../include/combotree/combotree.h"
 #include "random.h"
 #include "timer.h"
 
-#define TEST_SIZE   2000000
-#define LAST_EXPAND 1520000
+#define TEST_SIZE   60000000
+#define LAST_EXPAND 40000000
 
 using combotree::ComboTree;
 using combotree::Random;
 using combotree::Timer;
 
+// return human readable string of size
+std::string human_readable(double size) {
+  static const std::string suffix[] = {
+    "B",
+    "KB",
+    "MB",
+    "GB"
+  };
+  const int arr_len = 4;
+
+  std::ostringstream out;
+  out.precision(2);
+  for (int divs = 0; divs < arr_len; ++divs) {
+    if (size >= 1024.0) {
+      size /= 1024.0;
+    } else {
+      out << std::fixed << size;
+      return out.str() + suffix[divs];
+    }
+  }
+  out << std::fixed << size;
+  return out.str() + suffix[arr_len - 1];
+}
+
 int main(void) {
 #ifdef SERVER
-  ComboTree* tree = new ComboTree("/mnt/pmem0/combotree/", (1024*1024*1024*100UL), true);
+  ComboTree* tree = new ComboTree("/pmem0/combotree/", (1024*1024*1024*100UL), true);
 #else
-  ComboTree* tree = new ComboTree("/mnt/pmem0/combotree/", (1024*1024*1024*1UL), true);
+  ComboTree* tree = new ComboTree("/mnt/pmem0/", (1024*1024*1024*1UL), true);
 #endif
 
   std::vector<uint64_t> key;
@@ -40,24 +65,31 @@ int main(void) {
     assert(tree->Put(key[i], key[i]) == true);
   timer.Record("stop");
 
+  std::cout << std::fixed << std::setprecision(2);
+
   uint64_t total_time = timer.Microsecond("stop", "start");
   std::cout << "put: " << total_time/1000000.0 << " " << (double)TEST_SIZE/(double)total_time*1000000 << std::endl;
   uint64_t mid_time = timer.Microsecond("stop", "mid");
   std::cout << "put: " << mid_time/1000000.0 << " " << (double)(TEST_SIZE-LAST_EXPAND)/(double)mid_time*1000000 << std::endl;
 
-  std::cout << "clevel time: " << tree->CLevelTime()/1000000.0 << std::endl;
+  std::cout << "clevel time:    " << tree->CLevelTime()/1000000.0 << std::endl;
 
   timer.Clear();
 
-  std::cout << "entries: " << tree->BLevelEntries() << std::endl;
-  std::cout << "clevels: " << tree->CLevelCount() << std::endl;
+  std::cout << "entries:        " << tree->BLevelEntries() << std::endl;
+  std::cout << "clevels:        " << tree->CLevelCount() << std::endl;
+  std::cout << "clevel percent: " << (double)tree->CLevelCount() / tree->BLevelEntries() * 100.0 << "%" << std::endl;
+  std::cout << "size:           " << tree->Size() << std::endl;
+  std::cout << "usage:          " << human_readable(tree->Usage()) << std::endl;
+  std::cout << "bytes-per-pair: " << (double)tree->Usage() / tree->Size() << std::endl;
   tree->BLevelCompression();
 
   // Get
   timer.Record("start");
-  for (auto& k : key) {
-    assert(tree->Get(k, value) == true);
-    assert(value == k);
+  for (int i = 0; i < TEST_SIZE; ++i) {
+    uint64_t target = key[i];
+    assert(tree->Get(target, value) == true);
+    assert(value == target);
   }
 
   timer.Record("stop");
