@@ -160,11 +160,11 @@ bool ComboTree::Put(uint64_t key, uint64_t value) {
       continue;
     } else if (status_.load() == State::USING_COMBO_TREE) {
       ret = alevel_->Put(key, value);
-      if (Size() >= EXPANSION_FACTOR * blevel_->Entries())
+      if (Size() >= EXPANSION_FACTOR * BLEVEL_EXPAND_BUF_KEY * blevel_->Entries())
         ExpandComboTree_();
       break;
     } else if (status_.load() == State::COMBO_TREE_EXPANDING) {
-      if (blevel_->Size() >= EXPANSION_FACTOR * blevel_->Entries()) {
+      if (blevel_->Size() >= EXPANSION_FACTOR * BLEVEL_EXPAND_BUF_KEY * blevel_->Entries()) {
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
         wait++;
         wait_expanding_finish++;

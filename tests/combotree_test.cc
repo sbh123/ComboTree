@@ -6,7 +6,7 @@
 #include "random.h"
 #include "timer.h"
 
-#define TEST_SIZE   10000000
+#define TEST_SIZE   40000000
 #define LAST_EXPAND 1000000
 
 using combotree::ComboTree;
