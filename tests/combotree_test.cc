@@ -6,8 +6,8 @@
 #include "random.h"
 #include "timer.h"
 
-#define TEST_SIZE   40000000
-#define LAST_EXPAND 1000000
+#define TEST_SIZE   100000000
+#define LAST_EXPAND 60000000
 
 using combotree::ComboTree;
 using combotree::Random;
@@ -43,6 +43,9 @@ int main(void) {
 #else
   ComboTree* tree = new ComboTree("/mnt/pmem0/", (1024*1024*1024*1UL), true);
 #endif
+
+  std::cout << "TEST_SIZE:   " << TEST_SIZE << std::endl;
+  std::cout << "LAST_EXPAND: " << LAST_EXPAND << std::endl;
 
   std::vector<uint64_t> key;
   Random rnd(0, TEST_SIZE-1);

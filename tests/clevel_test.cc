@@ -23,13 +23,20 @@ int main(void) {
   void* base_addr = malloc(TEST_SIZE * 40);
   std::cout << "begin addr: " << base_addr << std::endl;
   std::cout << "end addr:   " << (void*)((char*)base_addr + (TEST_SIZE * 40)) << std::endl;
-  CLevel::MemControl mem(base_addr);
+  CLevel::MemControl mem(base_addr, TEST_SIZE * 40);
 
   CLevel clevel;
   clevel.Setup(&mem, 4);
 
   for (int i = 0; i < TEST_SIZE; ++i) {
     assert(clevel.Put(&mem, key[i], key[i]) == true);
+  }
+
+  CLevel::Iter aiter(&clevel, &mem, 0);
+  uint64_t last = aiter.key();
+  while (aiter.next()) {
+    assert(aiter.key() > last);
+    last = aiter.key();
   }
 
   for (int i = 0; i < TEST_SIZE; ++i) {
