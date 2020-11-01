@@ -1,5 +1,8 @@
 #pragma once
 
+#ifndef SERVER
+#define SERVER                @SERVER@
+#endif
 #ifndef CLEVEL_PMEM_FILE_SIZE
 #define CLEVEL_PMEM_FILE_SIZE @CLEVEL_PMEM_FILE_SIZE@
 #endif

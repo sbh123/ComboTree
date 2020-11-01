@@ -1,4 +1,5 @@
 #include <iostream>
+#include <fstream>
 #include <cassert>
 #include <iomanip>
 #include <sstream>
@@ -7,8 +8,11 @@
 #include "random.h"
 #include "timer.h"
 
-#define TEST_SIZE   1000000
+#define TEST_SIZE   10000000
 #define LAST_EXPAND 600000
+#define GET_SIZE    10000
+
+bool use_data_file = true;
 
 using combotree::ComboTree;
 using combotree::Random;
@@ -39,7 +43,7 @@ std::string human_readable(double size) {
 }
 
 int main(void) {
-#ifdef SERVER
+#if SERVER
   ComboTree* tree = new ComboTree("/pmem0/combotree/", (1024*1024*1024*100UL), true);
 #else
   ComboTree* tree = new ComboTree("/mnt/pmem0/", (1024*1024*512UL), true);
@@ -60,13 +64,23 @@ int main(void) {
 #endif
 
   std::vector<uint64_t> key;
-  Random rnd(0, TEST_SIZE-1);
 
-  for (int i = 0; i < TEST_SIZE; ++i)
-    key.push_back(i);
+  if (use_data_file) {
+    std::ifstream data("./data.dat");
 
-  for (int i = 0; i < TEST_SIZE; ++i)
-    std::swap(key[i],key[rnd.Next()]);
+    for (int i = 0; i < TEST_SIZE; ++i) {
+      uint64_t k;
+      data >> k;
+      key.push_back(k);
+      assert(data.good());
+    }
+  } else {
+    Random rnd(0, TEST_SIZE-1);
+    for (int i = 0; i < TEST_SIZE; ++i)
+      key.push_back(i);
+    for (int i = 0; i < TEST_SIZE; ++i)
+      std::swap(key[i],key[rnd.Next()]);
+  }
 
   uint64_t value;
   Timer timer;
@@ -101,7 +115,7 @@ int main(void) {
 
   // Get
   timer.Record("start");
-  for (int i = 0; i < TEST_SIZE; ++i) {
+  for (int i = 0; i < GET_SIZE; ++i) {
     uint64_t target = key[i];
     assert(tree->Get(target, value) == true);
     assert(value == target);
@@ -109,19 +123,19 @@ int main(void) {
 
   timer.Record("stop");
   total_time = timer.Microsecond("stop", "start");
-  std::cout << "get: " << total_time/1000000.0 << " " << (double)key.size()/(double)total_time*1000000 << std::endl;
+  std::cout << "get: " << total_time/1000000.0 << " " << (double)GET_SIZE/(double)total_time*1000000 << std::endl;
 
-  for (uint64_t i = TEST_SIZE; i < TEST_SIZE+100000; ++i) {
+  for (uint64_t i = TEST_SIZE; i < TEST_SIZE+10000; ++i) {
     assert(tree->Get(i, value) == false);
   }
 
   // Delete
-  for (auto& k : key) {
-    assert(tree->Delete(k) == true);
-  }
-  for (auto& k : key) {
-    assert(tree->Get(k, value) == false);
-  }
+  // for (auto& k : key) {
+  //   assert(tree->Delete(k) == true);
+  // }
+  // for (auto& k : key) {
+  //   assert(tree->Get(k, value) == false);
+  // }
 
   return 0;
 }

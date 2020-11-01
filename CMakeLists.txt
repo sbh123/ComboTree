@@ -10,10 +10,12 @@ if(SERVER)
   set(CLEVEL_PMEM_FILE_SIZE "(1024*1024*1024*16UL)")
   set(CLEVEL_PMEM_FILE      \"/pmem0/combotree-clevel-\")
   set(BLEVEL_PMEM_FILE      \"/pmem0/combotree-blevel-\")
+  set(SERVER                1)
 else()
   set(CLEVEL_PMEM_FILE_SIZE "(1024*1024*512UL)")
   set(CLEVEL_PMEM_FILE      \"/mnt/pmem0/combotree-clevel-\")
   set(BLEVEL_PMEM_FILE      \"/mnt/pmem0/combotree-blevel-\")
+  set(SERVER                0)
 endif(SERVER)
 set(BLEVEL_EXPAND_BUF_KEY 2)
 set(DEFAULT_SPAN          2)
@@ -65,6 +67,9 @@ target_link_libraries(combotree pmem pmemkv pthread)
 # Unit Test
 enable_testing()
 include_directories(src)
+
+## generate_data
+add_executable(generate_data tests/generate_data.cc)
 
 ## clevel_test
 add_executable(clevel_test tests/clevel_test.cc src/clevel.cc)

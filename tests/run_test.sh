@@ -1,9 +1,9 @@
 #!/bin/bash
+# need to run cmake first
 
 BUILDDIR=$(dirname "$0")/../build/
 
 cd $BUILDDIR
-cmake ..
 for expand_buf_key in 2 4 6 8 10
 do
 for expansion_factor in 2 4 8 16
