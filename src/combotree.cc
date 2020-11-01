@@ -3,7 +3,7 @@
 #include <memory>
 #include <iostream>
 #include <unistd.h>
-#include "../include/combotree/combotree.h"
+#include "combotree/combotree.h"
 #include "combotree_config.h"
 #include "alevel.h"
 #include "blevel.h"

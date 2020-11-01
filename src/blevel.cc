@@ -20,7 +20,7 @@ uint64_t CommonPrefixBytes(uint64_t a, uint64_t b) {
   return 8;
 }
 
-#ifdef STREAMING_LOAD
+#if STREAMING_LOAD
 void stream_load_entry(void* dest, void* source) {
   uint8_t* dst = (uint8_t*)dest;
   uint8_t* src = (uint8_t*)source;
@@ -39,7 +39,7 @@ void stream_load_entry(void* dest, void* source) {
 }
 #endif // STREAMING_LOAD
 
-#ifdef STREAMING_STORE
+#if STREAMING_STORE
 void stream_store_entry(void* dest, void* source) {
   uint8_t* dst = (uint8_t*)dest;
   uint8_t* src = (uint8_t*)source;
@@ -60,8 +60,20 @@ void stream_store_entry(void* dest, void* source) {
 
 } // anonymous namespace
 
-void BLevel::ExpandData::FlushToEntry(Entry* entry, int prefix_len) {
-#ifdef STREAMING_STORE
+void BLevel::ExpandData::FlushToEntry(Entry* entry, int prefix_len, CLevel::MemControl* mem) {
+  while (buf_count > entry->buf.max_entries) {
+    // flush last entry.max_entries data to clevel
+    // copy value
+    memcpy(entry->buf.pvalue(entry->buf.max_entries-1),
+           &value_buf[BLEVEL_EXPAND_BUF_KEY-buf_count], 8*entry->buf.max_entries);
+    // copy key
+    for (int i = 0; i < entry->buf.max_entries; ++i)
+      memcpy(entry->buf.pkey(i), &key_buf[i+buf_count-entry->buf.max_entries], 8 - prefix_len);
+    entry->buf.entries = entry->buf.max_entries;
+    entry->FlushToCLevel(mem);
+    buf_count -= entry->buf.max_entries;
+  }
+#if STREAMING_STORE
   Entry in_mem(entry->entry_key, prefix_len);
   // copy value
   memcpy(in_mem.buf.pvalue(buf_count-1),
@@ -208,11 +220,11 @@ void BLevel::ExpandPut_(ExpandData& data, uint64_t key, uint64_t value) {
     if (data.zero_entry && data.key_buf[0] != 0) {
       int prefix_len = CommonPrefixBytes(0UL, key);
       Entry* new_entry = new (data.new_addr) Entry(0UL, prefix_len);
-      data.FlushToEntry(new_entry, prefix_len);
+      data.FlushToEntry(new_entry, prefix_len, &clevel_mem_);
     } else {
       int prefix_len = CommonPrefixBytes(data.key_buf[0], key);
       Entry* new_entry = new (data.new_addr) Entry(data.key_buf[0], prefix_len);
-      data.FlushToEntry(new_entry, prefix_len);
+      data.FlushToEntry(new_entry, prefix_len, &clevel_mem_);
     }
     data.new_addr++;
     data.zero_entry = false;
@@ -229,7 +241,7 @@ void BLevel::ExpandFinish_(ExpandData& data) {
   if (data.buf_count != 0) {
     int prefix_len = CommonPrefixBytes(data.key_buf[0], 0xFFFFFFFFFFFFFFFFUL);
     Entry* new_entry = new (data.new_addr) Entry(data.key_buf[0], prefix_len);
-    data.FlushToEntry(new_entry, prefix_len);
+    data.FlushToEntry(new_entry, prefix_len, &clevel_mem_);
     data.new_addr++;
     nr_entries_++;
   }
@@ -255,13 +267,13 @@ void BLevel::Expansion(BLevel* old_blevel) {
 
   size_ = 0;
 
-#ifdef STREAMING_LOAD
+#if STREAMING_LOAD
   Entry in_mem_entry(0,0);
   old_entry = &in_mem_entry;
 #endif
 
   while (old_index < old_blevel->Entries()) {
-#ifdef STREAMING_LOAD
+#if STREAMING_LOAD
     stream_load_entry(&in_mem_entry, &old_blevel->entries_[old_index]);
 #else
     old_entry = &old_blevel->entries_[old_index];

@@ -126,7 +126,7 @@ class __attribute__((packed)) CLevel {
 
     CLevel::Node* NewNode(Node::Type type, int suffix_len) {
       assert(suffix_len > 0 && suffix_len <= 8);
-      assert(cur_addr_ + sizeof(CLevel::Node) < end_addr_);
+      assert((uint8_t*)cur_addr_ + sizeof(CLevel::Node) < end_addr_);
       CLevel::Node* ret = (CLevel::Node*)cur_addr_;
       cur_addr_ = (uint8_t*)cur_addr_ + sizeof(CLevel::Node);
       ret->type = type;

@@ -2,13 +2,13 @@
 #include <cassert>
 #include <iomanip>
 #include <sstream>
-#include "../include/combotree/combotree.h"
-#include "../src/combotree_config.h"
+#include "combotree/combotree.h"
+#include "combotree_config.h"
 #include "random.h"
 #include "timer.h"
 
-#define TEST_SIZE   100000000
-#define LAST_EXPAND 60000000
+#define TEST_SIZE   1000000
+#define LAST_EXPAND 600000
 
 using combotree::ComboTree;
 using combotree::Random;
@@ -50,6 +50,14 @@ int main(void) {
   std::cout << "BLEVEL_EXPAND_BUF_KEY: " << BLEVEL_EXPAND_BUF_KEY << std::endl;
   std::cout << "EXPANSION_FACTOR:      " << EXPANSION_FACTOR << std::endl;
   std::cout << "PMEMKV_THRESHOLD:      " << PMEMKV_THRESHOLD << std::endl;
+
+#if STREAMING_STORE
+  std::cout << "STREAMING_STORE = 1" << std::endl;
+#endif
+
+#if STREAMING_LOAD
+  std::cout << "STREAMING_LOAD  = 1" << std::endl;
+#endif
 
   std::vector<uint64_t> key;
   Random rnd(0, TEST_SIZE-1);

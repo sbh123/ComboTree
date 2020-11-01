@@ -2,7 +2,7 @@
 #include <cstdlib>
 #include <cassert>
 #include <vector>
-#include "../src/clevel.h"
+#include "clevel.h"
 #include "random.h"
 
 using combotree::CLevel;
@@ -46,7 +46,7 @@ int main(void) {
   }
 
   CLevel::Iter iter(&clevel, &mem, 0);
-  for (int i = 0; i < TEST_SIZE; ++i) {
+  for (uint64_t i = 0; i < TEST_SIZE; ++i) {
     assert(iter.key() == i);
     assert(iter.value() == i);
     if (i != TEST_SIZE - 1)
@@ -61,7 +61,7 @@ int main(void) {
     assert(clevel.Get(&mem, i, value) == false);
   }
 
-  for (int i = 1000; i < 10000; ++i) {
+  for (uint64_t i = 1000; i < 10000; ++i) {
     uint64_t value;
     assert(clevel.Delete(&mem, i, &value) == true);
     assert(value == i);

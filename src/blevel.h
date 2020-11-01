@@ -78,7 +78,7 @@ class BLevel {
       zero_entry = true;
     }
 
-    void FlushToEntry(Entry* entry, int prefix_len);
+    void FlushToEntry(Entry* entry, int prefix_len, CLevel::MemControl* mem);
   };
 
   // member
