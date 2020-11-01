@@ -3,6 +3,7 @@
 #include <iomanip>
 #include <sstream>
 #include "../include/combotree/combotree.h"
+#include "../src/combotree_config.h"
 #include "random.h"
 #include "timer.h"
 
@@ -41,11 +42,14 @@ int main(void) {
 #ifdef SERVER
   ComboTree* tree = new ComboTree("/pmem0/combotree/", (1024*1024*1024*100UL), true);
 #else
-  ComboTree* tree = new ComboTree("/mnt/pmem0/", (1024*1024*1024*1UL), true);
+  ComboTree* tree = new ComboTree("/mnt/pmem0/", (1024*1024*512UL), true);
 #endif
 
-  std::cout << "TEST_SIZE:   " << TEST_SIZE << std::endl;
-  std::cout << "LAST_EXPAND: " << LAST_EXPAND << std::endl;
+  std::cout << "TEST_SIZE:             " << TEST_SIZE << std::endl;
+  std::cout << "LAST_EXPAND:           " << LAST_EXPAND << std::endl;
+  std::cout << "BLEVEL_EXPAND_BUF_KEY: " << BLEVEL_EXPAND_BUF_KEY << std::endl;
+  std::cout << "EXPANSION_FACTOR:      " << EXPANSION_FACTOR << std::endl;
+  std::cout << "PMEMKV_THRESHOLD:      " << PMEMKV_THRESHOLD << std::endl;
 
   std::vector<uint64_t> key;
   Random rnd(0, TEST_SIZE-1);
