@@ -164,6 +164,7 @@ bool ComboTree::Put(uint64_t key, uint64_t value) {
         ExpandComboTree_();
       break;
     } else if (status_.load() == State::COMBO_TREE_EXPANDING) {
+      assert(0);
       if (blevel_->Size() >= EXPANSION_FACTOR * BLEVEL_EXPAND_BUF_KEY * blevel_->Entries()) {
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
         wait++;

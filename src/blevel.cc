@@ -65,7 +65,7 @@ void BLevel::ExpandData::FlushToEntry(Entry* entry, int prefix_len) {
   Entry in_mem(entry->entry_key, prefix_len);
   // copy value
   memcpy(in_mem.buf.pvalue(buf_count-1),
-          &value_buf[BLEVEL_EXPAND_BUF_KEY-buf_count], 8*buf_count);
+         &value_buf[BLEVEL_EXPAND_BUF_KEY-buf_count], 8*buf_count);
   // copy key
   for (int i = 0; i < buf_count; ++i)
     memcpy(in_mem.buf.pkey(i), &key_buf[i], 8 - prefix_len);
@@ -74,7 +74,7 @@ void BLevel::ExpandData::FlushToEntry(Entry* entry, int prefix_len) {
 #else
   // copy value
   memcpy(entry->buf.pvalue(buf_count-1),
-          &value_buf[BLEVEL_EXPAND_BUF_KEY-buf_count], 8*buf_count);
+         &value_buf[BLEVEL_EXPAND_BUF_KEY-buf_count], 8*buf_count);
   // copy key
   for (int i = 0; i < buf_count; ++i)
     memcpy(entry->buf.pkey(i), &key_buf[i], 8 - prefix_len);

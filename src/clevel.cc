@@ -45,7 +45,7 @@ CLevel::Node* CLevel::Node::Put(MemControl* mem, uint64_t key, uint64_t value, N
         // which contains first_child
         memcpy(new_root->first_child, &tmp, sizeof(new_root->first_child));
         new_root->index_buf.Put(0, new_node->leaf_buf.pkey(0),
-                                (uint64_t)new_node-mem->BaseAddr());
+                                (uint64_t)new_node - mem->BaseAddr());
         return new_root;
       } else {
         // store middle key in new_node.buf.key[entries] temporally
@@ -88,8 +88,8 @@ CLevel::Node* CLevel::Node::Put(MemControl* mem, uint64_t key, uint64_t value, N
           memcpy(new_root->first_child, &tmp, sizeof(new_root->first_child));
           index_buf.entries--;
           flush(this);
-          new_root->index_buf.Put(0, index_buf.pkey(index_buf.entries-1),
-                                  (uint64_t)new_node-mem->BaseAddr());
+          new_root->index_buf.Put(0, index_buf.pkey(index_buf.entries),
+                                  (uint64_t)new_node - mem->BaseAddr());
           return new_root;
         } else {
           // store middle key in new_node.buf.key[entries] temporally
