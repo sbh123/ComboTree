@@ -1,7 +1,7 @@
 project(ComboTree)
 cmake_minimum_required(VERSION 3.0)
 
-# use `cmake -DSERVER ..` when running in server
+# use `cmake -DSERVER:BOOL=ON ..` when running in server
 option(SERVER "Run in server" OFF)
 
 # ComboTree Configuration
@@ -63,6 +63,10 @@ set(COMBO_TREE_SRC
 
 add_library(combotree SHARED ${COMBO_TREE_SRC})
 target_link_libraries(combotree pmem pmemkv pthread)
+
+# benchmark
+add_executable(benchmark tests/benchmark.cc)
+target_link_libraries(benchmark combotree)
 
 # Unit Test
 enable_testing()

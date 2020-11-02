@@ -13,6 +13,8 @@ int main(int argc, char** argv) {
 
   uint64_t data_size = atoll(argv[1]);
 
+  std::cout << "data size: " << data_size << std::endl;
+
   Random rnd(0, data_size-1);
   std::vector<uint64_t> key;
   for (uint64_t i = 0; i < data_size; ++i)

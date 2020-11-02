@@ -157,6 +157,8 @@ class __attribute__((packed)) CLevel {
 
   class Iter {
    public:
+    Iter() {}
+
     Iter(const CLevel* clevel, const MemControl* mem, uint64_t start_key, uint64_t prefix_key)
       : mem_(mem), prefix_key(prefix_key)
     {
@@ -200,7 +202,7 @@ class __attribute__((packed)) CLevel {
       }
     }
 
-    ALWAYS_INLINE bool end() {
+    ALWAYS_INLINE bool end() const {
       return cur_ == nullptr ? true : false;
     }
 

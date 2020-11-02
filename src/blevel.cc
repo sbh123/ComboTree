@@ -214,7 +214,6 @@ BLevel::~BLevel() {
 }
 
 void BLevel::ExpandPut_(ExpandData& data, uint64_t key, uint64_t value) {
-  assert(key == value);
   if (data.buf_count == BLEVEL_EXPAND_BUF_KEY) {
     // buf full, add a new entry
     if (data.zero_entry && data.key_buf[0] != 0) {

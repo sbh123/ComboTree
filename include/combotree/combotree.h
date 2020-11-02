@@ -46,6 +46,21 @@ class ComboTree {
   }
 
  private:
+  class IterImpl;
+
+ public:
+  class Iter {
+   public:
+    Iter(const ComboTree* tree);
+    uint64_t key() const;
+    uint64_t value() const;
+    bool next();
+    bool end() const;
+   private:
+    IterImpl* pimpl_;
+  };
+
+ private:
   const std::string POOL_LAYOUT = "Combo Tree";
 
   enum class State {

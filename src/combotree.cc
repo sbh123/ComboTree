@@ -249,6 +249,50 @@ bool ComboTree::Delete(uint64_t key) {
   return ret;
 }
 
+/************************ ComboTree::IterImpl ************************/
+class ComboTree::IterImpl {
+ public:
+  IterImpl(const ComboTree* tree)
+    : tree_(tree)
+  {
+    if (tree_->blevel_ != nullptr) {
+      biter_ = new BLevel::Iter(tree_->blevel_.get());
+    } else {
+      assert(0);
+      biter_ = nullptr;
+    }
+  }
+
+  ALWAYS_INLINE uint64_t key() const {
+    return biter_->key();
+  }
+
+  ALWAYS_INLINE uint64_t value() const {
+    return biter_->value();
+  }
+
+  ALWAYS_INLINE bool next() {
+    return biter_->next();
+  }
+
+  ALWAYS_INLINE bool end() const {
+    return biter_ == nullptr || biter_->end();
+  }
+
+ private:
+  const ComboTree* tree_;
+  BLevel::Iter* biter_;
+};
+
+
+/************************ ComboTree::Iter ************************/
+ComboTree::Iter::Iter(const ComboTree* tree) : pimpl_(new IterImpl(tree)) {}
+uint64_t ComboTree::Iter::key() const   { return pimpl_->key(); }
+uint64_t ComboTree::Iter::value() const { return pimpl_->value(); }
+bool ComboTree::Iter::next()            { return pimpl_->next(); }
+bool ComboTree::Iter::end() const       { return pimpl_->end(); }
+
+
 namespace {
 
 // https://stackoverflow.com/a/18101042/7640227
