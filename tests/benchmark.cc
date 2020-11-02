@@ -8,9 +8,11 @@
 #include "random.h"
 #include "timer.h"
 
-#define TEST_SIZE   10000000
-#define LAST_EXPAND 600000
-#define GET_SIZE    1000000
+#define TEST_SIZE       10000000
+#define LAST_EXPAND     600000
+#define GET_SIZE        1000000
+#define SCAN_TEST_SIZE  1000000
+#define SCAN_SIZE       100
 
 bool use_data_file = false;
 
@@ -130,20 +132,19 @@ int main(void) {
   // scan
   timer.Clear();
   timer.Record("start");
-  ComboTree::Iter iter(tree);
-  for (uint64_t i = 0; i < TEST_SIZE; ++i) {
-    assert(iter.key() == i);
-    assert(iter.value() == i);
-    iter.next();
-    // if (i < TEST_SIZE - 1)
-    //   assert(iter.next());
-    // else
-    //   assert(!iter.next());
+  for (int i = 0; i < SCAN_TEST_SIZE; ++i) {
+    uint64_t start_key = key[i];
+    ComboTree::Iter iter(tree, start_key);
+    for (int j = 0; j < SCAN_SIZE; ++j) {
+      assert(iter.key() == start_key + j);
+      assert(iter.value() == start_key + j);
+      if (!iter.next())
+        break;
+    }
   }
-  assert(iter.end());
   timer.Record("stop");
   total_time = timer.Microsecond("stop", "start");
-  std::cout << "scan: " << total_time << " " << (double)TEST_SIZE/(double)total_time*1000000.0 << std::endl;
+  std::cout << "scan " << SCAN_SIZE << ": " << total_time/1000000.0 << " " << (double)SCAN_TEST_SIZE/(double)total_time*1000000.0 << std::endl;
 
   // Delete
   // for (auto& k : key) {

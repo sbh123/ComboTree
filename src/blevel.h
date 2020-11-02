@@ -54,6 +54,24 @@ class BLevel {
         }
       }
 
+      Iter(const Entry* entry, const CLevel::MemControl* mem, uint64_t start_key)
+        : entry_(entry), buf_idx_(0)
+      {
+        if (entry_->clevel.HasSetup()) {
+          new (&citer_) CLevel::Iter(&entry_->clevel, mem, entry_->entry_key, start_key);
+          has_clevel_ = !citer_.end();
+          point_to_clevel_ = has_clevel_ && (entry_->buf.entries == 0 || citer_.key() < entry_->key(0));
+        } else {
+          has_clevel_ = false;
+          point_to_clevel_ = false;
+        }
+        while (!end()) {
+          if (key() >= start_key)
+            return;
+          next();
+        }
+      }
+
       ALWAYS_INLINE uint64_t key() const {
         return point_to_clevel_ ? citer_.key() : entry_->key(buf_idx_);
       }
@@ -129,6 +147,15 @@ class BLevel {
     {
       do {
         new (&iter_) BLevel::Entry::Iter(&blevel_->entries_[entry_idx_], &blevel_->clevel_mem_);
+      } while (iter_.end() && ++entry_idx_ < blevel_->Entries());
+    }
+
+    Iter(const BLevel* blevel, uint64_t start_key, uint64_t begin, uint64_t end)
+      : blevel_(blevel)
+    {
+      entry_idx_ = blevel_->Find_(start_key, begin, end);
+      do {
+        new (&iter_) BLevel::Entry::Iter(&blevel_->entries_[entry_idx_], &blevel_->clevel_mem_, start_key);
       } while (iter_.end() && ++entry_idx_ < blevel_->Entries());
     }
 

@@ -159,7 +159,7 @@ class __attribute__((packed)) CLevel {
    public:
     Iter() {}
 
-    Iter(const CLevel* clevel, const MemControl* mem, uint64_t start_key, uint64_t prefix_key)
+    Iter(const CLevel* clevel, const MemControl* mem, uint64_t prefix_key, uint64_t start_key)
       : mem_(mem), prefix_key(prefix_key)
     {
       cur_ = clevel->root(mem->BaseAddr())->FindLeaf(mem, start_key);
@@ -168,6 +168,12 @@ class __attribute__((packed)) CLevel {
       if (cur_ != nullptr) {
         bool exist;
         idx_ = cur_->leaf_buf.Find(start_key, exist);
+        if (idx_ >= cur_->leaf_buf.entries) {
+          do {
+            cur_ = (const Node*)cur_->GetNext(mem_->BaseAddr());
+          } while (cur_ != nullptr && cur_->leaf_buf.Empty());
+          idx_ = 0;
+        }
       }
     }
 

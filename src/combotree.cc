@@ -263,6 +263,19 @@ class ComboTree::IterImpl {
     }
   }
 
+  IterImpl(const ComboTree* tree, uint64_t start_key)
+    : tree_(tree)
+  {
+    if (tree_->blevel_ != nullptr) {
+      uint64_t begin, end;
+      tree_->alevel_->GetBLevelRange_(start_key, begin, end);
+      biter_ = new BLevel::Iter(tree_->blevel_.get(), start_key, begin, end);
+    } else {
+      assert(0);
+      biter_ = nullptr;
+    }
+  }
+
   ALWAYS_INLINE uint64_t key() const {
     return biter_->key();
   }
@@ -287,6 +300,8 @@ class ComboTree::IterImpl {
 
 /************************ ComboTree::Iter ************************/
 ComboTree::Iter::Iter(const ComboTree* tree) : pimpl_(new IterImpl(tree)) {}
+ComboTree::Iter::Iter(const ComboTree* tree, uint64_t start_key)
+  : pimpl_(new IterImpl(tree, start_key)) {}
 uint64_t ComboTree::Iter::key() const   { return pimpl_->key(); }
 uint64_t ComboTree::Iter::value() const { return pimpl_->value(); }
 bool ComboTree::Iter::next()            { return pimpl_->next(); }

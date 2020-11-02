@@ -52,10 +52,13 @@ class ComboTree {
   class Iter {
    public:
     Iter(const ComboTree* tree);
+    Iter(const ComboTree* tree, uint64_t start_key);
+
     uint64_t key() const;
     uint64_t value() const;
     bool next();
     bool end() const;
+
    private:
     IterImpl* pimpl_;
   };

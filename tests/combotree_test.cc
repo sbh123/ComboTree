@@ -6,7 +6,7 @@
 #include "combotree_config.h"
 #include "random.h"
 
-#define TEST_SIZE   40000000
+#define TEST_SIZE   4000000
 
 using combotree::ComboTree;
 using combotree::Random;
@@ -70,6 +70,19 @@ int main(void) {
     iter.next();
   }
   assert(iter.end());
+
+  for (int i = 0; i < 1000; ++i) {
+    uint64_t start_key = rnd.Next();
+    auto right_iter = right_kv.lower_bound(start_key);
+    ComboTree::Iter iter(tree, start_key);
+    for (int j = 0; j < 100 && right_iter != right_kv.cend(); ++j) {
+      assert(!iter.end());
+      assert(right_iter->first == iter.key());
+      assert(right_iter->second == iter.value());
+      right_iter++;
+      iter.next();
+    }
+  }
 
   return 0;
 }
