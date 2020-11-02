@@ -75,12 +75,18 @@ int main(void) {
     uint64_t start_key = rnd.Next();
     auto right_iter = right_kv.lower_bound(start_key);
     ComboTree::Iter iter(tree, start_key);
+    // ComboTree::Iter riter(tree);
+    // while (riter.key() < start_key)
+    //   riter.next();
+    // assert(right_iter->first == riter.key());
+    assert(right_iter->first == iter.key());
     for (int j = 0; j < 100 && right_iter != right_kv.cend(); ++j) {
       assert(!iter.end());
       assert(right_iter->first == iter.key());
       assert(right_iter->second == iter.value());
       right_iter++;
       iter.next();
+      // riter.next();
     }
   }
 

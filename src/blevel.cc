@@ -278,6 +278,7 @@ void BLevel::Expansion(BLevel* old_blevel) {
     old_entry = &old_blevel->entries_[old_index];
 #endif
     if (old_entry->clevel.HasSetup()) {
+      expand_meta.clevel_count++;
       CLevel::Iter citer(&old_entry->clevel, old_mem, old_entry->entry_key);
       int buf_idx = 0;
       while (!citer.end() || buf_idx != old_entry->buf.entries) {
@@ -287,12 +288,14 @@ void BLevel::Expansion(BLevel* old_blevel) {
         } else if (buf_idx == old_entry->buf.entries) {
           do {
             ExpandPut_(expand_meta, citer.key(), citer.value());
+            expand_meta.clevel_data_count++;
           } while (citer.next());
         } else if (old_entry->key(buf_idx) < citer.key()) {
           ExpandPut_(expand_meta, old_entry->key(buf_idx), old_entry->value(buf_idx));
           buf_idx++;
         } else {
           ExpandPut_(expand_meta, citer.key(), citer.value());
+          expand_meta.clevel_data_count++;
           citer.next();
         }
       }
@@ -304,6 +307,9 @@ void BLevel::Expansion(BLevel* old_blevel) {
   }
 
   ExpandFinish_(expand_meta);
+
+  LOG(Debug::INFO, "data in clevel: %ld, clevel count: %ld, pairs per clevel: %lf",
+      expand_meta.clevel_data_count, expand_meta.clevel_count, (double)expand_meta.clevel_data_count/(double)expand_meta.clevel_count);
 }
 
 uint64_t BLevel::Find_(uint64_t key, uint64_t begin, uint64_t end) const {

@@ -57,7 +57,17 @@ class BLevel {
       Iter(const Entry* entry, const CLevel::MemControl* mem, uint64_t start_key)
         : entry_(entry), buf_idx_(0)
       {
-        if (entry_->clevel.HasSetup()) {
+        if (start_key <= entry->entry_key) {
+          if (entry_->clevel.HasSetup()) {
+            new (&citer_) CLevel::Iter(&entry_->clevel, mem, entry_->entry_key);
+            has_clevel_ = !citer_.end();
+            point_to_clevel_ = has_clevel_ && (entry_->buf.entries == 0 || citer_.key() < entry_->key(0));
+          } else {
+            has_clevel_ = false;
+            point_to_clevel_ = false;
+          }
+          return;
+        } else if (entry_->clevel.HasSetup()) {
           new (&citer_) CLevel::Iter(&entry_->clevel, mem, entry_->entry_key, start_key);
           has_clevel_ = !citer_.end();
           point_to_clevel_ = has_clevel_ && (entry_->buf.entries == 0 || citer_.key() < entry_->key(0));
@@ -65,11 +75,10 @@ class BLevel {
           has_clevel_ = false;
           point_to_clevel_ = false;
         }
-        while (!end()) {
+        do {
           if (key() >= start_key)
             return;
-          next();
-        }
+        } while (next());
       }
 
       ALWAYS_INLINE uint64_t key() const {
@@ -194,11 +203,15 @@ class BLevel {
     uint64_t value_buf[BLEVEL_EXPAND_BUF_KEY];
     int buf_count;
     bool zero_entry;
+    uint64_t clevel_data_count;
+    uint64_t clevel_count;
 
     ExpandData(Entry* entries) {
       buf_count = 0;
       new_addr = entries;
       zero_entry = true;
+      clevel_data_count = 0;
+      clevel_count = 0;
     }
 
     void FlushToEntry(Entry* entry, int prefix_len, CLevel::MemControl* mem);

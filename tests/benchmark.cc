@@ -12,9 +12,9 @@
 #define LAST_EXPAND     600000
 #define GET_SIZE        1000000
 #define SCAN_TEST_SIZE  1000000
-#define SCAN_SIZE       100
 
 bool use_data_file = false;
+int SCAN_SIZE = 100;
 
 using combotree::ComboTree;
 using combotree::Random;
@@ -44,18 +44,23 @@ std::string human_readable(double size) {
   return out.str() + suffix[arr_len - 1];
 }
 
-int main(void) {
+int main(int argc, char** argv) {
 #if SERVER
   ComboTree* tree = new ComboTree("/pmem0/combotree/", (1024*1024*1024*100UL), true);
 #else
   ComboTree* tree = new ComboTree("/mnt/pmem0/", (1024*1024*512UL), true);
 #endif
 
+  if (argc == 2) {
+    SCAN_SIZE = atoi(argv[1]);
+  }
+
   std::cout << "TEST_SIZE:             " << TEST_SIZE << std::endl;
   std::cout << "LAST_EXPAND:           " << LAST_EXPAND << std::endl;
   std::cout << "BLEVEL_EXPAND_BUF_KEY: " << BLEVEL_EXPAND_BUF_KEY << std::endl;
   std::cout << "EXPANSION_FACTOR:      " << EXPANSION_FACTOR << std::endl;
   std::cout << "PMEMKV_THRESHOLD:      " << PMEMKV_THRESHOLD << std::endl;
+  std::cout << "SCAN_SIZE:             " << SCAN_SIZE << std::endl;
 
 #if STREAMING_STORE
   std::cout << "STREAMING_STORE = 1" << std::endl;
