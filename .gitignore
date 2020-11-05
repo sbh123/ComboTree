@@ -1,6 +1,7 @@
 ## Test
 a.out
-result.txt
+*.txt
+*.xlsx
 
 ## CMake
 build/
