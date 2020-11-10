@@ -4,10 +4,11 @@
 #include <cstdint>
 #include <cstddef>
 #include <vector>
+#include <shared_mutex>
+#include "combotree_config.h"
 #include "kvbuffer.h"
 #include "clevel.h"
 #include "pmem.h"
-#include "combotree_config.h"
 
 namespace combotree {
 
@@ -38,16 +39,26 @@ class BLevel {
     void FlushToCLevel(CLevel::MemControl* mem);
 
     class Iter {
+#if BUF_SORT
+#define entry_key(idx)    entry_->key(idx)
+#define entry_value(idx)  entry_->value(idx)
+#else
+#define entry_key(idx)    entry_->key(sorted_index_[idx])
+#define entry_value(idx)  entry_->value(sorted_index_[idx])
+#endif
      public:
       Iter() {}
 
       Iter(const Entry* entry, const CLevel::MemControl* mem)
         : entry_(entry), buf_idx_(0)
       {
+#if !defined(BUF_SORT) || BUF_SORT == 0
+        entry->buf.GetSortedIndex(sorted_index_);
+#endif
         if (entry_->clevel.HasSetup()) {
           new (&citer_) CLevel::Iter(&entry_->clevel, mem, entry_->entry_key);
           has_clevel_ = !citer_.end();
-          point_to_clevel_ = has_clevel_ && (entry_->buf.entries == 0 || citer_.key() < entry_->key(0));
+          point_to_clevel_ = has_clevel_ && (entry_->buf.entries == 0 || citer_.key() < entry_key(0));
         } else {
           has_clevel_ = false;
           point_to_clevel_ = false;
@@ -57,11 +68,14 @@ class BLevel {
       Iter(const Entry* entry, const CLevel::MemControl* mem, uint64_t start_key)
         : entry_(entry), buf_idx_(0)
       {
+#if !defined(BUF_SORT) || BUF_SORT == 0
+        entry->buf.GetSortedIndex(sorted_index_);
+#endif
         if (start_key <= entry->entry_key) {
           if (entry_->clevel.HasSetup()) {
             new (&citer_) CLevel::Iter(&entry_->clevel, mem, entry_->entry_key);
             has_clevel_ = !citer_.end();
-            point_to_clevel_ = has_clevel_ && (entry_->buf.entries == 0 || citer_.key() < entry_->key(0));
+            point_to_clevel_ = has_clevel_ && (entry_->buf.entries == 0 || citer_.key() < entry_key(0));
           } else {
             has_clevel_ = false;
             point_to_clevel_ = false;
@@ -70,7 +84,7 @@ class BLevel {
         } else if (entry_->clevel.HasSetup()) {
           new (&citer_) CLevel::Iter(&entry_->clevel, mem, entry_->entry_key, start_key);
           has_clevel_ = !citer_.end();
-          point_to_clevel_ = has_clevel_ && (entry_->buf.entries == 0 || citer_.key() < entry_->key(0));
+          point_to_clevel_ = has_clevel_ && (entry_->buf.entries == 0 || citer_.key() < entry_key(0));
         } else {
           has_clevel_ = false;
           point_to_clevel_ = false;
@@ -82,11 +96,11 @@ class BLevel {
       }
 
       ALWAYS_INLINE uint64_t key() const {
-        return point_to_clevel_ ? citer_.key() : entry_->key(buf_idx_);
+        return point_to_clevel_ ? citer_.key() : entry_key(buf_idx_);
       }
 
       ALWAYS_INLINE uint64_t value() const {
-        return point_to_clevel_ ? citer_.value() : entry_->value(buf_idx_);
+        return point_to_clevel_ ? citer_.value() : entry_value(buf_idx_);
       }
 
       ALWAYS_INLINE bool next() {
@@ -97,13 +111,13 @@ class BLevel {
             return buf_idx_ < entry_->buf.entries;
           } else {
             point_to_clevel_ = buf_idx_ >= entry_->buf.entries ||
-                               citer_.key() < entry_->key(buf_idx_);
+                               citer_.key() < entry_key(buf_idx_);
             return true;
           }
         } else if (has_clevel_) {
           buf_idx_++;
           point_to_clevel_ = buf_idx_ >= entry_->buf.entries ||
-                             citer_.key() < entry_->key(buf_idx_);
+                             citer_.key() < entry_key(buf_idx_);
           return true;
         } else {
           buf_idx_++;
@@ -121,7 +135,13 @@ class BLevel {
       bool has_clevel_;
       bool point_to_clevel_;
       CLevel::Iter citer_;
+#if !defined(BUF_SORT) || BUF_SORT == 0
+      int sorted_index_[16];
+#endif
     };
+
+#undef entry_key
+#undef entry_value
   }; // Entry
 
   static_assert(sizeof(BLevel::Entry) == 128, "sizeof(BLevel::Entry) != 128");
@@ -228,6 +248,9 @@ class BLevel {
   size_t nr_entries_;
   std::atomic<size_t> size_;
   CLevel::MemControl clevel_mem_;
+#ifndef NO_LOCK
+  std::shared_mutex* lock_;
+#endif
 
   // function
   uint64_t Find_(uint64_t key, uint64_t begin, uint64_t end) const;

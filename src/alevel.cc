@@ -1,4 +1,5 @@
 #include <iostream>
+#include "combotree_config.h"
 #include "alevel.h"
 
 namespace combotree {
@@ -11,7 +12,7 @@ ALevel::ALevel(std::shared_ptr<BLevel> blevel, int span)
   // actual blevel entry count is blevel_->nr_entry_ - 1
   // because the first entry in blevel is 0
   nr_blevel_entry_ = blevel_->Entries() - 1;
-  nr_entry_ = CDFIndex_(max_key_) + 1;
+  nr_entry_ = ((nr_blevel_entry_ + 1) / span_) + 1;
   entry_ = new Entry[nr_entry_];
 
   entry_[0].key = min_key_;

@@ -20,12 +20,11 @@ endif(SERVER)
 set(BLEVEL_EXPAND_BUF_KEY 2)
 set(DEFAULT_SPAN          2)
 set(PMEMKV_THRESHOLD      1024)
-set(CLEVEL_LEAF_ENTRY     14)
-set(CLEVEL_INDEX_ENTRY    15)
 set(EXPANSION_FACTOR      4)
 set(ENTRY_SIZE_FACTOR     1.2)
 set(STREAMING_STORE       0)
 set(STREAMING_LOAD        0)
+set(BUF_SORT              0)
 
 configure_file(
   "${PROJECT_SOURCE_DIR}/src/combotree_config.h.in"

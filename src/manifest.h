@@ -2,6 +2,7 @@
 #include <libpmem.h>
 #include <libpmemobj++/persistent_ptr.hpp>
 #include <libpmemobj++/make_persistent_atomic.hpp>
+#include "combotree_config.h"
 
 namespace combotree {
 

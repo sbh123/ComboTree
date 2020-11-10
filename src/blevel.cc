@@ -2,6 +2,8 @@
 #include <cassert>
 #include <iostream>
 #include <chrono>
+#include <shared_mutex>
+#include "combotree_config.h"
 #include "blevel.h"
 
 namespace combotree {
@@ -12,12 +14,10 @@ namespace { // anonymous namespace
 
 int64_t clevel_time = 0;
 
-// require: little endian
-uint64_t CommonPrefixBytes(uint64_t a, uint64_t b) {
-  for (int i = 7; i >= 0; --i)
-    if (((char*)&a)[i] != ((char*)&b)[i])
-      return 7 - i;
-  return 8;
+ALWAYS_INLINE int CommonPrefixBytes(uint64_t a, uint64_t b) {
+  // the result of clz is undefined if arg is 0
+  int leading_zero_cnt = (a ^ b) == 0 ? 64 : __builtin_clzll(a ^ b);
+  return leading_zero_cnt / 8;
 }
 
 #if STREAMING_LOAD
@@ -120,6 +120,7 @@ BLevel::Entry::Entry(uint64_t key, int prefix_len)
   buf.max_entries = buf.MaxEntries();
 }
 
+// return true if not exist before, return false if update.
 bool BLevel::Entry::Put(CLevel::MemControl* mem, uint64_t key, uint64_t value) {
   bool exist;
   int pos = buf.Find(key, exist);
@@ -128,9 +129,9 @@ bool BLevel::Entry::Put(CLevel::MemControl* mem, uint64_t key, uint64_t value) {
     *(uint64_t*)buf.pvalue(pos) = value;
     flush(buf.pvalue(pos));
     fence();
-    return true;
+    return false;
   } else {
-    if (buf.Full()) {
+    if ((!clevel.HasSetup() && buf.entries == buf.max_entries - 1) || buf.Full()) {
       FlushToCLevel(mem);
       pos = 0;
     }
@@ -167,14 +168,12 @@ void BLevel::Entry::FlushToCLevel(CLevel::MemControl* mem) {
   timer.Start();
 
   if (!clevel.HasSetup()) {
-    // data will be moved from blevel.buf to clevel.root.buf
-    // blevel.buf will be cleared inside Setup()
     clevel.Setup(mem, buf);
   } else {
     for (int i = 0; i < buf.entries; ++i)
       assert(clevel.Put(mem, buf.key(i, entry_key), buf.value(i)) == true);
-    buf.Clear();
   }
+  buf.Clear();
 
   clevel_time += timer.End();
 }
@@ -182,7 +181,11 @@ void BLevel::Entry::FlushToCLevel(CLevel::MemControl* mem) {
 
 /****************************** BLevel ******************************/
 BLevel::BLevel(size_t data_size)
-  : nr_entries_(0), size_(0), clevel_mem_(CLEVEL_PMEM_FILE, CLEVEL_PMEM_FILE_SIZE)
+  : nr_entries_(0), size_(0),
+    clevel_mem_(CLEVEL_PMEM_FILE, CLEVEL_PMEM_FILE_SIZE)
+#ifndef NO_LOCK
+    , lock_(nullptr)
+#endif
 {
   pmem_file_ = std::string(BLEVEL_PMEM_FILE) + std::to_string(file_id_);
   int is_pmem;
@@ -211,6 +214,9 @@ BLevel::~BLevel() {
     pmem_unmap(pmem_addr_, mapped_len_);
     std::filesystem::remove(pmem_file_);
   }
+#ifndef NO_LOCK
+  if (lock_) delete lock_;
+#endif
 }
 
 void BLevel::ExpandPut_(ExpandData& data, uint64_t key, uint64_t value) {
@@ -256,6 +262,10 @@ void BLevel::Expansion(std::vector<std::pair<uint64_t,uint64_t>>& data) {
   for (size_t i = 0; i < data.size(); ++i)
     ExpandPut_(expand_meta, data[i].first, data[i].second);
   ExpandFinish_(expand_meta);
+
+#ifndef NO_LOCK
+  lock_ = new std::shared_mutex[Entries()];
+#endif
 }
 
 void BLevel::Expansion(BLevel* old_blevel) {
@@ -272,36 +282,32 @@ void BLevel::Expansion(BLevel* old_blevel) {
 #endif
 
   while (old_index < old_blevel->Entries()) {
+#ifndef NO_LOCK
+    // lock before streaming load
+    std::lock_guard<std::shared_mutex> lock(old_blevel->lock_[old_index]);
+#endif
 #if STREAMING_LOAD
     stream_load_entry(&in_mem_entry, &old_blevel->entries_[old_index]);
 #else
     old_entry = &old_blevel->entries_[old_index];
 #endif
+
     if (old_entry->clevel.HasSetup()) {
       expand_meta.clevel_count++;
-      CLevel::Iter citer(&old_entry->clevel, old_mem, old_entry->entry_key);
-      int buf_idx = 0;
-      while (!citer.end() || buf_idx != old_entry->buf.entries) {
-        if (citer.end()) {
-          for (; buf_idx < old_entry->buf.entries; ++buf_idx)
-            ExpandPut_(expand_meta, old_entry->key(buf_idx), old_entry->value(buf_idx));
-        } else if (buf_idx == old_entry->buf.entries) {
-          do {
-            ExpandPut_(expand_meta, citer.key(), citer.value());
-            expand_meta.clevel_data_count++;
-          } while (citer.next());
-        } else if (old_entry->key(buf_idx) < citer.key()) {
-          ExpandPut_(expand_meta, old_entry->key(buf_idx), old_entry->value(buf_idx));
-          buf_idx++;
-        } else {
-          ExpandPut_(expand_meta, citer.key(), citer.value());
-          expand_meta.clevel_data_count++;
-          citer.next();
-        }
-      }
+      Entry::Iter biter(old_entry, old_mem);
+      do {
+        ExpandPut_(expand_meta, biter.key(), biter.value());
+      } while(biter.next());
     } else if (!old_entry->buf.Empty()) {
-      for (uint64_t i = 0; i < old_entry->buf.entries; ++i)
+      for (uint64_t i = 0; i < old_entry->buf.entries; ++i) {
+#if BUF_SORT
         ExpandPut_(expand_meta, old_entry->key(i), old_entry->value(i));
+#else
+        int sorted_index[16];
+        old_entry->buf.GetSortedIndex(sorted_index);
+        ExpandPut_(expand_meta, old_entry->key(sorted_index[i]), old_entry->value(sorted_index[i]));
+#endif
+      }
     }
     old_index++;
   }
@@ -310,6 +316,10 @@ void BLevel::Expansion(BLevel* old_blevel) {
 
   LOG(Debug::INFO, "data in clevel: %ld, clevel count: %ld, pairs per clevel: %lf",
       expand_meta.clevel_data_count, expand_meta.clevel_count, (double)expand_meta.clevel_data_count/(double)expand_meta.clevel_count);
+
+#ifndef NO_LOCK
+  lock_ = new std::shared_mutex[Entries()];
+#endif
 }
 
 uint64_t BLevel::Find_(uint64_t key, uint64_t begin, uint64_t end) const {
@@ -334,6 +344,9 @@ uint64_t BLevel::Find_(uint64_t key, uint64_t begin, uint64_t end) const {
 
 bool BLevel::Put(uint64_t key, uint64_t value, uint64_t begin, uint64_t end) {
   uint64_t idx = Find_(key, begin, end);
+#ifndef NO_LOCK
+  std::lock_guard<std::shared_mutex> lock(lock_[idx]);
+#endif
   if (entries_[idx].Put(&clevel_mem_, key, value)) {
     size_++;
     return true;
@@ -343,11 +356,17 @@ bool BLevel::Put(uint64_t key, uint64_t value, uint64_t begin, uint64_t end) {
 
 bool BLevel::Get(uint64_t key, uint64_t& value, uint64_t begin, uint64_t end) const {
   uint64_t idx = Find_(key, begin, end);
+#ifndef NO_LOCK
+  std::shared_lock<std::shared_mutex> lock(lock_[idx]);
+#endif
   return entries_[idx].Get((CLevel::MemControl*)&clevel_mem_, key, value);
 }
 
 bool BLevel::Delete(uint64_t key, uint64_t* value, uint64_t begin, uint64_t end) {
   uint64_t idx = Find_(key, begin, end);
+#ifndef NO_LOCK
+  std::lock_guard<std::shared_mutex> lock(lock_[idx]);
+#endif
   if (entries_[idx].Delete(&clevel_mem_, key, value)) {
     size_--;
     return true;

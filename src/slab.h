@@ -6,6 +6,7 @@
 #include <shared_mutex>
 #include <libpmemobj++/persistent_ptr.hpp>
 #include <libpmemobj++/make_persistent_array_atomic.hpp>
+#include "combotree_config.h"
 
 namespace combotree {
 

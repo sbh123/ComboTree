@@ -44,6 +44,9 @@ class __attribute__((packed)) CLevel {
     Node* Put(MemControl* mem, uint64_t key, uint64_t value, Node* parent);
     bool Get(MemControl* mem, uint64_t key, uint64_t& value) const;
     bool Delete(MemControl* mem, uint64_t key, uint64_t* value);
+#if !defined(BUF_SORT) || BUF_SORT == 0
+    void PutChild(MemControl* mem, void* key, const Node* child);
+#endif
 
     ALWAYS_INLINE Node* GetChild(int pos, uint64_t base_addr) const {
       if (pos == 0)
@@ -66,8 +69,8 @@ class __attribute__((packed)) CLevel {
       while (node->type != Type::LEAF) {
         assert(node->type != Type::INVALID);
         bool exist;
-        int pos = node->index_buf.Find(key, exist);
-        node = node->GetChild(exist ? pos + 1 : pos, mem->BaseAddr());
+        int pos = node->index_buf.FindLE(key, exist);
+        node = node->GetChild(pos+1, mem->BaseAddr());
       }
       return node;
     }
@@ -165,14 +168,25 @@ class __attribute__((packed)) CLevel {
       cur_ = clevel->root(mem->BaseAddr())->FindLeaf(mem, start_key);
       while (cur_ != nullptr && cur_->leaf_buf.Empty())
         cur_ = (const Node*)cur_->GetNext(mem_->BaseAddr());
-      if (cur_ != nullptr) {
+      if (cur_) {
+#if BUF_SORT
         bool exist;
-        idx_ = cur_->leaf_buf.Find(start_key, exist);
+        idx_ = cur_->leaf_buf.FindLE(start_key, exist);
+        idx_ = exist ? idx_ : idx_ + 1;
+#else
+        cur_->leaf_buf.GetSortedIndex(sorted_index_);
+        for (idx_ = 0; idx_ < cur_->leaf_buf.entries; ++idx_)
+          if (cur_->leaf_buf.key(sorted_index_[idx_], prefix_key) >= start_key)
+            break;
+#endif
         if (idx_ >= cur_->leaf_buf.entries) {
           do {
             cur_ = (const Node*)cur_->GetNext(mem_->BaseAddr());
           } while (cur_ != nullptr && cur_->leaf_buf.Empty());
           idx_ = 0;
+#if !defined(BUF_SORT) || BUF_SORT == 0
+          if (cur_) cur_->leaf_buf.GetSortedIndex(sorted_index_);
+#endif
         }
       }
     }
@@ -184,24 +198,38 @@ class __attribute__((packed)) CLevel {
       while (cur_ != nullptr && cur_->leaf_buf.Empty())
         cur_ = (const Node*)cur_->GetNext(mem_->BaseAddr());
       idx_ = 0;
+#if !defined(BUF_SORT) || BUF_SORT == 0
+      if (cur_) cur_->leaf_buf.GetSortedIndex(sorted_index_);
+#endif
     }
 
     ALWAYS_INLINE uint64_t key() const {
+#if BUF_SORT
       return cur_->leaf_buf.key(idx_, prefix_key);
+#else
+      return cur_->leaf_buf.key(sorted_index_[idx_], prefix_key);
+#endif
     }
 
     ALWAYS_INLINE uint64_t value() const {
+#if BUF_SORT
       return cur_->leaf_buf.value(idx_);
+#else
+      return cur_->leaf_buf.value(sorted_index_[idx_]);
+#endif
     }
 
     // return false if reachs end
     ALWAYS_INLINE bool next() {
       idx_++;
-      if (idx_ >= cur_->index_buf.entries) {
+      if (idx_ >= cur_->leaf_buf.entries) {
         do {
           cur_ = (const Node*)cur_->GetNext(mem_->BaseAddr());
         } while (cur_ != nullptr && cur_->leaf_buf.Empty());
         idx_ = 0;
+#if !defined(BUF_SORT) || BUF_SORT == 0
+        if (cur_) cur_->leaf_buf.GetSortedIndex(sorted_index_);
+#endif
         return cur_ == nullptr ? false : true;
       } else {
         return true;
@@ -217,6 +245,9 @@ class __attribute__((packed)) CLevel {
     uint64_t prefix_key;
     const Node* cur_;
     int idx_;   // current index in node
+#if !defined(BUF_SORT) || BUF_SORT == 0
+    int sorted_index_[16];
+#endif
   };
 
   CLevel();

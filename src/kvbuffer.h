@@ -4,6 +4,8 @@
 #include <cstdint>
 #include <cstring>
 #include <cassert>
+#include <algorithm>
+#include "combotree_config.h"
 #include "pmem.h"
 
 namespace combotree {
@@ -62,10 +64,6 @@ struct KVBuffer {
 
     return (key_prefix & prefix_mask[prefix_bytes]) |
            ((*(uint64_t*)pkey(idx)) & suffix_mask[suffix_bytes]);
-
-    // uint64_t ret = *(uint64_t*)pkey(idx);
-    // memcpy(((uint8_t*)&ret)+suffix_bytes, ((uint8_t*)&key_prefix)+suffix_bytes, prefix_bytes);
-    // return ret;
   }
 
   ALWAYS_INLINE uint64_t value(int idx) const {
@@ -74,6 +72,7 @@ struct KVBuffer {
   }
 
   int Find(uint64_t target, bool& find) const {
+#if BUF_SORT
     int left = 0;
     int right = entries - 1;
     while (left <= right) {
@@ -90,6 +89,49 @@ struct KVBuffer {
     }
     find = false;
     return left;
+#else
+    for (int i = 0; i < entries; ++i) {
+      if (!memcmp(pkey(i), &target, suffix_bytes)) {
+        find = true;
+        return i;
+      }
+    }
+    find = false;
+    return entries;
+#endif // BUF_SORT
+  }
+
+  // find first entry greater or equal to target
+  int FindLE(uint64_t target, bool& find) const {
+#if BUF_SORT
+    for (int i = 0; i < entries; ++i) {
+      uint64_t cur_key = key(i, target);
+      if (cur_key == target) {
+        find = true;
+        return i;
+      } else if (cur_key > target) {
+        find = false;
+        return i - 1;
+      }
+    }
+    find = false;
+    return entries - 1;
+#else
+    int index = -1;
+    uint64_t max_smaller_key = 0;
+    for (int i = 0; i < entries; ++i) {
+      uint64_t cur_key = key(i, target);
+      if (cur_key == target) {
+        find = true;
+        return i;
+      } else if (target > cur_key && cur_key > max_smaller_key) {
+        index = i;
+        max_smaller_key = cur_key;
+      }
+    }
+    find = false;
+    return index;
+#endif
   }
 
   ALWAYS_INLINE void Clear() {
@@ -99,6 +141,7 @@ struct KVBuffer {
   }
 
   ALWAYS_INLINE bool Put(int pos, void* new_key, uint64_t value) {
+#if BUF_SORT
     memmove(pkey(pos+1), pkey(pos), suffix_bytes*(entries-pos));
     memmove(pvalue(entries), pvalue(entries-1), value_size*(entries-pos));
 
@@ -111,6 +154,15 @@ struct KVBuffer {
     flush(pvalue(pos));
     fence();
     return true;
+#else
+    memcpy(pkey(pos), new_key, suffix_bytes);
+    memcpy(pvalue(pos), &value, value_size);
+    entries++;
+    flush(pvalue(pos));
+    fence();
+    flush(&meta);
+    return true;
+#endif // BUF_SORT
   }
 
   ALWAYS_INLINE bool Put(int pos, uint64_t new_key, uint64_t value) {
@@ -118,6 +170,7 @@ struct KVBuffer {
   }
 
   ALWAYS_INLINE bool Delete(int pos) {
+#if BUF_SORT
     assert(pos < entries && pos >= 0);
     memmove(pkey(pos), pkey(pos+1), suffix_bytes*(entries-pos-1));
     memmove(pvalue(entries-2), pvalue(entries-1), value_size*(entries-pos-1));
@@ -126,14 +179,69 @@ struct KVBuffer {
     flush(pvalue(pos));
     fence();
     return true;
+#else
+    if (pos != entries - 1) {
+      // move key first, the write is an atomic write.
+      // if system crashed after key move and before update
+      // of entries, it will be fixed during recovery.
+      memcpy(pkey(pos), pkey(entries - 1), suffix_bytes);
+      memcpy(pvalue(pos), pvalue(entries - 1), value_size);
+      flush(pkey(pos));
+      flush(pvalue(pos));
+      fence();
+    }
+    entries--;
+    flush(&meta);
+    fence();
+    return true;
+#endif // BUF_SORT
   }
 
-  void MoveData(KVBuffer<buf_size, value_size>* dest, int start_pos, int entry_count) {
+#if BUF_SORT
+  // move data from this.[start_pos, entries) to dest.[0,entries-start_pos),
+  // the start_pos and entries are the position of sorted order.
+  void MoveData(KVBuffer<buf_size, value_size>* dest, int start_pos) {
+    int entry_count = entries - start_pos;
     memcpy(dest->pkey(0), pkey(start_pos), suffix_bytes*entry_count);
     memcpy(dest->pvalue(entry_count-1), pvalue(start_pos+entry_count-1), value_size*entry_count);
     entries -= entry_count;
     dest->entries = entry_count;
   }
+#else
+  int GetSortedIndex(int sorted_index[buf_size/9]) const {
+    uint64_t keys[buf_size/9];
+    for (int i = 0; i < entries; ++i) {
+      keys[i] = key(i, 0);  // prefix does not matter
+      sorted_index[i] = i;
+    }
+    std::sort(&sorted_index[0], &sorted_index[entries],
+      [&keys](uint64_t a, uint64_t b) { return keys[a] < keys[b]; });
+    for (int i = 0; i < entries - 1; ++i) {
+      assert(keys[sorted_index[i]] < keys[sorted_index[i + 1]]);
+    }
+    return entries;
+  }
+
+  // copy data from this.[start_pos, entries) to dest.[0,entries-start_pos),
+  // the start_pos and entries are the position of sorted order.
+  void CopyData(KVBuffer<buf_size, value_size>* dest, int start_pos, int* sorted_index) const {
+    for (int i = start_pos; i < entries; ++i) {
+      memcpy(dest->pkey(i-start_pos), pkey(sorted_index[i]), suffix_bytes);
+      memcpy(dest->pvalue(i-start_pos), pvalue(sorted_index[i]), value_size);
+    }
+    dest->entries = entries - start_pos;
+  }
+
+  void DeleteData(int start_pos, int* sorted_index) {
+    int index[buf_size/9];
+    int delete_cnt = entries - start_pos;
+    memcpy(&index[0], &sorted_index[start_pos], delete_cnt*sizeof(int));
+    std::sort(&index[0], &index[delete_cnt]);
+    // delete entries from bigger index to smaller index
+    for (int i = delete_cnt - 1; i >= 0; --i)
+      Delete(index[i]);
+  }
+#endif // BUF_SORT
 };
 
 }

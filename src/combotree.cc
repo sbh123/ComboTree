@@ -162,6 +162,7 @@ bool ComboTree::Put(uint64_t key, uint64_t value) {
       ret = alevel_->Put(key, value);
       if (Size() >= EXPANSION_FACTOR * BLEVEL_EXPAND_BUF_KEY * blevel_->Entries())
         ExpandComboTree_();
+      ret = true;
       break;
     } else if (status_.load() == State::COMBO_TREE_EXPANDING) {
       assert(0);

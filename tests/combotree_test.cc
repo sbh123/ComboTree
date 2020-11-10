@@ -54,7 +54,7 @@ int main(void) {
     assert(value == kv.second);
   }
 
-  for (uint64_t i = 0; i < TEST_SIZE; ++i) {
+  for (uint64_t i = 0; i < TEST_SIZE * 2; ++i) {
     if (right_kv.count(i) == 0) {
       assert(tree->Get(i, value) == false);
     }
@@ -82,6 +82,13 @@ int main(void) {
     assert(right_iter->first == iter.key());
     for (int j = 0; j < 100 && right_iter != right_kv.cend(); ++j) {
       assert(!iter.end());
+      // assert(!riter.end());
+      // uint64_t rkey = riter.key();
+      // uint64_t rvalue = riter.value();
+      // uint64_t k = iter.key();
+      // uint64_t v = iter.value();
+      // assert(right_iter->first == riter.key());
+      // assert(right_iter->second == riter.value());
       assert(right_iter->first == iter.key());
       assert(right_iter->second == iter.value());
       right_iter++;

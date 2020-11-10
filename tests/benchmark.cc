@@ -13,7 +13,7 @@
 #define GET_SIZE        1000000
 #define SCAN_TEST_SIZE  1000000
 
-bool use_data_file = false;
+bool use_data_file = true;
 int SCAN_SIZE = 100;
 
 using combotree::ComboTree;
