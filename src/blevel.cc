@@ -295,9 +295,12 @@ void BLevel::Expansion(BLevel* old_blevel) {
     if (old_entry->clevel.HasSetup()) {
       expand_meta.clevel_count++;
       Entry::Iter biter(old_entry, old_mem);
+      uint64_t total_cnt = 0;
       do {
+        total_cnt++;
         ExpandPut_(expand_meta, biter.key(), biter.value());
       } while(biter.next());
+      expand_meta.clevel_data_count += total_cnt - old_entry->buf.entries;
     } else if (!old_entry->buf.Empty()) {
       for (uint64_t i = 0; i < old_entry->buf.entries; ++i) {
 #if BUF_SORT

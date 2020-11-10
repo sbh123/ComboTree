@@ -17,14 +17,14 @@ else()
   set(BLEVEL_PMEM_FILE      \"/mnt/pmem0/combotree-blevel-\")
   set(SERVER                0)
 endif(SERVER)
-set(BLEVEL_EXPAND_BUF_KEY 2)
+set(BLEVEL_EXPAND_BUF_KEY 6)
+set(EXPANSION_FACTOR      4)
 set(DEFAULT_SPAN          2)
 set(PMEMKV_THRESHOLD      1024)
-set(EXPANSION_FACTOR      4)
 set(ENTRY_SIZE_FACTOR     1.2)
 set(STREAMING_STORE       0)
 set(STREAMING_LOAD        0)
-set(BUF_SORT              0)
+set(BUF_SORT              1)
 
 configure_file(
   "${PROJECT_SOURCE_DIR}/src/combotree_config.h.in"
