@@ -13,7 +13,7 @@
 size_t TEST_SIZE      = 10000000;
 size_t LAST_EXPAND    = 6000000;
 size_t GET_SIZE       = 1000000;
-size_t SCAN_TEST_SIZE = 1000000;
+size_t SCAN_TEST_SIZE = 500000000;
 
 int thread_num        = 4;
 bool use_data_file    = false;
@@ -112,10 +112,6 @@ int main(int argc, char** argv) {
   }
   if (GET_SIZE > TEST_SIZE) {
     std::cerr << "GET_SIZE < TEST_SIZE!" << std::endl;
-    return -1;
-  }
-  if (SCAN_TEST_SIZE > TEST_SIZE) {
-    std::cerr << "SCAN_TEST_SIZE < TEST_SIZE!" << std::endl;
     return -1;
   }
 
@@ -250,14 +246,15 @@ int main(int argc, char** argv) {
   }
 
   // scan
-  per_thread_size = SCAN_TEST_SIZE / thread_num;
   for (auto scan : scan_size) {
+    size_t total_size = std::min(SCAN_TEST_SIZE / scan, TEST_SIZE);
+    per_thread_size = total_size / thread_num;
     timer.Clear();
     timer.Record("start");
     for (int i = 0; i < thread_num; ++i) {
       threads.emplace_back([=,&key](){
         size_t start_pos = i*per_thread_size;
-        size_t size = (i == thread_num-1) ? SCAN_TEST_SIZE-(thread_num-1)*per_thread_size : per_thread_size;
+        size_t size = (i == thread_num-1) ? total_size-(thread_num-1)*per_thread_size : per_thread_size;
         for (size_t j = 0; j < size; ++j) {
           uint64_t start_key = key[start_pos+j];
           ComboTree::NoSortIter iter(tree, start_key);
@@ -276,18 +273,19 @@ int main(int argc, char** argv) {
     threads.clear();
     timer.Record("stop");
     total_time = timer.Microsecond("stop", "start");
-    std::cout << "scan " << scan << ": " << total_time/1000000.0 << " " << (double)SCAN_TEST_SIZE/(double)total_time*1000000.0 << std::endl;
+    std::cout << "scan " << scan << ": " << total_time/1000000.0 << " " << (double)total_size/(double)total_time*1000000.0 << std::endl;
   }
 
   // sort_scan
-  per_thread_size = SCAN_TEST_SIZE / thread_num;
   for (auto scan : sort_scan_size) {
+    size_t total_size = std::min(SCAN_TEST_SIZE / scan, TEST_SIZE);
+    per_thread_size = total_size / thread_num;
     timer.Clear();
     timer.Record("start");
     for (int i = 0; i < thread_num; ++i) {
       threads.emplace_back([=,&key](){
         size_t start_pos = i*per_thread_size;
-        size_t size = (i == thread_num-1) ? SCAN_TEST_SIZE-(thread_num-1)*per_thread_size : per_thread_size;
+        size_t size = (i == thread_num-1) ? total_size-(thread_num-1)*per_thread_size : per_thread_size;
         for (size_t j = 0; j < size; ++j) {
           uint64_t start_key = key[start_pos+j];
           ComboTree::Iter iter(tree, start_key);
@@ -307,7 +305,7 @@ int main(int argc, char** argv) {
     threads.clear();
     timer.Record("stop");
     total_time = timer.Microsecond("stop", "start");
-    std::cout << "sort scan " << scan << ": " << total_time/1000000.0 << " " << (double)SCAN_TEST_SIZE/(double)total_time*1000000.0 << std::endl;
+    std::cout << "sort scan " << scan << ": " << total_time/1000000.0 << " " << (double)total_size/(double)total_time*1000000.0 << std::endl;
   }
 
   // Delete
