@@ -264,7 +264,7 @@ bool ComboTree::Delete(uint64_t key) {
 class ComboTree::IterImpl {
  public:
   IterImpl(const ComboTree* tree)
-    : tree_(tree)
+    : tree_(tree), biter_(nullptr)
   {
     if (tree_->blevel_ != nullptr) {
       biter_ = new BLevel::Iter(tree_->blevel_.get());
@@ -275,7 +275,7 @@ class ComboTree::IterImpl {
   }
 
   IterImpl(const ComboTree* tree, uint64_t start_key)
-    : tree_(tree)
+    : tree_(tree), biter_(nullptr)
   {
     if (tree_->blevel_ != nullptr) {
       uint64_t begin, end;
@@ -285,6 +285,11 @@ class ComboTree::IterImpl {
       assert(0);
       biter_ = nullptr;
     }
+  }
+
+  ~IterImpl() {
+    if (biter_)
+      delete biter_;
   }
 
   ALWAYS_INLINE uint64_t key() const {

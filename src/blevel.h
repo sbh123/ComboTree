@@ -172,20 +172,51 @@ class BLevel {
   class Iter {
    public:
     Iter(const BLevel* blevel)
-      : blevel_(blevel), entry_idx_(0)
+      : blevel_(blevel), entry_idx_(0), locked_(false)
     {
-      do {
+#ifndef NO_LOCK
+      blevel_->lock_[entry_idx_].lock_shared();
+      locked_ = true;
+#endif
+      new (&iter_) BLevel::Entry::Iter(&blevel_->entries_[entry_idx_], &blevel_->clevel_mem_);
+      while (iter_.end() && ++entry_idx_ < blevel_->Entries()) {
+#ifndef NO_LOCK
+        blevel_->lock_[entry_idx_-1].unlock_shared();
+        blevel_->lock_[entry_idx_].lock_shared();
+#endif
         new (&iter_) BLevel::Entry::Iter(&blevel_->entries_[entry_idx_], &blevel_->clevel_mem_);
-      } while (iter_.end() && ++entry_idx_ < blevel_->Entries());
+      }
+      if (iter_.end()) {
+        blevel_->lock_[entry_idx_].unlock_shared();
+        locked_ = false;
+      }
     }
 
     Iter(const BLevel* blevel, uint64_t start_key, uint64_t begin, uint64_t end)
-      : blevel_(blevel)
+      : blevel_(blevel), locked_(false)
     {
       entry_idx_ = blevel_->Find_(start_key, begin, end);
-      do {
+#ifndef NO_LOCK
+      blevel_->lock_[entry_idx_].lock_shared();
+      locked_ = true;
+#endif
+      new (&iter_) BLevel::Entry::Iter(&blevel_->entries_[entry_idx_], &blevel_->clevel_mem_, start_key);
+      while (iter_.end() && ++entry_idx_ < blevel_->Entries()) {
+#ifndef NO_LOCK
+        blevel_->lock_[entry_idx_-1].unlock_shared();
+        blevel_->lock_[entry_idx_].lock_shared();
+#endif
         new (&iter_) BLevel::Entry::Iter(&blevel_->entries_[entry_idx_], &blevel_->clevel_mem_, start_key);
-      } while (iter_.end() && ++entry_idx_ < blevel_->Entries());
+      }
+      if (iter_.end()) {
+        blevel_->lock_[entry_idx_].unlock_shared();
+        locked_ = false;
+      }
+    }
+
+    ~Iter() {
+      if (locked_)
+        blevel_->lock_[entry_idx_].unlock_shared();
     }
 
     ALWAYS_INLINE uint64_t key() const {
@@ -198,8 +229,17 @@ class BLevel {
 
     ALWAYS_INLINE bool next() {
       if (!iter_.next()) {
-        while (iter_.end() && ++entry_idx_ < blevel_->Entries())
+        while (iter_.end() && ++entry_idx_ < blevel_->Entries()) {
+#ifndef NO_LOCK
+          blevel_->lock_[entry_idx_-1].unlock_shared();
+          blevel_->lock_[entry_idx_].lock_shared();
+#endif
           new (&iter_) BLevel::Entry::Iter(&blevel_->entries_[entry_idx_], &blevel_->clevel_mem_);
+        }
+        if (iter_.end()) {
+          blevel_->lock_[entry_idx_].unlock_shared();
+          locked_ = false;
+        }
         return entry_idx_ < blevel_->Entries();
       }
       return true;
@@ -213,6 +253,7 @@ class BLevel {
     const BLevel* blevel_;
     uint64_t entry_idx_;
     BLevel::Entry::Iter iter_;
+    bool locked_;
   };
 
   friend Test;

@@ -268,7 +268,8 @@ void BLevel::Expansion(std::vector<std::pair<uint64_t,uint64_t>>& data) {
   ExpandFinish_(expand_meta);
 
 #ifndef NO_LOCK
-  lock_ = new std::shared_mutex[Entries()];
+  // plus one because of scan
+  lock_ = new std::shared_mutex[Entries()+1];
 #endif
 }
 
@@ -325,7 +326,8 @@ void BLevel::Expansion(BLevel* old_blevel) {
       expand_meta.clevel_data_count, expand_meta.clevel_count, (double)expand_meta.clevel_data_count/(double)expand_meta.clevel_count);
 
 #ifndef NO_LOCK
-  lock_ = new std::shared_mutex[Entries()];
+  // plus one because of scan
+  lock_ = new std::shared_mutex[Entries()+1];
 #endif
 }
 
