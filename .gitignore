@@ -20,4 +20,4 @@ CTestTestfile.cmake
 _deps
 
 ## VSCode
-.vscode/
+.vscode

@@ -15,8 +15,8 @@ size_t GET_SIZE       = 1000000;
 size_t SCAN_TEST_SIZE = 1000000;
 size_t SCAN_SIZE      = 100;
 
-int thread_num      = 4;
-bool use_data_file  = true;
+int thread_num        = 4;
+bool use_data_file    = true;
 
 using combotree::ComboTree;
 using combotree::Random;
