@@ -131,7 +131,11 @@ bool BLevel::Entry::Put(CLevel::MemControl* mem, uint64_t key, uint64_t value) {
     fence();
     return false;
   } else {
+#if BUF_SORT
+    if (buf.Full()) {
+#else
     if ((!clevel.HasSetup() && buf.entries == buf.max_entries - 1) || buf.Full()) {
+#endif
       FlushToCLevel(mem);
       pos = 0;
     }

@@ -8,7 +8,7 @@
 using combotree::CLevel;
 using combotree::Random;
 
-#define TEST_SIZE 200000
+#define TEST_SIZE 1000000
 
 int main(void) {
   std::vector<uint64_t> key;
@@ -20,10 +20,10 @@ int main(void) {
   for (int i = 0; i < TEST_SIZE; ++i)
     std::swap(key[i], key[rnd.Next()]);
 
-  void* base_addr = malloc(TEST_SIZE * 400);
+  void* base_addr = malloc(TEST_SIZE * 40);
   std::cout << "begin addr: " << base_addr << std::endl;
   std::cout << "end addr:   " << (void*)((char*)base_addr + (TEST_SIZE * 40)) << std::endl;
-  CLevel::MemControl mem(base_addr, TEST_SIZE * 400);
+  CLevel::MemControl mem(base_addr, TEST_SIZE * 40);
 
   CLevel clevel;
   clevel.Setup(&mem, 4);

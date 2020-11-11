@@ -14,6 +14,7 @@
 namespace combotree {
 
 std::mutex log_mutex;
+int64_t expand_time = 0;
 
 ComboTree::ComboTree(std::string pool_dir, size_t pool_size, bool create)
     : pool_dir_(pool_dir), pool_size_(pool_size),
@@ -104,6 +105,9 @@ void ComboTree::ChangeToComboTree_() {
 void ComboTree::ExpandComboTree_() {
   LOG(Debug::INFO, "start to expand combotree. current size is %ld", Size());
 
+  Timer timer;
+  timer.Start();
+
   // change status
   State tmp = State::USING_COMBO_TREE;
   if (!status_.compare_exchange_strong(tmp, State::COMBO_TREE_EXPANDING)) {
@@ -135,11 +139,13 @@ void ComboTree::ExpandComboTree_() {
 
     old_alevel.reset();
     old_blevel.reset();
-
-    LOG(Debug::INFO, "finish expanding combotree. current size is %ld, current entry count is %ld", Size(), blevel_->Entries());
-    permit_delete_.store(true);
   // });
   // expandion_thread.detach();
+
+  expand_time += timer.End();
+
+  LOG(Debug::INFO, "finish expanding combotree. current size is %ld, current entry count is %ld, expansion time is %lds", Size(), blevel_->Entries(), (double)expand_time/1000000.0);
+  permit_delete_.store(true);
 }
 
 bool ComboTree::Put(uint64_t key, uint64_t value) {
