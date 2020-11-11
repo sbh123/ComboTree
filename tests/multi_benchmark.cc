@@ -102,10 +102,6 @@ int main(int argc, char** argv) {
     }
   }
 
-  TEST_SIZE      = (TEST_SIZE / thread_num) * thread_num;
-  LAST_EXPAND    = (LAST_EXPAND / thread_num) * thread_num;
-  GET_SIZE       = (GET_SIZE / thread_num) * thread_num;
-  SCAN_TEST_SIZE = (SCAN_TEST_SIZE / thread_num) * thread_num;
   if (LAST_EXPAND > TEST_SIZE) {
     std::cerr << "LAST_EXPAND < TEST_SIZE!" << std::endl;
     return -1;
@@ -154,6 +150,7 @@ int main(int argc, char** argv) {
       key.push_back(k);
       assert(data.good());
     }
+    std::cout << "finish read data.dat" << std::endl;
   } else {
     Random rnd(0, TEST_SIZE-1);
     for (size_t i = 0; i < TEST_SIZE; ++i)
@@ -178,7 +175,8 @@ int main(int argc, char** argv) {
   for (int i = 0; i < thread_num; ++i) {
     threads.emplace_back([=,&key](){
       size_t start_pos = i*per_thread_size;
-      for (size_t j = 0; j < per_thread_size; ++j)
+      size_t size = (i == thread_num-1) ? LAST_EXPAND-(thread_num-1)*per_thread_size : per_thread_size;
+      for (size_t j = 0; j < size; ++j)
         assert(tree->Put(key[start_pos+j], key[start_pos+j]) == true);
     });
   }
@@ -191,7 +189,8 @@ int main(int argc, char** argv) {
   for (int i = 0; i < thread_num; ++i) {
     threads.emplace_back([=,&key](){
       size_t start_pos = i*per_thread_size+LAST_EXPAND;
-      for (size_t j = 0; j < per_thread_size; ++j)
+      size_t size = (i == thread_num-1) ? TEST_SIZE-LAST_EXPAND-(thread_num-1)*per_thread_size : per_thread_size;
+      for (size_t j = 0; j < size; ++j)
         assert(tree->Put(key[start_pos+j], key[start_pos+j]) == true);
     });
   }
@@ -224,8 +223,9 @@ int main(int argc, char** argv) {
   for (int i = 0; i < thread_num; ++i) {
     threads.emplace_back([=,&key](){
       size_t start_pos = i*per_thread_size;
+      size_t size = (i == thread_num-1) ? GET_SIZE-(thread_num-1)*per_thread_size : per_thread_size;
       size_t value;
-      for (size_t j = 0; j < per_thread_size; ++j) {
+      for (size_t j = 0; j < size; ++j) {
         assert(tree->Get(key[start_pos+j], value) == true);
         assert(value == key[start_pos+j]);
       }
@@ -244,14 +244,15 @@ int main(int argc, char** argv) {
   }
 
   // scan
+  per_thread_size = SCAN_TEST_SIZE / thread_num;
   for (auto scan : scan_size) {
     timer.Clear();
-    per_thread_size = SCAN_TEST_SIZE / thread_num;
     timer.Record("start");
     for (int i = 0; i < thread_num; ++i) {
       threads.emplace_back([=,&key](){
         size_t start_pos = i*per_thread_size;
-        for (size_t j = 0; j < per_thread_size; ++j) {
+        size_t size = (i == thread_num-1) ? SCAN_TEST_SIZE-(thread_num-1)*per_thread_size : per_thread_size;
+        for (size_t j = 0; j < size; ++j) {
           uint64_t start_key = key[start_pos+j];
           ComboTree::Iter iter(tree, start_key);
           for (size_t k = 0; k < scan; ++k) {
