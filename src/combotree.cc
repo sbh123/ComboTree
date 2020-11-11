@@ -103,19 +103,19 @@ void ComboTree::ChangeToComboTree_() {
 }
 
 void ComboTree::ExpandComboTree_() {
-  LOG(Debug::INFO, "start to expand combotree. current size is %ld", Size());
-
-  Timer timer;
-  timer.Start();
-
   // change status
   State tmp = State::USING_COMBO_TREE;
   if (!status_.compare_exchange_strong(tmp, State::COMBO_TREE_EXPANDING)) {
-    LOG(Debug::WARNING, "another thread is expanding combotree! exit.");
+    // LOG(Debug::WARNING, "another thread is expanding combotree! exit.");
     return;
   }
 
   std::this_thread::sleep_for(std::chrono::milliseconds(1));
+
+  LOG(Debug::INFO, "start to expand combotree. current size is %ld", Size());
+
+  Timer timer;
+  timer.Start();
 
   permit_delete_.store(false);
   std::shared_ptr<BLevel> old_blevel = blevel_;
