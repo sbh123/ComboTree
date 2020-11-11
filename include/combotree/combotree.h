@@ -47,6 +47,7 @@ class ComboTree {
 
  private:
   class IterImpl;
+  class NoSortIterImpl;
 
  public:
   class Iter {
@@ -61,6 +62,20 @@ class ComboTree {
 
    private:
     IterImpl* pimpl_;
+  };
+
+  class NoSortIter {
+   public:
+    NoSortIter(const ComboTree* tree);
+    NoSortIter(const ComboTree* tree, uint64_t start_key);
+
+    uint64_t key() const;
+    uint64_t value() const;
+    bool next();
+    bool end() const;
+
+   private:
+    NoSortIterImpl* pimpl_;
   };
 
  private:

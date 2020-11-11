@@ -313,6 +313,59 @@ class ComboTree::IterImpl {
   BLevel::Iter* biter_;
 };
 
+/********************* ComboTree::NoSortIterImpl *********************/
+class ComboTree::NoSortIterImpl {
+ public:
+  NoSortIterImpl(const ComboTree* tree)
+    : tree_(tree), biter_(nullptr)
+  {
+    if (tree_->blevel_ != nullptr) {
+      biter_ = new BLevel::NoSortIter(tree_->blevel_.get());
+    } else {
+      assert(0);
+      biter_ = nullptr;
+    }
+  }
+
+  NoSortIterImpl(const ComboTree* tree, uint64_t start_key)
+    : tree_(tree), biter_(nullptr)
+  {
+    if (tree_->blevel_ != nullptr) {
+      uint64_t begin, end;
+      tree_->alevel_->GetBLevelRange_(start_key, begin, end);
+      biter_ = new BLevel::NoSortIter(tree_->blevel_.get(), start_key, begin, end);
+    } else {
+      assert(0);
+      biter_ = nullptr;
+    }
+  }
+
+  ~NoSortIterImpl() {
+    if (biter_)
+      delete biter_;
+  }
+
+  ALWAYS_INLINE uint64_t key() const {
+    return biter_->key();
+  }
+
+  ALWAYS_INLINE uint64_t value() const {
+    return biter_->value();
+  }
+
+  ALWAYS_INLINE bool next() {
+    return biter_->next();
+  }
+
+  ALWAYS_INLINE bool end() const {
+    return biter_ == nullptr || biter_->end();
+  }
+
+ private:
+  const ComboTree* tree_;
+  BLevel::NoSortIter* biter_;
+};
+
 
 /************************ ComboTree::Iter ************************/
 ComboTree::Iter::Iter(const ComboTree* tree) : pimpl_(new IterImpl(tree)) {}
@@ -322,6 +375,16 @@ uint64_t ComboTree::Iter::key() const   { return pimpl_->key(); }
 uint64_t ComboTree::Iter::value() const { return pimpl_->value(); }
 bool ComboTree::Iter::next()            { return pimpl_->next(); }
 bool ComboTree::Iter::end() const       { return pimpl_->end(); }
+
+
+/********************* ComboTree::NoSortIter *********************/
+ComboTree::NoSortIter::NoSortIter(const ComboTree* tree) : pimpl_(new NoSortIterImpl(tree)) {}
+ComboTree::NoSortIter::NoSortIter(const ComboTree* tree, uint64_t start_key)
+  : pimpl_(new NoSortIterImpl(tree, start_key)) {}
+uint64_t ComboTree::NoSortIter::key() const   { return pimpl_->key(); }
+uint64_t ComboTree::NoSortIter::value() const { return pimpl_->value(); }
+bool ComboTree::NoSortIter::next()            { return pimpl_->next(); }
+bool ComboTree::NoSortIter::end() const       { return pimpl_->end(); }
 
 
 namespace {

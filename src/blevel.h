@@ -46,6 +46,7 @@ class BLevel {
 #define entry_key(idx)    entry_->key(sorted_index_[idx])
 #define entry_value(idx)  entry_->value(sorted_index_[idx])
 #endif
+
      public:
       Iter() {}
 
@@ -126,7 +127,7 @@ class BLevel {
       }
 
       ALWAYS_INLINE bool end() const {
-        return buf_idx_ >= entry_->buf.entries && !point_to_clevel_;
+        return (buf_idx_ >= entry_->buf.entries) && !point_to_clevel_;
       }
 
      private:
@@ -138,10 +139,80 @@ class BLevel {
 #if !defined(BUF_SORT) || BUF_SORT == 0
       int sorted_index_[16];
 #endif
-    };
 
 #undef entry_key
 #undef entry_value
+    };
+
+    class NoSortIter {
+     public:
+      NoSortIter() {}
+
+      NoSortIter(const Entry* entry, const CLevel::MemControl* mem)
+        : entry_(entry), buf_idx_(0)
+      {
+        if (entry_->clevel.HasSetup()) {
+          new (&citer_) CLevel::NoSortIter(&entry_->clevel, mem, entry_->entry_key);
+          has_clevel_ = !citer_.end();
+          point_to_clevel_ = has_clevel_ && (entry_->buf.entries == 0);
+        } else {
+          has_clevel_ = false;
+          point_to_clevel_ = false;
+        }
+      }
+
+      NoSortIter(const Entry* entry, const CLevel::MemControl* mem, uint64_t start_key)
+        : entry_(entry), buf_idx_(0)
+      {
+        if (entry_->clevel.HasSetup()) {
+          new (&citer_) CLevel::NoSortIter(&entry_->clevel, mem, entry_->entry_key, start_key);
+          has_clevel_ = !citer_.end();
+          point_to_clevel_ = has_clevel_ && (entry_->buf.entries == 0);
+        } else {
+          has_clevel_ = false;
+          point_to_clevel_ = false;
+        }
+      }
+
+      ALWAYS_INLINE uint64_t key() const {
+        return point_to_clevel_ ? citer_.key() : entry_->key(buf_idx_);
+      }
+
+      ALWAYS_INLINE uint64_t value() const {
+        return point_to_clevel_ ? citer_.value() : entry_->value(buf_idx_);
+      }
+
+      ALWAYS_INLINE bool next() {
+        if (buf_idx_ < entry_->buf.entries - 1) {
+          buf_idx_++;
+          return true;
+        } else if (buf_idx_ == entry_->buf.entries - 1) {
+          buf_idx_++;
+          if (has_clevel_) {
+            point_to_clevel_ = true;
+            return true;
+          } else {
+            return false;
+          }
+        } else if (point_to_clevel_) {
+          point_to_clevel_ = citer_.next();
+          return point_to_clevel_;
+        } else {
+          return false;
+        }
+      }
+
+      ALWAYS_INLINE bool end() const {
+        return (buf_idx_ >= entry_->buf.entries) && !point_to_clevel_;
+      }
+
+     private:
+      const Entry* entry_;
+      int buf_idx_;
+      bool has_clevel_;
+      bool point_to_clevel_;
+      CLevel::NoSortIter citer_;
+    };
   }; // Entry
 
   static_assert(sizeof(BLevel::Entry) == 128, "sizeof(BLevel::Entry) != 128");
@@ -186,7 +257,7 @@ class BLevel {
 #endif
         new (&iter_) BLevel::Entry::Iter(&blevel_->entries_[entry_idx_], &blevel_->clevel_mem_);
       }
-      if (iter_.end()) {
+      if (entry_idx_ >= blevel_->Entries()) {
         blevel_->lock_[entry_idx_].unlock_shared();
         locked_ = false;
       }
@@ -208,7 +279,7 @@ class BLevel {
 #endif
         new (&iter_) BLevel::Entry::Iter(&blevel_->entries_[entry_idx_], &blevel_->clevel_mem_, start_key);
       }
-      if (iter_.end()) {
+      if (entry_idx_ >= blevel_->Entries()) {
         blevel_->lock_[entry_idx_].unlock_shared();
         locked_ = false;
       }
@@ -236,13 +307,16 @@ class BLevel {
 #endif
           new (&iter_) BLevel::Entry::Iter(&blevel_->entries_[entry_idx_], &blevel_->clevel_mem_);
         }
-        if (iter_.end()) {
+        if (entry_idx_ >= blevel_->Entries()) {
           blevel_->lock_[entry_idx_].unlock_shared();
           locked_ = false;
+          return false;
+        } else {
+          return true;
         }
-        return entry_idx_ < blevel_->Entries();
+      } else {
+        return true;
       }
-      return true;
     }
 
     ALWAYS_INLINE bool end() const {
@@ -253,6 +327,96 @@ class BLevel {
     const BLevel* blevel_;
     uint64_t entry_idx_;
     BLevel::Entry::Iter iter_;
+    bool locked_;
+  };
+
+  class NoSortIter {
+   public:
+    NoSortIter(const BLevel* blevel)
+      : blevel_(blevel), entry_idx_(0), locked_(false)
+    {
+#ifndef NO_LOCK
+      blevel_->lock_[entry_idx_].lock_shared();
+      locked_ = true;
+#endif
+      new (&iter_) BLevel::Entry::NoSortIter(&blevel_->entries_[entry_idx_], &blevel_->clevel_mem_);
+      while (iter_.end() && ++entry_idx_ < blevel_->Entries()) {
+#ifndef NO_LOCK
+        blevel_->lock_[entry_idx_-1].unlock_shared();
+        blevel_->lock_[entry_idx_].lock_shared();
+#endif
+        new (&iter_) BLevel::Entry::NoSortIter(&blevel_->entries_[entry_idx_], &blevel_->clevel_mem_);
+      }
+      if (entry_idx_ >= blevel_->Entries()) {
+        blevel_->lock_[entry_idx_].unlock_shared();
+        locked_ = false;
+      }
+    }
+
+    NoSortIter(const BLevel* blevel, uint64_t start_key, uint64_t begin, uint64_t end)
+      : blevel_(blevel), locked_(false)
+    {
+      entry_idx_ = blevel_->Find_(start_key, begin, end);
+#ifndef NO_LOCK
+      blevel_->lock_[entry_idx_].lock_shared();
+      locked_ = true;
+#endif
+      new (&iter_) BLevel::Entry::NoSortIter(&blevel_->entries_[entry_idx_], &blevel_->clevel_mem_, start_key);
+      while (iter_.end() && ++entry_idx_ < blevel_->Entries()) {
+#ifndef NO_LOCK
+        blevel_->lock_[entry_idx_-1].unlock_shared();
+        blevel_->lock_[entry_idx_].lock_shared();
+#endif
+        new (&iter_) BLevel::Entry::NoSortIter(&blevel_->entries_[entry_idx_], &blevel_->clevel_mem_, start_key);
+      }
+      if (entry_idx_ >= blevel_->Entries()) {
+        blevel_->lock_[entry_idx_].unlock_shared();
+        locked_ = false;
+      }
+    }
+
+    ~NoSortIter() {
+      if (locked_)
+        blevel_->lock_[entry_idx_].unlock_shared();
+    }
+
+    ALWAYS_INLINE uint64_t key() const {
+      return iter_.key();
+    }
+
+    ALWAYS_INLINE uint64_t value() const {
+      return iter_.value();
+    }
+
+    ALWAYS_INLINE bool next() {
+      if (!iter_.next()) {
+        while (iter_.end() && ++entry_idx_ < blevel_->Entries()) {
+#ifndef NO_LOCK
+          blevel_->lock_[entry_idx_-1].unlock_shared();
+          blevel_->lock_[entry_idx_].lock_shared();
+#endif
+          new (&iter_) BLevel::Entry::NoSortIter(&blevel_->entries_[entry_idx_], &blevel_->clevel_mem_);
+        }
+        if (entry_idx_ >= blevel_->Entries()) {
+          blevel_->lock_[entry_idx_].unlock_shared();
+          locked_ = false;
+          return false;
+        } else {
+          return true;
+        }
+      } else {
+        return true;
+      }
+    }
+
+    ALWAYS_INLINE bool end() const {
+      return entry_idx_ >= blevel_->Entries();
+    }
+
+   private:
+    const BLevel* blevel_;
+    uint64_t entry_idx_;
+    BLevel::Entry::NoSortIter iter_;
     bool locked_;
   };
 

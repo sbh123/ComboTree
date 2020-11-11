@@ -250,6 +250,61 @@ class __attribute__((packed)) CLevel {
 #endif
   };
 
+  class NoSortIter {
+   public:
+    NoSortIter() {}
+
+    NoSortIter(const CLevel* clevel, const MemControl* mem, uint64_t prefix_key, uint64_t start_key)
+      : mem_(mem), prefix_key(prefix_key)
+    {
+      cur_ = clevel->root(mem->BaseAddr())->FindLeaf(mem, start_key);
+      while (cur_ != nullptr && cur_->leaf_buf.Empty())
+        cur_ = (const Node*)cur_->GetNext(mem_->BaseAddr());
+      idx_ = 0;
+    }
+
+    NoSortIter(const CLevel* clevel, const MemControl* mem, uint64_t prefix_key)
+      : mem_(mem), prefix_key(prefix_key)
+    {
+      cur_ = clevel->root(mem->BaseAddr())->FindHead(mem);
+      while (cur_ != nullptr && cur_->leaf_buf.Empty())
+        cur_ = (const Node*)cur_->GetNext(mem_->BaseAddr());
+      idx_ = 0;
+    }
+
+    ALWAYS_INLINE uint64_t key() const {
+      return cur_->leaf_buf.key(idx_, prefix_key);
+    }
+
+    ALWAYS_INLINE uint64_t value() const {
+      return cur_->leaf_buf.value(idx_);
+    }
+
+    // return false if reachs end
+    ALWAYS_INLINE bool next() {
+      idx_++;
+      if (idx_ >= cur_->leaf_buf.entries) {
+        do {
+          cur_ = (const Node*)cur_->GetNext(mem_->BaseAddr());
+        } while (cur_ != nullptr && cur_->leaf_buf.Empty());
+        idx_ = 0;
+        return cur_ == nullptr ? false : true;
+      } else {
+        return true;
+      }
+    }
+
+    ALWAYS_INLINE bool end() const {
+      return cur_ == nullptr ? true : false;
+    }
+
+   private:
+    const MemControl* mem_;
+    uint64_t prefix_key;
+    const Node* cur_;
+    int idx_;   // current index in node
+  };
+
   CLevel();
   ALWAYS_INLINE bool HasSetup() const { return !(root_[0] & 1); };
   void Setup(MemControl* mem, int suffix_len);

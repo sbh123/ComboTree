@@ -12,7 +12,7 @@ int BLevel::file_id_ = 0;
 
 namespace { // anonymous namespace
 
-int64_t clevel_time = 0;
+std::atomic<int64_t> clevel_time = 0;
 
 ALWAYS_INLINE int CommonPrefixBytes(uint64_t a, uint64_t b) {
   // the result of clz is undefined if arg is 0
@@ -179,7 +179,7 @@ void BLevel::Entry::FlushToCLevel(CLevel::MemControl* mem) {
   }
   buf.Clear();
 
-  clevel_time += timer.End();
+  clevel_time.fetch_add(timer.End());
 }
 
 

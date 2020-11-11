@@ -1,8 +1,11 @@
 #pragma once
 
-#ifndef SERVER
-#define SERVER                @SERVER@
-#endif
+#cmakedefine SERVER
+#cmakedefine BUF_SORT
+#cmakedefine STREAMING_STORE
+#cmakedefine STREAMING_LOAD
+#cmakedefine NO_LOCK
+
 #ifndef CLEVEL_PMEM_FILE_SIZE
 #define CLEVEL_PMEM_FILE_SIZE @CLEVEL_PMEM_FILE_SIZE@
 #endif
@@ -26,13 +29,4 @@
 #endif
 #ifndef ENTRY_SIZE_FACTOR
 #define ENTRY_SIZE_FACTOR     @ENTRY_SIZE_FACTOR@
-#endif
-#ifndef BUF_SORT
-#define BUF_SORT              @BUF_SORT@
-#endif
-#ifndef STREAMING_STORE
-#define STREAMING_STORE       @STREAMING_STORE@
-#endif
-#ifndef STREAMING_LOAD
-#define STREAMING_LOAD        @STREAMING_LOAD@
 #endif

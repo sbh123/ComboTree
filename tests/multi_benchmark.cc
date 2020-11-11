@@ -18,6 +18,7 @@ size_t SCAN_TEST_SIZE = 1000000;
 int thread_num        = 4;
 bool use_data_file    = false;
 std::vector<size_t> scan_size;
+std::vector<size_t> sort_scan_size;
 
 using combotree::ComboTree;
 using combotree::Random;
@@ -58,6 +59,7 @@ void show_help(char* prog) {
     "    --get-size               GET_SIZE" << std::endl <<
     "    --scan-test-size         SCAN_TEST_SIZE" << std::endl <<
     "    --scan[-s]               add scan" << std::endl <<
+    "    --sort-scan              add sort scan" << std::endl <<
     "    --use-data-file[-d]      use data file" << std::endl <<
     "    --help[-h]               show help" << std::endl;
 }
@@ -71,6 +73,7 @@ int main(int argc, char** argv) {
     {"get-size",        required_argument, NULL, 0},
     {"scan-test-size",  required_argument, NULL, 0},
     {"scan",            required_argument, NULL, 's'},
+    {"sort-scan",       required_argument, NULL, 0},
     {"use-data-file",   no_argument,       NULL, 'd'},
     {"help",            no_argument,       NULL, 'h'},
     {NULL, 0, NULL, 0}
@@ -88,8 +91,9 @@ int main(int argc, char** argv) {
           case 3: GET_SIZE = atoi(optarg); break;
           case 4: SCAN_TEST_SIZE = atoi(optarg); break;
           case 5: scan_size.push_back(atoi(optarg)); break;
-          case 6: use_data_file = true; break;
-          case 7: show_help(argv[0]); return 0;
+          case 6: sort_scan_size.push_back(atoi(optarg)); break;
+          case 7: use_data_file = true; break;
+          case 8: show_help(argv[0]); return 0;
           default: std::cerr << "Parse Argument Error!" << std::endl; abort();
         }
         break;
@@ -122,6 +126,8 @@ int main(int argc, char** argv) {
   std::cout << "SCAN_TEST_SIZE:        " << SCAN_TEST_SIZE << std::endl;
   for (auto &sz : scan_size)
     std::cout << "SCAN:                  " << sz << std::endl;
+  for (auto &sz : sort_scan_size)
+    std::cout << "SORT_SCAN:             " << sz << std::endl;
   std::cout << std::endl;
   std::cout << "BLEVEL_EXPAND_BUF_KEY: " << BLEVEL_EXPAND_BUF_KEY << std::endl;
   std::cout << "EXPANSION_FACTOR:      " << EXPANSION_FACTOR << std::endl;
@@ -254,7 +260,39 @@ int main(int argc, char** argv) {
         size_t size = (i == thread_num-1) ? SCAN_TEST_SIZE-(thread_num-1)*per_thread_size : per_thread_size;
         for (size_t j = 0; j < size; ++j) {
           uint64_t start_key = key[start_pos+j];
+          ComboTree::NoSortIter iter(tree, start_key);
+          if (iter.end())
+            continue;
+          for (size_t k = 0; k < scan; ++k) {
+            assert(iter.key() == iter.value());
+            if (!iter.next())
+              break;
+          }
+        }
+      });
+    }
+    for (auto& t : threads)
+      t.join();
+    threads.clear();
+    timer.Record("stop");
+    total_time = timer.Microsecond("stop", "start");
+    std::cout << "scan " << scan << ": " << total_time/1000000.0 << " " << (double)SCAN_TEST_SIZE/(double)total_time*1000000.0 << std::endl;
+  }
+
+  // sort_scan
+  per_thread_size = SCAN_TEST_SIZE / thread_num;
+  for (auto scan : sort_scan_size) {
+    timer.Clear();
+    timer.Record("start");
+    for (int i = 0; i < thread_num; ++i) {
+      threads.emplace_back([=,&key](){
+        size_t start_pos = i*per_thread_size;
+        size_t size = (i == thread_num-1) ? SCAN_TEST_SIZE-(thread_num-1)*per_thread_size : per_thread_size;
+        for (size_t j = 0; j < size; ++j) {
+          uint64_t start_key = key[start_pos+j];
           ComboTree::Iter iter(tree, start_key);
+          if (iter.end())
+            continue;
           for (size_t k = 0; k < scan; ++k) {
             assert(iter.key() == start_key + k);
             assert(iter.value() == start_key + k);
@@ -269,7 +307,7 @@ int main(int argc, char** argv) {
     threads.clear();
     timer.Record("stop");
     total_time = timer.Microsecond("stop", "start");
-    std::cout << "scan " << scan << ": " << total_time/1000000.0 << " " << (double)SCAN_TEST_SIZE/(double)total_time*1000000.0 << std::endl;
+    std::cout << "sort scan " << scan << ": " << total_time/1000000.0 << " " << (double)SCAN_TEST_SIZE/(double)total_time*1000000.0 << std::endl;
   }
 
   // Delete

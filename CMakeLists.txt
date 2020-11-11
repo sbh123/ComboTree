@@ -2,7 +2,11 @@ project(ComboTree)
 cmake_minimum_required(VERSION 3.0)
 
 # use `cmake -DSERVER:BOOL=ON ..` when running in server
-option(SERVER "Run in server" ON)
+option(SERVER           "Run in server"           ON)
+option(BUF_SORT         "Sort buffer in KVBufer"  OFF)
+option(STREAMING_LOAD   "Use Non-temporal Load"   OFF)
+option(STREAMING_STORE  "Use Non-temporal Store"  OFF)
+option(NO_LOCK          "Don't use lock"          OFF)
 
 # ComboTree Configuration
 # use `make clean && make CXX_DEFINES="-DNAME=VALUE"` to override during compile
@@ -10,21 +14,16 @@ if(SERVER)
   set(CLEVEL_PMEM_FILE_SIZE "(1024*1024*1024*16UL)")
   set(CLEVEL_PMEM_FILE      \"/pmem0/combotree-clevel-\")
   set(BLEVEL_PMEM_FILE      \"/pmem0/combotree-blevel-\")
-  set(SERVER                1)
 else()
   set(CLEVEL_PMEM_FILE_SIZE "(1024*1024*512UL)")
   set(CLEVEL_PMEM_FILE      \"/mnt/pmem0/combotree-clevel-\")
   set(BLEVEL_PMEM_FILE      \"/mnt/pmem0/combotree-blevel-\")
-  set(SERVER                0)
 endif(SERVER)
 set(BLEVEL_EXPAND_BUF_KEY 6)
 set(EXPANSION_FACTOR      4)
 set(DEFAULT_SPAN          2)
 set(PMEMKV_THRESHOLD      1024)
 set(ENTRY_SIZE_FACTOR     1.2)
-set(STREAMING_STORE       0)
-set(STREAMING_LOAD        0)
-set(BUF_SORT              0)
 
 configure_file(
   "${PROJECT_SOURCE_DIR}/src/combotree_config.h.in"
