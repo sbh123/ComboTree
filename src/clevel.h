@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <libpmem.h>
 #include <filesystem>
+#include <atomic>
 #include "kvbuffer.h"
 #include "combotree_config.h"
 #include "debug.h"
@@ -93,7 +94,7 @@ class __attribute__((packed)) CLevel {
    public:
     MemControl(void* base_addr, size_t size)
       : pmem_file_(""), pmem_addr_(0), base_addr_((uint64_t)base_addr),
-        cur_addr_(base_addr), end_addr_((uint8_t*)base_addr+size)
+        cur_addr_((uintptr_t)base_addr), end_addr_((uint8_t*)base_addr+size)
     {}
 
     MemControl(std::string pmem_file, size_t file_size)
@@ -116,7 +117,7 @@ class __attribute__((packed)) CLevel {
         base_addr_ = (base_addr_+64) & ~(uintptr_t)63;
       }
 
-      cur_addr_ = (void*)base_addr_;
+      cur_addr_ = base_addr_;
       end_addr_ = (uint8_t*)pmem_addr_ + mapped_len_;
     }
 
@@ -129,9 +130,8 @@ class __attribute__((packed)) CLevel {
 
     CLevel::Node* NewNode(Node::Type type, int suffix_len) {
       assert(suffix_len > 0 && suffix_len <= 8);
-      assert((uint8_t*)cur_addr_ + sizeof(CLevel::Node) < end_addr_);
-      CLevel::Node* ret = (CLevel::Node*)cur_addr_;
-      cur_addr_ = (uint8_t*)cur_addr_ + sizeof(CLevel::Node);
+      assert((uint8_t*)cur_addr_.load() + sizeof(CLevel::Node) < end_addr_);
+      CLevel::Node* ret = (CLevel::Node*)cur_addr_.fetch_add(sizeof(CLevel::Node));
       ret->type = type;
       ret->leaf_buf.suffix_bytes = suffix_len;
       ret->leaf_buf.prefix_bytes = 8 - suffix_len;
@@ -145,7 +145,7 @@ class __attribute__((packed)) CLevel {
     }
 
     uint64_t Usage() const {
-      return (uint64_t)cur_addr_ - base_addr_;
+      return (uint64_t)cur_addr_.load() - base_addr_;
     }
 
    private:
@@ -153,7 +153,7 @@ class __attribute__((packed)) CLevel {
     void* pmem_addr_;
     size_t mapped_len_;
     uint64_t base_addr_;
-    void* cur_addr_;
+    std::atomic<uintptr_t> cur_addr_;
     void* end_addr_;
     static int file_id_;
   };

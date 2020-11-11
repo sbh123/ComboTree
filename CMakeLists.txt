@@ -83,3 +83,8 @@ add_test(clevel_test clevel_test)
 add_executable(combotree_test tests/combotree_test.cc)
 target_link_libraries(combotree_test combotree)
 add_test(combotree_test combotree_test)
+
+## multi_combotree_test
+add_executable(multi_combotree_test tests/multi_combotree_test.cc)
+target_link_libraries(multi_combotree_test combotree)
+add_test(multi_combotree_test multi_combotree_test)
