@@ -6,7 +6,7 @@ namespace combotree {
 
 int CLevel::MemControl::file_id_ = 0;
 
-#if !defined(BUF_SORT) || BUF_SORT == 0
+#ifndef BUF_SORT
 void CLevel::Node::PutChild(MemControl* mem, void* key, const Node* child) {
   assert(type == Type::INDEX);
   assert(index_buf.entries < index_buf.max_entries);
@@ -18,7 +18,7 @@ void CLevel::Node::PutChild(MemControl* mem, void* key, const Node* child) {
 // always success (if no exception)
 // FIXME: return false when exist
 CLevel::Node* CLevel::Node::Put(MemControl* mem, uint64_t key, uint64_t value, Node* parent) {
-#if BUF_SORT
+#ifdef BUF_SORT
   if (type == Type::LEAF) {
 
     bool exist;

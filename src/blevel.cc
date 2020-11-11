@@ -20,7 +20,7 @@ ALWAYS_INLINE int CommonPrefixBytes(uint64_t a, uint64_t b) {
   return leading_zero_cnt / 8;
 }
 
-#if STREAMING_LOAD
+#ifdef STREAMING_LOAD
 void stream_load_entry(void* dest, void* source) {
   uint8_t* dst = (uint8_t*)dest;
   uint8_t* src = (uint8_t*)source;
@@ -39,7 +39,7 @@ void stream_load_entry(void* dest, void* source) {
 }
 #endif // STREAMING_LOAD
 
-#if STREAMING_STORE
+#ifdef STREAMING_STORE
 void stream_store_entry(void* dest, void* source) {
   uint8_t* dst = (uint8_t*)dest;
   uint8_t* src = (uint8_t*)source;
@@ -73,7 +73,7 @@ void BLevel::ExpandData::FlushToEntry(Entry* entry, int prefix_len, CLevel::MemC
     entry->FlushToCLevel(mem);
     buf_count -= entry->buf.max_entries;
   }
-#if STREAMING_STORE
+#ifdef STREAMING_STORE
   Entry in_mem(entry->entry_key, prefix_len);
   // copy value
   memcpy(in_mem.buf.pvalue(buf_count-1),
@@ -131,7 +131,7 @@ bool BLevel::Entry::Put(CLevel::MemControl* mem, uint64_t key, uint64_t value) {
     fence();
     return false;
   } else {
-#if BUF_SORT
+#ifdef BUF_SORT
     if (buf.Full()) {
 #else
     if ((!clevel.HasSetup() && buf.entries == buf.max_entries - 1) || buf.Full()) {
@@ -281,7 +281,7 @@ void BLevel::Expansion(BLevel* old_blevel) {
 
   size_ = 0;
 
-#if STREAMING_LOAD
+#ifdef STREAMING_LOAD
   Entry in_mem_entry(0,0);
   old_entry = &in_mem_entry;
 #endif
@@ -291,7 +291,7 @@ void BLevel::Expansion(BLevel* old_blevel) {
     // lock before streaming load
     std::lock_guard<std::shared_mutex> lock(old_blevel->lock_[old_index]);
 #endif
-#if STREAMING_LOAD
+#ifdef STREAMING_LOAD
     stream_load_entry(&in_mem_entry, &old_blevel->entries_[old_index]);
 #else
     old_entry = &old_blevel->entries_[old_index];
@@ -307,7 +307,7 @@ void BLevel::Expansion(BLevel* old_blevel) {
       } while(biter.next());
       expand_meta.clevel_data_count += total_cnt - old_entry->buf.entries;
     } else if (!old_entry->buf.Empty()) {
-#if BUF_SORT
+#ifdef BUF_SORT
       for (uint64_t i = 0; i < old_entry->buf.entries; ++i)
         ExpandPut_(expand_meta, old_entry->key(i), old_entry->value(i));
 #else

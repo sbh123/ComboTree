@@ -12,7 +12,7 @@ using combotree::ComboTree;
 using combotree::Random;
 
 int main(void) {
-#if SERVER
+#ifdef SERVER
   ComboTree* tree = new ComboTree("/pmem0/combotree/", (1024*1024*1024*100UL), true);
 #else
   ComboTree* tree = new ComboTree("/mnt/pmem0/", (1024*1024*512UL), true);
@@ -23,11 +23,11 @@ int main(void) {
   std::cout << "EXPANSION_FACTOR:      " << EXPANSION_FACTOR << std::endl;
   std::cout << "PMEMKV_THRESHOLD:      " << PMEMKV_THRESHOLD << std::endl;
 
-#if STREAMING_STORE
+#ifdef STREAMING_STORE
   std::cout << "STREAMING_STORE = 1" << std::endl;
 #endif
 
-#if STREAMING_LOAD
+#ifdef STREAMING_LOAD
   std::cout << "STREAMING_LOAD  = 1" << std::endl;
 #endif
 

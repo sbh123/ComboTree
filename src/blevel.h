@@ -39,7 +39,7 @@ class BLevel {
     void FlushToCLevel(CLevel::MemControl* mem);
 
     class Iter {
-#if BUF_SORT
+#ifdef BUF_SORT
 #define entry_key(idx)    entry_->key(idx)
 #define entry_value(idx)  entry_->value(idx)
 #else
@@ -53,7 +53,7 @@ class BLevel {
       Iter(const Entry* entry, const CLevel::MemControl* mem)
         : entry_(entry), buf_idx_(0)
       {
-#if !defined(BUF_SORT) || BUF_SORT == 0
+#ifndef BUF_SORT
         entry->buf.GetSortedIndex(sorted_index_);
 #endif
         if (entry_->clevel.HasSetup()) {
@@ -69,7 +69,7 @@ class BLevel {
       Iter(const Entry* entry, const CLevel::MemControl* mem, uint64_t start_key)
         : entry_(entry), buf_idx_(0)
       {
-#if !defined(BUF_SORT) || BUF_SORT == 0
+#ifndef BUF_SORT
         entry->buf.GetSortedIndex(sorted_index_);
 #endif
         if (start_key <= entry->entry_key) {
@@ -136,7 +136,7 @@ class BLevel {
       bool has_clevel_;
       bool point_to_clevel_;
       CLevel::Iter citer_;
-#if !defined(BUF_SORT) || BUF_SORT == 0
+#ifndef BUF_SORT
       int sorted_index_[16];
 #endif
 

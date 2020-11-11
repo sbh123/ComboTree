@@ -72,7 +72,7 @@ struct KVBuffer {
   }
 
   int Find(uint64_t target, bool& find) const {
-#if BUF_SORT
+#ifdef BUF_SORT
     int left = 0;
     int right = entries - 1;
     while (left <= right) {
@@ -103,7 +103,7 @@ struct KVBuffer {
 
   // find first entry greater or equal to target
   int FindLE(uint64_t target, bool& find) const {
-#if BUF_SORT
+#ifdef BUF_SORT
     for (int i = 0; i < entries; ++i) {
       uint64_t cur_key = key(i, target);
       if (cur_key == target) {
@@ -141,7 +141,7 @@ struct KVBuffer {
   }
 
   ALWAYS_INLINE bool Put(int pos, void* new_key, uint64_t value) {
-#if BUF_SORT
+#ifdef BUF_SORT
     memmove(pkey(pos+1), pkey(pos), suffix_bytes*(entries-pos));
     memmove(pvalue(entries), pvalue(entries-1), value_size*(entries-pos));
 
@@ -170,7 +170,7 @@ struct KVBuffer {
   }
 
   ALWAYS_INLINE bool Delete(int pos) {
-#if BUF_SORT
+#ifdef BUF_SORT
     assert(pos < entries && pos >= 0);
     memmove(pkey(pos), pkey(pos+1), suffix_bytes*(entries-pos-1));
     memmove(pvalue(entries-2), pvalue(entries-1), value_size*(entries-pos-1));
@@ -197,7 +197,7 @@ struct KVBuffer {
 #endif // BUF_SORT
   }
 
-#if BUF_SORT
+#ifdef BUF_SORT
   // move data from this.[start_pos, entries) to dest.[0,entries-start_pos),
   // the start_pos and entries are the position of sorted order.
   void MoveData(KVBuffer<buf_size, value_size>* dest, int start_pos) {
