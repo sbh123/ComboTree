@@ -306,15 +306,15 @@ void BLevel::Expansion(BLevel* old_blevel) {
       } while(biter.next());
       expand_meta.clevel_data_count += total_cnt - old_entry->buf.entries;
     } else if (!old_entry->buf.Empty()) {
-      for (uint64_t i = 0; i < old_entry->buf.entries; ++i) {
 #if BUF_SORT
+      for (uint64_t i = 0; i < old_entry->buf.entries; ++i)
         ExpandPut_(expand_meta, old_entry->key(i), old_entry->value(i));
 #else
-        int sorted_index[16];
-        old_entry->buf.GetSortedIndex(sorted_index);
+      int sorted_index[16];
+      old_entry->buf.GetSortedIndex(sorted_index);
+      for (uint64_t i = 0; i < old_entry->buf.entries; ++i)
         ExpandPut_(expand_meta, old_entry->key(sorted_index[i]), old_entry->value(sorted_index[i]));
 #endif
-      }
     }
     old_index++;
   }
