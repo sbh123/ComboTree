@@ -2,7 +2,7 @@ project(ComboTree)
 cmake_minimum_required(VERSION 3.0)
 
 # use `cmake -DSERVER:BOOL=ON ..` when running in server
-option(SERVER "Run in server" OFF)
+option(SERVER "Run in server" ON)
 
 # ComboTree Configuration
 # use `make clean && make CXX_DEFINES="-DNAME=VALUE"` to override during compile
@@ -24,7 +24,7 @@ set(PMEMKV_THRESHOLD      1024)
 set(ENTRY_SIZE_FACTOR     1.2)
 set(STREAMING_STORE       0)
 set(STREAMING_LOAD        0)
-set(BUF_SORT              1)
+set(BUF_SORT              0)
 
 configure_file(
   "${PROJECT_SOURCE_DIR}/src/combotree_config.h.in"
@@ -66,6 +66,10 @@ target_link_libraries(combotree pmem pmemkv pthread)
 # benchmark
 add_executable(benchmark tests/benchmark.cc)
 target_link_libraries(benchmark combotree)
+
+# multi_benchmark
+add_executable(multi_benchmark tests/multi_benchmark.cc)
+target_link_libraries(multi_benchmark combotree)
 
 # Unit Test
 enable_testing()
