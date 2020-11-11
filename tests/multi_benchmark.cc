@@ -66,12 +66,18 @@ int main(int argc, char** argv) {
   GET_SIZE       = (GET_SIZE / thread_num) * thread_num;
   SCAN_TEST_SIZE = (SCAN_TEST_SIZE / thread_num) * thread_num;
 
+  std::cout << "THREAD NUMBER:         " << thread_num << std::endl;
   std::cout << "TEST_SIZE:             " << TEST_SIZE << std::endl;
   std::cout << "LAST_EXPAND:           " << LAST_EXPAND << std::endl;
   std::cout << "BLEVEL_EXPAND_BUF_KEY: " << BLEVEL_EXPAND_BUF_KEY << std::endl;
   std::cout << "EXPANSION_FACTOR:      " << EXPANSION_FACTOR << std::endl;
   std::cout << "PMEMKV_THRESHOLD:      " << PMEMKV_THRESHOLD << std::endl;
+  std::cout << "ENTRY_SIZE_FACTOR:     " << ENTRY_SIZE_FACTOR << std::endl;
   std::cout << "SCAN_SIZE:             " << SCAN_SIZE << std::endl;
+
+#if BUF_SORT
+  std::cout << "BUF_SORT = 1" << std::endl;
+#endif
 
 #if STREAMING_STORE
   std::cout << "STREAMING_STORE = 1" << std::endl;
@@ -133,14 +139,14 @@ int main(int argc, char** argv) {
   threads.clear();
   timer.Record("stop");
 
+  std::cout << std::fixed << std::setprecision(2);
+
   uint64_t total_time = timer.Microsecond("mid", "start");
   std::cout << "load: " << total_time/1000000.0 << " " << (double)TEST_SIZE/(double)total_time*1000000.0 << std::endl;
   uint64_t mid_time = timer.Microsecond("stop", "mid");
   std::cout << "put:  " << mid_time/1000000.0 << " " << (double)(TEST_SIZE-LAST_EXPAND)/(double)mid_time*1000000.0 << std::endl;
 
   std::cout << "clevel time:    " << tree->CLevelTime()/1000000.0 << std::endl;
-
-  std::cout << std::fixed << std::setprecision(2);
 
   std::cout << "entries:        " << tree->BLevelEntries() << std::endl;
   std::cout << "clevels:        " << tree->CLevelCount() << std::endl;
