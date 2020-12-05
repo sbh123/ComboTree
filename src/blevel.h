@@ -267,12 +267,14 @@ class BLevel {
 #ifndef NO_LOCK
       blevel_->lock_[entry_idx_].lock_shared();
       locked_ = true;
+      uint64_t last_idx = entry_idx_;
 #endif
       new (&iter_) BLevel::Entry::Iter(&blevel_->entries_[entry_idx_], &blevel_->clevel_mem_);
       while (iter_.end() && NextIndex_()) {
 #ifndef NO_LOCK
-        blevel_->lock_[entry_idx_-1].unlock_shared();
+        blevel_->lock_[last_idx].unlock_shared();
         blevel_->lock_[entry_idx_].lock_shared();
+        last_idx = entry_idx_;
 #endif
         new (&iter_) BLevel::Entry::Iter(&blevel_->entries_[entry_idx_], &blevel_->clevel_mem_);
       }
@@ -288,19 +290,22 @@ class BLevel {
 #ifdef BRANGE
       range_ = blevel_->FindBRangeByKey_(start_key);
       range_end_ = blevel_->ranges_[range_].physical_entry_start+blevel_->ranges_[range_].entries;
-      entry_idx_ = blevel_->FindByRange_(start_key, range_, end, nullptr);
+      end = std::min(blevel_->ranges_[range_+1].logical_entry_start-1, end);
+      entry_idx_ = blevel_->FindByRange_(start_key, range_, blevel_->GetPhysical_(blevel_->ranges_[range_], end), nullptr);
 #else
       entry_idx_ = blevel_->Find_(start_key, begin, end);
 #endif
 #ifndef NO_LOCK
       blevel_->lock_[entry_idx_].lock_shared();
       locked_ = true;
+      uint64_t last_idx = entry_idx_;
 #endif
       new (&iter_) BLevel::Entry::Iter(&blevel_->entries_[entry_idx_], &blevel_->clevel_mem_, start_key);
       while (iter_.end() && NextIndex_()) {
 #ifndef NO_LOCK
-        blevel_->lock_[entry_idx_-1].unlock_shared();
+        blevel_->lock_[last_idx].unlock_shared();
         blevel_->lock_[entry_idx_].lock_shared();
+        last_idx = entry_idx_;
 #endif
         new (&iter_) BLevel::Entry::Iter(&blevel_->entries_[entry_idx_], &blevel_->clevel_mem_, start_key);
       }
@@ -325,10 +330,14 @@ class BLevel {
 
     ALWAYS_INLINE bool next() {
       if (!iter_.next()) {
+#ifndef NO_LOCK
+        uint64_t last_idx = entry_idx_;
+#endif
         while (iter_.end() && NextIndex_()) {
 #ifndef NO_LOCK
-          blevel_->lock_[entry_idx_-1].unlock_shared();
+          blevel_->lock_[last_idx].unlock_shared();
           blevel_->lock_[entry_idx_].lock_shared();
+          last_idx = entry_idx_;
 #endif
           new (&iter_) BLevel::Entry::Iter(&blevel_->entries_[entry_idx_], &blevel_->clevel_mem_);
         }
@@ -386,12 +395,14 @@ class BLevel {
 #ifndef NO_LOCK
       blevel_->lock_[entry_idx_].lock_shared();
       locked_ = true;
+      uint64_t last_idx = entry_idx_;
 #endif
       new (&iter_) BLevel::Entry::NoSortIter(&blevel_->entries_[entry_idx_], &blevel_->clevel_mem_);
       while (iter_.end() && NextIndex_()) {
 #ifndef NO_LOCK
-        blevel_->lock_[entry_idx_-1].unlock_shared();
+        blevel_->lock_[last_idx].unlock_shared();
         blevel_->lock_[entry_idx_].lock_shared();
+        last_idx = entry_idx_;
 #endif
         new (&iter_) BLevel::Entry::NoSortIter(&blevel_->entries_[entry_idx_], &blevel_->clevel_mem_);
       }
@@ -407,19 +418,22 @@ class BLevel {
 #ifdef BRANGE
       range_ = blevel_->FindBRangeByKey_(start_key);
       range_end_ = blevel_->ranges_[range_].physical_entry_start+blevel_->ranges_[range_].entries;
-      entry_idx_ = blevel_->FindByRange_(start_key, range_, end, nullptr);
+      end = std::min(blevel_->ranges_[range_+1].logical_entry_start-1, end);
+      entry_idx_ = blevel_->FindByRange_(start_key, range_, blevel_->GetPhysical_(blevel_->ranges_[range_], end), nullptr);
 #else
       entry_idx_ = blevel_->Find_(start_key, begin, end);
 #endif
 #ifndef NO_LOCK
       blevel_->lock_[entry_idx_].lock_shared();
       locked_ = true;
+      uint64_t last_idx = entry_idx_;
 #endif
       new (&iter_) BLevel::Entry::NoSortIter(&blevel_->entries_[entry_idx_], &blevel_->clevel_mem_, start_key);
       while (iter_.end() && NextIndex_()) {
 #ifndef NO_LOCK
-        blevel_->lock_[entry_idx_-1].unlock_shared();
+        blevel_->lock_[last_idx].unlock_shared();
         blevel_->lock_[entry_idx_].lock_shared();
+        last_idx = entry_idx_;
 #endif
         new (&iter_) BLevel::Entry::NoSortIter(&blevel_->entries_[entry_idx_], &blevel_->clevel_mem_, start_key);
       }
@@ -444,10 +458,14 @@ class BLevel {
 
     ALWAYS_INLINE bool next() {
       if (!iter_.next()) {
+#ifndef NO_LOCK
+        uint64_t last_idx = entry_idx_;
+#endif
         while (iter_.end() && NextIndex_()) {
 #ifndef NO_LOCK
-          blevel_->lock_[entry_idx_-1].unlock_shared();
+          blevel_->lock_[last_idx].unlock_shared();
           blevel_->lock_[entry_idx_].lock_shared();
+          last_idx = entry_idx_;
 #endif
           new (&iter_) BLevel::Entry::NoSortIter(&blevel_->entries_[entry_idx_], &blevel_->clevel_mem_);
         }
