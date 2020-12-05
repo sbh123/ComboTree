@@ -116,6 +116,9 @@ int main(int argc, char** argv) {
   }
 
   std::cout << "THREAD NUMBER:         " << thread_num << std::endl;
+#ifdef BRANGE
+  std::cout << "EXPAND_THREADS:        " << EXPAND_THREADS << std::endl;
+#endif
   std::cout << "TEST_SIZE:             " << TEST_SIZE << std::endl;
   std::cout << "LAST_EXPAND:           " << LAST_EXPAND << std::endl;
   std::cout << "GET_SIZE:              " << GET_SIZE << std::endl;
@@ -261,8 +264,6 @@ int main(int argc, char** argv) {
           if (iter.end())
             continue;
           for (size_t k = 0; k < scan; ++k) {
-            uint64_t tkey = iter.key();
-            uint64_t tval = iter.value();
             assert(iter.key() == iter.value());
             if (!iter.next())
               break;
