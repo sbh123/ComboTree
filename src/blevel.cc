@@ -266,13 +266,12 @@ void BLevel::ExpandPut_(ExpandData& data, uint64_t key, uint64_t value) {
       data.FlushToEntry(new_entry, prefix_len, &clevel_mem_);
       (*data.expanded_entries)++;
       data.new_addr++;
+      // assert(data.entry_key < key);
       // next entry_key
-      assert(data.entry_key < key);
       data.entry_key = key;
     } else {
       Entry* entry = data.new_addr - 1;
       uint64_t entry_idx = ranges_[data.target_range].physical_entry_start+ranges_[data.target_range].entries-1;
-      assert(&entries_[entry_idx] == entry);
       std::lock_guard<std::shared_mutex> lock(lock_[entry_idx]);
       for (int i = 0; i < data.buf_count; ++i)
         entry->Put(&clevel_mem_, data.key_buf[i], data.value_buf[BLEVEL_EXPAND_BUF_KEY-i-1]);
@@ -364,7 +363,6 @@ void BLevel::PrepareExpansion(BLevel* old_blevel) {
   uint64_t range_size = sum_interval / EXPAND_THREADS;
   uint64_t cur_size = range_size;
   uint64_t cur_range = 0;
-  assert(cur_size > old_blevel->size_per_interval_[0][0]);
   uint64_t min_diff = UINT64_MAX;
 
   ranges_[cur_range].start_key = 0;
@@ -402,9 +400,9 @@ void BLevel::PrepareExpansion(BLevel* old_blevel) {
     }
   }
 
+  assert(cur_range == EXPAND_THREADS - 1);
   expand_data_[cur_range].end_range = EXPAND_THREADS - 1;
   expand_data_[cur_range].end_interval = old_blevel->intervals_[EXPAND_THREADS-1] - 1;
-  assert(cur_range == EXPAND_THREADS - 1);
   ranges_[EXPAND_THREADS].start_key = UINT64_MAX;
 
   for (int i = 0; i < EXPAND_THREADS; ++i) {
@@ -470,8 +468,6 @@ void BLevel::ExpandRange_(BLevel* old_blevel, int thread_id) {
         uint64_t total_cnt = 0;
         uint64_t last_key = 0;
         do {
-          assert(last_key == 0 || last_key < biter.key());
-          assert(biter.key() >= old_entry->entry_key);
           last_key = biter.key();
           total_cnt++;
           ExpandPut_(expand_meta, biter.key(), biter.value());
@@ -516,9 +512,9 @@ void BLevel::FinishExpansion_() {
     assert(ranges_[i].start_key == entries_[ranges_[i].physical_entry_start].entry_key);
   }
   ranges_[EXPAND_THREADS].logical_entry_start = nr_entries_;
-  for (uint64_t i = 0; i < nr_entries_ - 1; ++i) {
-    assert(EntryKey(i) < EntryKey(i + 1));
-  }
+  // for (uint64_t i = 0; i < nr_entries_ - 1; ++i) {
+  //   assert(EntryKey(i) < EntryKey(i + 1));
+  // }
 }
 
 bool BLevel::IsKeyExpanded(uint64_t key, int& range, uint64_t& end) const {
@@ -599,21 +595,21 @@ uint64_t BLevel::Find_(uint64_t key, uint64_t begin, uint64_t end
                        , std::atomic<size_t>** interval
 #endif
                        ) const {
-  assert(begin < Entries());
-  assert(end < Entries());
-  // FIXME: too many assert
-  assert(begin <= end);
-  assert(end < nr_entries_);
-  uint64_t min_key = EntryKey(begin);
-  uint64_t max_key = (end + 1 == nr_entries_) ? UINT64_MAX : EntryKey(end+1);
-  assert(key >= min_key);
-  assert(key <= max_key);
+  // assert(begin < Entries());
+  // assert(end < Entries());
+  // // FIXME: too many assert
+  // assert(begin <= end);
+  // assert(end < nr_entries_);
+  // uint64_t min_key = EntryKey(begin);
+  // uint64_t max_key = (end + 1 == nr_entries_) ? UINT64_MAX : EntryKey(end+1);
+  // assert(key >= min_key);
+  // assert(key <= max_key);
 #ifdef BRANGE
   // change logical index [begin, end] to physical index
   // after this, begin and end are in the same brange.
   int target_range = FindBRangeByKey_(key);
-  assert(begin < ranges_[target_range+1].logical_entry_start);
-  assert(end >= ranges_[target_range].logical_entry_start);
+  // assert(begin < ranges_[target_range+1].logical_entry_start);
+  // assert(end >= ranges_[target_range].logical_entry_start);
   begin = (begin >= ranges_[target_range].logical_entry_start) ?
             GetPhysical_(ranges_[target_range], begin) :
             ranges_[target_range].physical_entry_start;
@@ -680,11 +676,11 @@ uint64_t BLevel::FindByRange_(uint64_t key, int range, uint64_t end,
 }
 
 bool BLevel::PutRange(uint64_t key, uint64_t value, int range, uint64_t end) {
-  assert(key >= entries_[ranges_[range].physical_entry_start].entry_key);
-  assert(key < expanded_max_key_[range]);
+  // assert(key >= entries_[ranges_[range].physical_entry_start].entry_key);
+  // assert(key < expanded_max_key_[range]);
   std::atomic<size_t>* interval_size;
   uint64_t idx = FindByRange_(key, range, end, &interval_size);
-  assert(key >= entries_[idx].entry_key);
+  // assert(key >= entries_[idx].entry_key);
   return Put_(key, value, idx, interval_size);
 }
 

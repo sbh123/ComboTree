@@ -610,7 +610,7 @@ class BLevel {
   }
 
   ALWAYS_INLINE uint64_t GetPhysical_(const BRange& range, uint64_t logical_idx) const {
-    assert(logical_idx - range.logical_entry_start < range.entries);
+    // assert(logical_idx - range.logical_entry_start < range.entries);
     return range.physical_entry_start + (logical_idx - range.logical_entry_start);
   }
 
@@ -640,7 +640,7 @@ class BLevel {
                                   , std::atomic<size_t>* interval_size
 #endif
                                   ) {
-    assert(entries_[physical_idx].entry_key <= key);
+    // assert(entries_[physical_idx].entry_key <= key);
 #ifndef NO_LOCK
     std::lock_guard<std::shared_mutex> lock(lock_[physical_idx]);
 #endif
