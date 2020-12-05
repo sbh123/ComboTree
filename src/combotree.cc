@@ -87,7 +87,10 @@ void ComboTree::ChangeToComboTree_() {
   old_blevel_ = blevel_;
   blevel_->Expansion(exist_kv);
 
-  alevel_ = new ALevel(blevel_);
+  {
+    std::lock_guard<std::shared_mutex> lock(alevel_lock_);
+    alevel_ = new ALevel(blevel_);
+  }
   // change manifest first
   manifest_->SetIsComboTree(true);
   State s = State::PMEMKV_TO_COMBO_TREE;
@@ -131,10 +134,13 @@ void ComboTree::ExpandComboTree_() {
 
   need_sleep_.store(false);
 
-  ALevel* old_alevel_ = alevel_;
-  ALevel* new_alevel = new ALevel(blevel_);
-  alevel_ = new_alevel;
-  delete old_alevel_;
+  {
+    std::lock_guard<std::shared_mutex> lock(alevel_lock_);
+    delete alevel_;
+    alevel_ = new ALevel(blevel_);
+    delete old_blevel_;
+    old_blevel_ = blevel_;
+  }
 
   s = State::COMBO_TREE_EXPANDING;
   if (!status_.compare_exchange_strong(s, State::USING_COMBO_TREE))
@@ -142,8 +148,6 @@ void ComboTree::ExpandComboTree_() {
 
   expand_time += timer.End();
   permit_delete_.store(true);
-  delete old_blevel_;
-  old_blevel_ = blevel_;
 
   LOG(Debug::INFO, "finish expanding combotree. current size is %ld, current entry count is %ld, expansion time is %lfs", Size(), blevel_->Entries(), (double)expand_time/1000000.0);
 
@@ -237,11 +241,12 @@ bool ComboTree::Put(uint64_t key, uint64_t value) {
       } else {
         int range;
         uint64_t end;
-        if (blevel_->IsKeyExpanded(key, range, end))
+        if (blevel_->IsKeyExpanded(key, range, end)) {
           ret = blevel_->PutRange(key, value, range, end);
-        else {
-          std::this_thread::sleep_for(std::chrono::milliseconds(10));
-          continue;
+        } else {
+          // std::this_thread::sleep_for(std::chrono::milliseconds(10));
+          // continue;
+          std::shared_lock<std::shared_mutex> lock(alevel_lock_);
           ret = alevel_->Put(key, value);
         }
         if (!ret) continue;

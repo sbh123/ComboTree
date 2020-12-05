@@ -97,6 +97,7 @@ class ComboTree {
   BLevel* old_blevel_;
   PmemKV* pmemkv_;
   Manifest* manifest_;
+  std::shared_mutex alevel_lock_;
   std::atomic<State> status_;
   std::atomic<bool> permit_delete_;
   std::atomic<int> sleeped_threads_;

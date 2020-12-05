@@ -261,7 +261,7 @@ void BLevel::ExpandPut_(ExpandData& data, uint64_t key, uint64_t value) {
   if (data.buf_count == BLEVEL_EXPAND_BUF_KEY) {
     // buf full, add a new entry
     if (data.new_addr < data.max_addr) {
-      int prefix_len = CommonPrefixBytes(data.entry_key, key);
+      int prefix_len = CommonPrefixBytes(data.entry_key, (data.new_addr == data.max_addr - 1) ? data.last_entry_key : key);
       Entry* new_entry = new (data.new_addr) Entry(data.entry_key, prefix_len);
       data.FlushToEntry(new_entry, prefix_len, &clevel_mem_);
       (*data.expanded_entries)++;
@@ -270,10 +270,12 @@ void BLevel::ExpandPut_(ExpandData& data, uint64_t key, uint64_t value) {
       assert(data.entry_key < key);
       data.entry_key = key;
     } else {
-      for (int i = 0; i < data.buf_count; ++i) {
-        Entry* entry = data.new_addr - 1;
+      Entry* entry = data.new_addr - 1;
+      uint64_t entry_idx = ranges_[data.target_range].physical_entry_start+ranges_[data.target_range].entries-1;
+      assert(&entries_[entry_idx] == entry);
+      std::lock_guard<std::shared_mutex> lock(lock_[entry_idx]);
+      for (int i = 0; i < data.buf_count; ++i)
         entry->Put(&clevel_mem_, data.key_buf[i], data.value_buf[BLEVEL_EXPAND_BUF_KEY-i-1]);
-      }
       data.buf_count = 0;
     }
     data.max_key->store(key);
@@ -284,23 +286,24 @@ void BLevel::ExpandPut_(ExpandData& data, uint64_t key, uint64_t value) {
   data.size++;
 }
 
-void BLevel::ExpandFinish_(ExpandData& data, uint64_t next_key) {
+void BLevel::ExpandFinish_(ExpandData& data) {
   if (data.buf_count != 0) {
     if (data.new_addr < data.max_addr) {
-      int prefix_len = CommonPrefixBytes(data.entry_key, next_key);
+      int prefix_len = CommonPrefixBytes(data.entry_key, data.last_entry_key);
       Entry* new_entry = new (data.new_addr) Entry(data.entry_key, prefix_len);
       data.FlushToEntry(new_entry, prefix_len, &clevel_mem_);
       data.new_addr++;
       // inc expanded_entries before change max_key
       (*data.expanded_entries)++;
     } else {
-      for (int i = 0; i < data.buf_count; ++i) {
-        Entry* entry = data.new_addr - 1;
+      Entry* entry = data.new_addr - 1;
+      uint64_t entry_idx = ranges_[data.target_range].physical_entry_start+ranges_[data.target_range].entries-1;
+      std::lock_guard<std::shared_mutex> lock(lock_[entry_idx]);
+      for (int i = 0; i < data.buf_count; ++i)
         entry->Put(&clevel_mem_, data.key_buf[i], data.value_buf[BLEVEL_EXPAND_BUF_KEY-i-1]);
-      }
       data.buf_count = 0;
     }
-    data.max_key->store(next_key);
+    data.max_key->store(data.last_entry_key);
   }
 }
 
@@ -309,6 +312,7 @@ void BLevel::Expansion(std::vector<std::pair<uint64_t,uint64_t>>& data) {
     return;
 
   ExpandData expand_meta(entries_, entries_ + physical_nr_entries_, 0);
+  expand_meta.last_entry_key = UINT64_MAX;
   std::atomic<uint64_t> entry_count(0);
   std::atomic<uint64_t> max_key(0);
   expand_meta.expanded_entries = &entry_count;
@@ -316,7 +320,7 @@ void BLevel::Expansion(std::vector<std::pair<uint64_t,uint64_t>>& data) {
 
   for (size_t i = 0; i < data.size(); ++i)
     ExpandPut_(expand_meta, data[i].first, data[i].second);
-  ExpandFinish_(expand_meta, UINT64_MAX);
+  ExpandFinish_(expand_meta);
 
 #ifdef BRANGE
   uint64_t range_size = entry_count / EXPAND_THREADS;
@@ -347,10 +351,19 @@ void BLevel::Expansion(std::vector<std::pair<uint64_t,uint64_t>>& data) {
 
 #ifdef BRANGE
 void BLevel::PrepareExpansion(BLevel* old_blevel) {
-  uint64_t range_size = old_blevel->Size() / EXPAND_THREADS;
   uint64_t sum_interval = 0;
-  uint64_t cur_range = 0;
+  std::vector<uint64_t> sums;
+
+  for (int i = 0; i < EXPAND_THREADS; ++i) {
+    for (uint64_t j = 0; j < old_blevel->intervals_[i]; ++j) {
+      sum_interval += old_blevel->size_per_interval_[i][j];
+      sums.push_back(sum_interval);
+    }
+  }
+
+  uint64_t range_size = sum_interval / EXPAND_THREADS;
   uint64_t cur_size = range_size;
+  uint64_t cur_range = 0;
   assert(cur_size > old_blevel->size_per_interval_[0][0]);
   uint64_t min_diff = UINT64_MAX;
 
@@ -359,10 +372,10 @@ void BLevel::PrepareExpansion(BLevel* old_blevel) {
                                             &entries_[ranges_[cur_range+1].physical_entry_start],
                                             ranges_[cur_range].start_key);
 
+  uint64_t sums_idx = 0;
   for (int i = 0; i < EXPAND_THREADS; ++i) {
     for (size_t j = 0; j < old_blevel->intervals_[i]; ++j) {
-      sum_interval += old_blevel->size_per_interval_[i][j];
-      uint64_t cur_diff = sum_interval > cur_size ? sum_interval - cur_size : cur_size - sum_interval;
+      uint64_t cur_diff = sums[sums_idx] > cur_size ? sums[sums_idx] - cur_size : cur_size - sums[sums_idx];
       if (cur_diff < min_diff) {
         min_diff = cur_diff;
       } else {
@@ -375,7 +388,7 @@ void BLevel::PrepareExpansion(BLevel* old_blevel) {
         }
         cur_range++;
         cur_size = (cur_range == EXPAND_THREADS-1) ? UINT64_MAX : cur_size+range_size;
-        min_diff = sum_interval > cur_size ? sum_interval - cur_size : cur_size - sum_interval;
+        min_diff = sums[sums_idx] > cur_size ? sums[sums_idx] - cur_size : cur_size - sums[sums_idx];
         ranges_[cur_range].start_key = old_blevel->entries_[old_blevel->ranges_[i].physical_entry_start+
                                                             old_blevel->interval_size_*j].entry_key;
         new (&expand_data_[cur_range]) ExpandData(&entries_[ranges_[cur_range].physical_entry_start],
@@ -385,6 +398,7 @@ void BLevel::PrepareExpansion(BLevel* old_blevel) {
         expand_data_[cur_range].begin_interval = j;
         expand_data_[cur_range].target_range = cur_range;
       }
+      sums_idx++;
     }
   }
 
@@ -398,6 +412,7 @@ void BLevel::PrepareExpansion(BLevel* old_blevel) {
     expand_data_[i].expanded_entries = &expanded_entries_[i];
     expanded_max_key_[i].store(0);
     expand_data_[i].max_key = &expanded_max_key_[i];
+    expand_data_[i].last_entry_key = ranges_[i+1].start_key;
   }
 }
 
@@ -477,7 +492,7 @@ void BLevel::ExpandRange_(BLevel* old_blevel, int thread_id) {
     }
   }
 
-  ExpandFinish_(expand_meta, ranges_[target_range+1].start_key);
+  ExpandFinish_(expand_meta);
 
   ranges_[target_range].entries = *expand_meta.expanded_entries;
   size_.fetch_add(expand_meta.size);
@@ -520,6 +535,7 @@ bool BLevel::IsKeyExpanded(uint64_t key, int& range, uint64_t& end) const {
 
 void BLevel::Expansion(BLevel* old_blevel) {
   ExpandData expand_meta(entries_, entries_ + physical_nr_entries_, 0);
+  expand_meta.last_entry_key = UINT64_MAX;
   std::atomic<uint64_t> entry_count(0);
   expand_meta.expanded_entries = &entry_count;
   std::atomic<uint64_t> max_key(0);
@@ -568,7 +584,7 @@ void BLevel::Expansion(BLevel* old_blevel) {
     old_index++;
   }
 
-  ExpandFinish_(expand_meta, UINT64_MAX);
+  ExpandFinish_(expand_meta);
 
   nr_entries_ = entry_count;
   size_.fetch_add(expand_meta.size);
@@ -664,8 +680,11 @@ uint64_t BLevel::FindByRange_(uint64_t key, int range, uint64_t end,
 }
 
 bool BLevel::PutRange(uint64_t key, uint64_t value, int range, uint64_t end) {
+  assert(key >= entries_[ranges_[range].physical_entry_start].entry_key);
+  assert(key < expanded_max_key_[range]);
   std::atomic<size_t>* interval_size;
   uint64_t idx = FindByRange_(key, range, end, &interval_size);
+  assert(key >= entries_[idx].entry_key);
   return Put_(key, value, idx, interval_size);
 }
 

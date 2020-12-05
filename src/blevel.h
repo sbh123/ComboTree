@@ -538,6 +538,7 @@ class BLevel {
     uint64_t target_range;
 #endif
     uint64_t entry_key;
+    uint64_t last_entry_key;
     int buf_count;
     std::atomic<uint64_t>* max_key;
     std::atomic<uint64_t>* expanded_entries;
@@ -632,7 +633,7 @@ class BLevel {
 #endif
   void ExpandSetup_(ExpandData& data);
   void ExpandPut_(ExpandData& data, uint64_t key, uint64_t value);
-  void ExpandFinish_(ExpandData& data, uint64_t next_key);
+  void ExpandFinish_(ExpandData& data);
 
   ALWAYS_INLINE bool Put_(uint64_t key, uint64_t value, uint64_t physical_idx
 #ifdef BRANGE
