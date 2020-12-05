@@ -3,10 +3,11 @@ cmake_minimum_required(VERSION 3.0)
 
 # use `cmake -DSERVER:BOOL=ON ..` when running in server
 option(SERVER           "Run in server"           ON)
-option(BUF_SORT         "Sort buffer in KVBufer"  OFF)
+option(BUF_SORT         "Sort buffer in KVBufer"  ON)
 option(STREAMING_LOAD   "Use Non-temporal Load"   OFF)
 option(STREAMING_STORE  "Use Non-temporal Store"  OFF)
 option(NO_LOCK          "Don't use lock"          OFF)
+option(BRANGE           "Multi-thread expanding"  ON)
 
 # ComboTree Configuration
 # use `make clean && make CXX_DEFINES="-DNAME=VALUE"` to override during compile
@@ -19,6 +20,12 @@ else()
   set(CLEVEL_PMEM_FILE      \"/mnt/pmem0/combotree-clevel-\")
   set(BLEVEL_PMEM_FILE      \"/mnt/pmem0/combotree-blevel-\")
 endif(SERVER)
+
+if(BRANGE)
+  set(EXPAND_THREADS      4)
+  set(BRANGE_COUNT        192)
+endif(BRANGE)
+
 set(BLEVEL_EXPAND_BUF_KEY 6)
 set(EXPANSION_FACTOR      4)
 set(DEFAULT_SPAN          2)

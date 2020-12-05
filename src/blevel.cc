@@ -3,10 +3,21 @@
 #include <iostream>
 #include <chrono>
 #include <shared_mutex>
+#include <condition_variable>
+#include <thread>
 #include "combotree_config.h"
 #include "blevel.h"
 
 namespace combotree {
+
+// global variable
+#ifdef BRANGE
+std::mutex BLevel::expand_wait_lock;
+std::condition_variable BLevel::expand_wait_cv;
+std::atomic<uint64_t> BLevel::expanded_max_key_[EXPAND_THREADS];
+std::atomic<uint64_t> BLevel::expanded_entries_[EXPAND_THREADS];
+BLevel::ExpandData BLevel::expand_data_[EXPAND_THREADS];
+#endif
 
 int BLevel::file_id_ = 0;
 
@@ -194,7 +205,8 @@ BLevel::BLevel(size_t data_size)
   pmem_file_ = std::string(BLEVEL_PMEM_FILE) + std::to_string(file_id_);
   int is_pmem;
   std::filesystem::remove(pmem_file_);
-  size_t file_size = sizeof(Entry)*((data_size+1+BLEVEL_EXPAND_BUF_KEY-1)/BLEVEL_EXPAND_BUF_KEY);
+  physical_nr_entries_ = ((data_size+1+BLEVEL_EXPAND_BUF_KEY-1)/BLEVEL_EXPAND_BUF_KEY) * ENTRY_SIZE_FACTOR;
+  size_t file_size = sizeof(Entry) * physical_nr_entries_;
   pmem_addr_ = pmem_map_file(pmem_file_.c_str(), file_size + 64,
                PMEM_FILE_CREATE | PMEM_FILE_EXCL, 0666, &mapped_len_, &is_pmem);
   assert(is_pmem == 1);
@@ -202,6 +214,23 @@ BLevel::BLevel(size_t data_size)
     perror("BLevel::BLevel(): pmem_map_file");
     exit(1);
   }
+
+#ifdef BRANGE
+  interval_size_ = std::max(8UL, physical_nr_entries_ / EXPAND_THREADS / 128);
+  uint64_t entries_per_range = physical_nr_entries_ / EXPAND_THREADS;
+  for (int i = 0; i < EXPAND_THREADS; ++i) {
+    ranges_[i].physical_entry_start = i * entries_per_range;
+    if (i != EXPAND_THREADS - 1)
+      ranges_[i].entries = entries_per_range;
+    else
+      ranges_[i].entries = physical_nr_entries_-((EXPAND_THREADS-1)*entries_per_range);
+    intervals_[i] = (ranges_[i].entries+interval_size_-1)/interval_size_;
+    size_per_interval_[i] = new std::atomic<size_t>[intervals_[i]]{};
+    assert(size_per_interval_[i][0] == 0);
+  }
+  ranges_[EXPAND_THREADS].physical_entry_start = physical_nr_entries_;
+  ranges_[EXPAND_THREADS].entries = -1;
+#endif
 
   // aligned at 64-bytes
   entries_ = (Entry*)pmem_addr_;
@@ -211,6 +240,11 @@ BLevel::BLevel(size_t data_size)
   }
 
   entries_offset_ = (uint64_t)entries_ - (uint64_t)pmem_addr_;
+
+#ifndef NO_LOCK
+  // plus one because of scan
+  lock_ = new std::shared_mutex[physical_nr_entries_+1];
+#endif
 }
 
 BLevel::~BLevel() {
@@ -226,60 +260,274 @@ BLevel::~BLevel() {
 void BLevel::ExpandPut_(ExpandData& data, uint64_t key, uint64_t value) {
   if (data.buf_count == BLEVEL_EXPAND_BUF_KEY) {
     // buf full, add a new entry
-    if (data.zero_entry && data.key_buf[0] != 0) {
-      int prefix_len = CommonPrefixBytes(0UL, key);
-      Entry* new_entry = new (data.new_addr) Entry(0UL, prefix_len);
+    if (data.new_addr < data.max_addr) {
+      int prefix_len = CommonPrefixBytes(data.entry_key, key);
+      Entry* new_entry = new (data.new_addr) Entry(data.entry_key, prefix_len);
       data.FlushToEntry(new_entry, prefix_len, &clevel_mem_);
+      (*data.expanded_entries)++;
+      data.new_addr++;
+      // next entry_key
+      assert(data.entry_key < key);
+      data.entry_key = key;
     } else {
-      int prefix_len = CommonPrefixBytes(data.key_buf[0], key);
-      Entry* new_entry = new (data.new_addr) Entry(data.key_buf[0], prefix_len);
-      data.FlushToEntry(new_entry, prefix_len, &clevel_mem_);
+      for (int i = 0; i < data.buf_count; ++i) {
+        Entry* entry = data.new_addr - 1;
+        entry->Put(&clevel_mem_, data.key_buf[i], data.value_buf[BLEVEL_EXPAND_BUF_KEY-i-1]);
+      }
+      data.buf_count = 0;
     }
-    data.new_addr++;
-    data.zero_entry = false;
-    nr_entries_++;
+    data.max_key->store(key);
   }
   data.key_buf[data.buf_count] = key;
-  data.value_buf[BLEVEL_EXPAND_BUF_KEY - data.buf_count - 1] = value;
+  data.value_buf[BLEVEL_EXPAND_BUF_KEY-data.buf_count-1] = value;
   data.buf_count++;
-  size_++;
+  data.size++;
 }
 
-void BLevel::ExpandFinish_(ExpandData& data) {
-  assert(data.zero_entry != true);
+void BLevel::ExpandFinish_(ExpandData& data, uint64_t next_key) {
   if (data.buf_count != 0) {
-    int prefix_len = CommonPrefixBytes(data.key_buf[0], 0xFFFFFFFFFFFFFFFFUL);
-    Entry* new_entry = new (data.new_addr) Entry(data.key_buf[0], prefix_len);
-    data.FlushToEntry(new_entry, prefix_len, &clevel_mem_);
-    data.new_addr++;
-    nr_entries_++;
+    if (data.new_addr < data.max_addr) {
+      int prefix_len = CommonPrefixBytes(data.entry_key, next_key);
+      Entry* new_entry = new (data.new_addr) Entry(data.entry_key, prefix_len);
+      data.FlushToEntry(new_entry, prefix_len, &clevel_mem_);
+      data.new_addr++;
+      // inc expanded_entries before change max_key
+      (*data.expanded_entries)++;
+    } else {
+      for (int i = 0; i < data.buf_count; ++i) {
+        Entry* entry = data.new_addr - 1;
+        entry->Put(&clevel_mem_, data.key_buf[i], data.value_buf[BLEVEL_EXPAND_BUF_KEY-i-1]);
+      }
+      data.buf_count = 0;
+    }
+    data.max_key->store(next_key);
   }
 }
 
 void BLevel::Expansion(std::vector<std::pair<uint64_t,uint64_t>>& data) {
-  size_ = 0;
-
   if (data.empty())
     return;
 
-  ExpandData expand_meta(entries_);
+  ExpandData expand_meta(entries_, entries_ + physical_nr_entries_, 0);
+  std::atomic<uint64_t> entry_count(0);
+  std::atomic<uint64_t> max_key(0);
+  expand_meta.expanded_entries = &entry_count;
+  expand_meta.max_key = &max_key;
+
   for (size_t i = 0; i < data.size(); ++i)
     ExpandPut_(expand_meta, data[i].first, data[i].second);
-  ExpandFinish_(expand_meta);
+  ExpandFinish_(expand_meta, UINT64_MAX);
 
-#ifndef NO_LOCK
-  // plus one because of scan
-  lock_ = new std::shared_mutex[Entries()+1];
+#ifdef BRANGE
+  uint64_t range_size = entry_count / EXPAND_THREADS;
+
+  nr_entries_ = 0;
+  for (int i = 0; i < EXPAND_THREADS; ++i) {
+    ranges_[i].entries = (i < EXPAND_THREADS-1) ? range_size : entry_count-(EXPAND_THREADS-1)*range_size;
+    ranges_[i].logical_entry_start  = nr_entries_;
+    ranges_[i].physical_entry_start = nr_entries_;
+    ranges_[i].start_key = entries_[nr_entries_].entry_key;
+    nr_entries_ += ranges_[i].entries;
+    intervals_[i] = (ranges_[i].entries+interval_size_-1) / interval_size_;
+    for (uint64_t j = 0; j < intervals_[i] - 1; ++j)
+      size_per_interval_[i][j].fetch_add(interval_size_*BLEVEL_EXPAND_BUF_KEY);
+    size_per_interval_[i][intervals_[i]-1].fetch_add(
+      (ranges_[i].entries-(interval_size_*(intervals_[i]-1)))*BLEVEL_EXPAND_BUF_KEY);
+  }
+  ranges_[EXPAND_THREADS].entries = -1;
+  ranges_[EXPAND_THREADS].logical_entry_start = nr_entries_;
+  ranges_[EXPAND_THREADS].physical_entry_start = nr_entries_;
+  ranges_[EXPAND_THREADS].start_key = UINT64_MAX;
 #endif
+
+  nr_entries_ = entry_count;
+  size_.fetch_add(expand_meta.size);
+  assert(size_ == data.size());
+}
+
+#ifdef BRANGE
+void BLevel::PrepareExpansion(BLevel* old_blevel) {
+  uint64_t range_size = old_blevel->Size() / EXPAND_THREADS;
+  uint64_t sum_interval = 0;
+  uint64_t cur_range = 0;
+  uint64_t cur_size = range_size;
+  assert(cur_size > old_blevel->size_per_interval_[0][0]);
+  uint64_t min_diff = UINT64_MAX;
+
+  ranges_[cur_range].start_key = 0;
+  new (&expand_data_[cur_range]) ExpandData(&entries_[ranges_[cur_range].physical_entry_start],
+                                            &entries_[ranges_[cur_range+1].physical_entry_start],
+                                            ranges_[cur_range].start_key);
+
+  for (int i = 0; i < EXPAND_THREADS; ++i) {
+    for (size_t j = 0; j < old_blevel->intervals_[i]; ++j) {
+      sum_interval += old_blevel->size_per_interval_[i][j];
+      uint64_t cur_diff = sum_interval > cur_size ? sum_interval - cur_size : cur_size - sum_interval;
+      if (cur_diff < min_diff) {
+        min_diff = cur_diff;
+      } else {
+        if (j == 0) {
+          expand_data_[cur_range].end_range = i - 1;
+          expand_data_[cur_range].end_interval = old_blevel->intervals_[i-1] - 1;
+        } else {
+          expand_data_[cur_range].end_range = i;
+          expand_data_[cur_range].end_interval = j - 1;
+        }
+        cur_range++;
+        cur_size = (cur_range == EXPAND_THREADS-1) ? UINT64_MAX : cur_size+range_size;
+        min_diff = sum_interval > cur_size ? sum_interval - cur_size : cur_size - sum_interval;
+        ranges_[cur_range].start_key = old_blevel->entries_[old_blevel->ranges_[i].physical_entry_start+
+                                                            old_blevel->interval_size_*j].entry_key;
+        new (&expand_data_[cur_range]) ExpandData(&entries_[ranges_[cur_range].physical_entry_start],
+                                                  &entries_[ranges_[cur_range+1].physical_entry_start],
+                                                  ranges_[cur_range].start_key);
+        expand_data_[cur_range].begin_range = i;
+        expand_data_[cur_range].begin_interval = j;
+        expand_data_[cur_range].target_range = cur_range;
+      }
+    }
+  }
+
+  expand_data_[cur_range].end_range = EXPAND_THREADS - 1;
+  expand_data_[cur_range].end_interval = old_blevel->intervals_[EXPAND_THREADS-1] - 1;
+  assert(cur_range == EXPAND_THREADS - 1);
+  ranges_[EXPAND_THREADS].start_key = UINT64_MAX;
+
+  for (int i = 0; i < EXPAND_THREADS; ++i) {
+    expanded_entries_[i].store(0);
+    expand_data_[i].expanded_entries = &expanded_entries_[i];
+    expanded_max_key_[i].store(0);
+    expand_data_[i].max_key = &expanded_max_key_[i];
+  }
 }
 
 void BLevel::Expansion(BLevel* old_blevel) {
-  uint64_t old_index = 0;
-  ExpandData expand_meta(entries_);
+  std::vector<std::thread> expand_thread;
+  for (int i = 0; i < EXPAND_THREADS; ++i)
+    expand_thread.emplace_back(&BLevel::ExpandRange_, this, old_blevel, i);
+  for (auto& t : expand_thread)
+    t.join();
+  FinishExpansion_();
+
+  expand_wait_cv.notify_all();
+}
+
+void BLevel::ExpandRange_(BLevel* old_blevel, int thread_id) {
+  ExpandData& expand_meta = expand_data_[thread_id];
+  int begin_range = expand_meta.begin_range;
+  int end_range   = expand_meta.end_range;
+
+  uint64_t physical_begin = old_blevel->ranges_[begin_range].physical_entry_start +
+                            expand_meta.begin_interval * old_blevel->interval_size_;
+  uint64_t physical_end   = old_blevel->ranges_[end_range].physical_entry_start +
+                            std::min(old_blevel->ranges_[end_range].entries,
+                                     (expand_meta.end_interval+1)*old_blevel->interval_size_);
+
+  int target_range = expand_meta.target_range;
   Entry* old_entry;
   CLevel::MemControl* old_mem = &old_blevel->clevel_mem_;
 
-  size_ = 0;
+#ifdef STREAMING_LOAD
+  Entry in_mem_entry(0,0);
+  old_entry = &in_mem_entry;
+#endif
+
+  for (int range = begin_range; range <= end_range; ++range) {
+    // physical index
+    uint64_t range_begin = (range == begin_range) ? physical_begin :
+                           old_blevel->ranges_[range].physical_entry_start;
+    uint64_t range_end   = (range == end_range) ? physical_end :
+                           old_blevel->ranges_[range].physical_entry_start + old_blevel->ranges_[range].entries;
+
+    for (uint64_t old_index = range_begin; old_index < range_end; ++old_index) {
+#ifndef NO_LOCK
+      std::lock_guard<std::shared_mutex> lock(old_blevel->lock_[old_index]);
+#endif
+#ifdef STREAMING_LOAD
+      stream_load_entry(&in_mem_entry, &old_blevel->entries_[old_index]);
+#else
+      old_entry = &old_blevel->entries_[old_index];
+#endif
+
+      if (old_entry->clevel.HasSetup()) {
+        expand_meta.clevel_count++;
+        Entry::Iter biter(old_entry, old_mem);
+        uint64_t total_cnt = 0;
+        uint64_t last_key = 0;
+        do {
+          assert(last_key == 0 || last_key < biter.key());
+          assert(biter.key() >= old_entry->entry_key);
+          last_key = biter.key();
+          total_cnt++;
+          ExpandPut_(expand_meta, biter.key(), biter.value());
+        } while(biter.next());
+        expand_meta.clevel_data_count += total_cnt - old_entry->buf.entries;
+      } else if (!old_entry->buf.Empty()) {
+#ifdef BUF_SORT
+        for (uint64_t i = 0; i < old_entry->buf.entries; ++i)
+          ExpandPut_(expand_meta, old_entry->key(i), old_entry->value(i));
+#else
+        int sorted_index[16];
+        old_entry->buf.GetSortedIndex(sorted_index);
+        for (uint64_t i = 0; i < old_entry->buf.entries; ++i)
+          ExpandPut_(expand_meta, old_entry->key(sorted_index[i]), old_entry->value(sorted_index[i]));
+#endif // BUF_SORT
+      }
+      old_blevel->entries_[old_index].SetInvalid();
+    }
+  }
+
+  ExpandFinish_(expand_meta, ranges_[target_range+1].start_key);
+
+  ranges_[target_range].entries = *expand_meta.expanded_entries;
+  size_.fetch_add(expand_meta.size);
+
+  intervals_[target_range] = (ranges_[target_range].entries+interval_size_-1)/interval_size_;
+  for (uint64_t i = 0; i < intervals_[target_range] - 1; ++i)
+    size_per_interval_[target_range][i].fetch_add(interval_size_*BLEVEL_EXPAND_BUF_KEY);
+  size_per_interval_[target_range][intervals_[target_range]-1].fetch_add(
+    (ranges_[target_range].entries-(interval_size_*(intervals_[target_range]-1)))*BLEVEL_EXPAND_BUF_KEY);
+
+  LOG(Debug::INFO, "data in clevel: %ld, clevel count: %ld, pairs per clevel: %lf",
+      expand_meta.clevel_data_count, expand_meta.clevel_count, (double)expand_meta.clevel_data_count/(double)expand_meta.clevel_count);
+}
+
+// all thread has finished expansion
+void BLevel::FinishExpansion_() {
+  nr_entries_ = 0;
+  for (int i = 0; i < EXPAND_THREADS; ++i) {
+    ranges_[i].logical_entry_start = nr_entries_;
+    nr_entries_ += ranges_[i].entries;
+    assert(ranges_[i].start_key == entries_[ranges_[i].physical_entry_start].entry_key);
+  }
+  ranges_[EXPAND_THREADS].logical_entry_start = nr_entries_;
+  for (uint64_t i = 0; i < nr_entries_ - 1; ++i) {
+    assert(EntryKey(i) < EntryKey(i + 1));
+  }
+}
+
+bool BLevel::IsKeyExpanded(uint64_t key, int& range, uint64_t& end) const {
+  range = FindBRangeByKey_(key);
+  if (key < expanded_max_key_[range].load()) {
+    end = ranges_[range].physical_entry_start + expanded_entries_[range].load() - 1;
+    return true;
+  } else {
+    return false;
+  }
+}
+
+#else // BRANGE
+
+void BLevel::Expansion(BLevel* old_blevel) {
+  ExpandData expand_meta(entries_, entries_ + physical_nr_entries_, 0);
+  std::atomic<uint64_t> entry_count(0);
+  expand_meta.expanded_entries = &entry_count;
+  std::atomic<uint64_t> max_key(0);
+  expand_meta.max_key = &max_key;
+
+  uint64_t old_index = 0;
+  Entry* old_entry;
+  CLevel::MemControl* old_mem = &old_blevel->clevel_mem_;
 
 #ifdef STREAMING_LOAD
   Entry in_mem_entry(0,0);
@@ -320,27 +568,57 @@ void BLevel::Expansion(BLevel* old_blevel) {
     old_index++;
   }
 
-  ExpandFinish_(expand_meta);
+  ExpandFinish_(expand_meta, UINT64_MAX);
+
+  nr_entries_ = entry_count;
+  size_.fetch_add(expand_meta.size);
 
   LOG(Debug::INFO, "data in clevel: %ld, clevel count: %ld, pairs per clevel: %lf",
       expand_meta.clevel_data_count, expand_meta.clevel_count, (double)expand_meta.clevel_data_count/(double)expand_meta.clevel_count);
-
-#ifndef NO_LOCK
-  // plus one because of scan
-  lock_ = new std::shared_mutex[Entries()+1];
-#endif
 }
+#endif // BRANGE
 
-uint64_t BLevel::Find_(uint64_t key, uint64_t begin, uint64_t end) const {
+uint64_t BLevel::Find_(uint64_t key, uint64_t begin, uint64_t end
+#ifdef BRANGE
+                       , std::atomic<size_t>** interval
+#endif
+                       ) const {
   assert(begin < Entries());
   assert(end < Entries());
+  // FIXME: too many assert
+  assert(begin <= end);
+  assert(end < nr_entries_);
+  uint64_t min_key = EntryKey(begin);
+  uint64_t max_key = (end + 1 == nr_entries_) ? UINT64_MAX : EntryKey(end+1);
+  assert(key >= min_key);
+  assert(key <= max_key);
+#ifdef BRANGE
+  // change logical index [begin, end] to physical index
+  // after this, begin and end are in the same brange.
+  int target_range = FindBRangeByKey_(key);
+  assert(begin < ranges_[target_range+1].logical_entry_start);
+  assert(end >= ranges_[target_range].logical_entry_start);
+  begin = (begin >= ranges_[target_range].logical_entry_start) ?
+            GetPhysical_(ranges_[target_range], begin) :
+            ranges_[target_range].physical_entry_start;
+  end   = (end < ranges_[target_range+1].logical_entry_start) ?
+            GetPhysical_(ranges_[target_range], end) :
+            ranges_[target_range].physical_entry_start+ranges_[target_range].entries-1;
+#endif // BRANGE
+
+  // binary search
   int left = begin;
   int right = end;
-  // binary search
   while (left <= right) {
     int middle = (left + right) / 2;
     uint64_t mid_key = entries_[middle].entry_key;
     if (mid_key == key) {
+#ifdef BRANGE
+      if (interval) {
+        int idx = (middle - ranges_[target_range].physical_entry_start) / interval_size_;
+        *interval = &size_per_interval_[target_range][idx];
+      }
+#endif
       return middle;
     } else if (mid_key < key) {
       left = middle + 1;
@@ -348,39 +626,90 @@ uint64_t BLevel::Find_(uint64_t key, uint64_t begin, uint64_t end) const {
       right = middle - 1;
     }
   }
+#ifdef BRANGE
+  if (interval) {
+    int idx = (right - ranges_[target_range].physical_entry_start) / interval_size_;
+    *interval = &size_per_interval_[target_range][idx];
+  }
+#endif
   return right;
 }
 
-bool BLevel::Put(uint64_t key, uint64_t value, uint64_t begin, uint64_t end) {
-  uint64_t idx = Find_(key, begin, end);
-#ifndef NO_LOCK
-  std::lock_guard<std::shared_mutex> lock(lock_[idx]);
-#endif
-  if (entries_[idx].Put(&clevel_mem_, key, value)) {
-    size_++;
-    return true;
+#ifdef BRANGE
+uint64_t BLevel::FindByRange_(uint64_t key, int range, uint64_t end,
+                              std::atomic<size_t>** interval) const {
+  // binary search
+  int left = ranges_[range].physical_entry_start;
+  int right = end;
+  while (left <= right) {
+    int middle = (left + right) / 2;
+    uint64_t mid_key = entries_[middle].entry_key;
+    if (mid_key == key) {
+      if (interval) {
+        int idx = (middle - ranges_[range].physical_entry_start) / interval_size_;
+        *interval = &size_per_interval_[range][idx];
+      }
+      return middle;
+    } else if (mid_key < key) {
+      left = middle + 1;
+    } else {
+      right = middle - 1;
+    }
   }
-  return false;
+  if (interval) {
+    int idx = (right - ranges_[range].physical_entry_start) / interval_size_;
+    *interval = &size_per_interval_[range][idx];
+  }
+  return right;
+}
+
+bool BLevel::PutRange(uint64_t key, uint64_t value, int range, uint64_t end) {
+  std::atomic<size_t>* interval_size;
+  uint64_t idx = FindByRange_(key, range, end, &interval_size);
+  return Put_(key, value, idx, interval_size);
+}
+
+bool BLevel::GetRange(uint64_t key, uint64_t& value, int range, uint64_t end) const {
+  uint64_t idx = Find_(key, range, end, nullptr);
+  return Get_(key, value, idx);
+}
+
+bool BLevel::DeleteRange(uint64_t key, uint64_t* value, int range, uint64_t end) {
+  std::atomic<size_t>* interval_size;
+  uint64_t idx = Find_(key, range, end, &interval_size);
+  return Delete_(key, value, idx, interval_size);
+}
+#endif // BRANGE
+
+bool BLevel::Put(uint64_t key, uint64_t value, uint64_t begin, uint64_t end) {
+#ifdef BRANGE
+  std::atomic<size_t>* interval_size;
+  uint64_t idx = Find_(key, begin, end, &interval_size);
+  return Put_(key, value, idx, interval_size);
+#else
+  uint64_t idx = Find_(key, begin, end);
+  return Put_(key, value, idx);
+#endif
 }
 
 bool BLevel::Get(uint64_t key, uint64_t& value, uint64_t begin, uint64_t end) const {
+#ifdef BRANGE
+  uint64_t idx = Find_(key, begin, end, nullptr);
+#else
   uint64_t idx = Find_(key, begin, end);
-#ifndef NO_LOCK
-  std::shared_lock<std::shared_mutex> lock(lock_[idx]);
 #endif
-  return entries_[idx].Get((CLevel::MemControl*)&clevel_mem_, key, value);
+  return Get_(key, value, idx);
 }
 
 bool BLevel::Delete(uint64_t key, uint64_t* value, uint64_t begin, uint64_t end) {
+#ifdef BRANGE
+  std::atomic<size_t>* interval_size;
+  uint64_t idx = Find_(key, begin, end, &interval_size);
+  return Delete_(key, value, idx, interval_size);
+#else
   uint64_t idx = Find_(key, begin, end);
-#ifndef NO_LOCK
-  std::lock_guard<std::shared_mutex> lock(lock_[idx]);
+  return Delete_(key, value, idx);
 #endif
-  if (entries_[idx].Delete(&clevel_mem_, key, value)) {
-    size_--;
-    return true;
-  }
-  return false;
 }
 
 size_t BLevel::CountCLevel() const {

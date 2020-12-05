@@ -5,6 +5,7 @@
 #cmakedefine STREAMING_STORE
 #cmakedefine STREAMING_LOAD
 #cmakedefine NO_LOCK
+#cmakedefine BRANGE
 
 #ifndef CLEVEL_PMEM_FILE_SIZE
 #define CLEVEL_PMEM_FILE_SIZE @CLEVEL_PMEM_FILE_SIZE@
@@ -29,4 +30,10 @@
 #endif
 #ifndef ENTRY_SIZE_FACTOR
 #define ENTRY_SIZE_FACTOR     @ENTRY_SIZE_FACTOR@
+#endif
+#if defined(BRANGE) && !defined(BRANGE_COUNT)
+#define BRANGE_COUNT          @BRANGE_COUNT@
+#endif
+#if defined(BRANGE) && !defined(EXPAND_THREADS)
+#define EXPAND_THREADS        @EXPAND_THREADS@
 #endif

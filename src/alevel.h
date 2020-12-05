@@ -12,7 +12,7 @@ class ComboTree;
 // in-memory
 class ALevel {
  public:
-  ALevel(std::shared_ptr<BLevel> blevel, int span = DEFAULT_SPAN);
+  ALevel(BLevel* blevel, int span = DEFAULT_SPAN);
 
   bool Put(uint64_t key, uint64_t value) {
     uint64_t begin, end;
@@ -47,7 +47,7 @@ class ALevel {
   };
 
   int span_;
-  std::shared_ptr<BLevel> blevel_;
+  BLevel* blevel_;
   uint64_t min_key_;
   uint64_t max_key_;
   uint64_t nr_blevel_entry_;

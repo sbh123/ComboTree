@@ -4,14 +4,14 @@
 
 namespace combotree {
 
-ALevel::ALevel(std::shared_ptr<BLevel> blevel, int span)
+ALevel::ALevel(BLevel* blevel, int span)
     : span_(span), blevel_(blevel)
 {
-  min_key_ = blevel_->MinEntryKey();
-  max_key_ = blevel_->MaxEntryKey();
   // actual blevel entry count is blevel_->nr_entry_ - 1
   // because the first entry in blevel is 0
   nr_blevel_entry_ = blevel_->Entries() - 1;
+  min_key_ = blevel_->EntryKey(1);
+  max_key_ = blevel_->EntryKey(nr_blevel_entry_);
   nr_entry_ = ((nr_blevel_entry_ + 1) / span_) + 1;
   entry_ = new Entry[nr_entry_];
 

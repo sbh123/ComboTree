@@ -7,12 +7,12 @@
 #include "combotree_config.h"
 #include "random.h"
 
-#define TEST_SIZE   4000000
+#define TEST_SIZE   40000000
 
 using combotree::ComboTree;
 using combotree::Random;
 
-int thread_num = 4;
+int thread_num = 8;
 
 int main(void) {
 #ifdef SERVER

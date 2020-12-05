@@ -68,7 +68,7 @@ struct KVBuffer {
 
   ALWAYS_INLINE uint64_t value(int idx) const {
     // the const bit mask will be generated during compile
-    return *(uint64_t*)pvalue(idx) & (0xFFFFFFFFFFFFFFFFUL >> ((8-value_size)*8));
+    return *(uint64_t*)pvalue(idx) & (UINT64_MAX >> ((8-value_size)*8));
   }
 
   int Find(uint64_t target, bool& find) const {
