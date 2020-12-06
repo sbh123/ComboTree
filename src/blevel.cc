@@ -264,7 +264,7 @@ void BLevel::ExpandPut_(ExpandData& data, uint64_t key, uint64_t value) {
       int prefix_len = CommonPrefixBytes(data.entry_key, (data.new_addr == data.max_addr - 1) ? data.last_entry_key : key);
       Entry* new_entry = new (data.new_addr) Entry(data.entry_key, prefix_len);
       data.FlushToEntry(new_entry, prefix_len, &clevel_mem_);
-      (*data.expanded_entries)++;
+      data.expanded_entries->fetch_add(1, std::memory_order_release);
       data.new_addr++;
       // assert(data.entry_key < key);
       // next entry_key
@@ -277,7 +277,7 @@ void BLevel::ExpandPut_(ExpandData& data, uint64_t key, uint64_t value) {
         entry->Put(&clevel_mem_, data.key_buf[i], data.value_buf[BLEVEL_EXPAND_BUF_KEY-i-1]);
       data.buf_count = 0;
     }
-    data.max_key->store(key);
+    data.max_key->store(key, std::memory_order_release);
   }
   data.key_buf[data.buf_count] = key;
   data.value_buf[BLEVEL_EXPAND_BUF_KEY-data.buf_count-1] = value;
@@ -293,7 +293,7 @@ void BLevel::ExpandFinish_(ExpandData& data) {
       data.FlushToEntry(new_entry, prefix_len, &clevel_mem_);
       data.new_addr++;
       // inc expanded_entries before change max_key
-      (*data.expanded_entries)++;
+      data.expanded_entries->fetch_add(1, std::memory_order_release);
     } else {
       Entry* entry = data.new_addr - 1;
       uint64_t entry_idx = ranges_[data.target_range].physical_entry_start+ranges_[data.target_range].entries-1;
@@ -302,7 +302,7 @@ void BLevel::ExpandFinish_(ExpandData& data) {
         entry->Put(&clevel_mem_, data.key_buf[i], data.value_buf[BLEVEL_EXPAND_BUF_KEY-i-1]);
       data.buf_count = 0;
     }
-    data.max_key->store(data.last_entry_key);
+    data.max_key->store(data.last_entry_key, std::memory_order_release);
   }
 }
 
@@ -344,7 +344,7 @@ void BLevel::Expansion(std::vector<std::pair<uint64_t,uint64_t>>& data) {
 #endif
 
   nr_entries_ = entry_count;
-  size_.fetch_add(expand_meta.size);
+  size_.fetch_add(expand_meta.size, std::memory_order_release);
   assert(size_ == data.size());
 }
 
@@ -517,8 +517,8 @@ void BLevel::FinishExpansion_() {
 
 bool BLevel::IsKeyExpanded(uint64_t key, int& range, uint64_t& end) const {
   range = FindBRangeByKey_(key);
-  if (key < expanded_max_key_[range].load()) {
-    end = ranges_[range].physical_entry_start + expanded_entries_[range].load() - 1;
+  if (key < expanded_max_key_[range].load(std::memory_order_acquire)) {
+    end = ranges_[range].physical_entry_start + expanded_entries_[range].load(std::memory_order_acquire) - 1;
     return true;
   } else {
     return false;

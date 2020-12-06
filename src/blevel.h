@@ -647,9 +647,9 @@ class BLevel {
     if (!entries_[physical_idx].IsValid())
       return false;
     entries_[physical_idx].Put(&clevel_mem_, key, value);
-    size_++;
+    size_.fetch_add(1, std::memory_order_relaxed);
 #ifdef BRANGE
-    (*interval_size)++;
+    interval_size->fetch_add(1, std::memory_order_relaxed);
 #endif
     return true;
   }
@@ -674,9 +674,9 @@ class BLevel {
     if (!entries_[physical_idx].IsValid())
       return false;
     entries_[physical_idx].Delete(&clevel_mem_, key, value);
-    size_--;
+    size_.fetch_sub(1, std::memory_order_relaxed);
 #ifdef BRANGE
-    (*interval_size)--;
+    interval_size->fetch_sub(1, std::memory_order_relaxed);
 #endif
     return true;
   }
