@@ -646,6 +646,23 @@ uint64_t BLevel::Find_(uint64_t key, uint64_t begin, uint64_t end
 }
 
 #ifdef BRANGE
+uint64_t BLevel::BinarySearch_(uint64_t key, uint64_t begin, uint64_t end) const {
+  // binary search
+  int left = begin;
+  int right = end;
+  while (left <= right) {
+    int middle = (left + right) / 2;
+    uint64_t mid_key = entries_[middle].entry_key;
+    if (mid_key == key)
+      return middle;
+    else if (mid_key < key)
+      left = middle + 1;
+    else
+      right = middle - 1;
+  }
+  return right;
+}
+
 uint64_t BLevel::FindByRange_(uint64_t key, int range, uint64_t end,
                               std::atomic<size_t>** interval) const {
   // binary search

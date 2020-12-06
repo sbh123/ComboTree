@@ -40,7 +40,7 @@ foreach (@lines) {
         $row = 0;
         $expand_count = 0;
         writesheet "Thread", $1;
-    } elsif (/start to expand combotree/) {
+    } elsif (/preparing to expand combotree/) {
         $expand_count++;
     } elsif (/load:${num}${num}/) {
         writesheet "load iops", $2/1000;

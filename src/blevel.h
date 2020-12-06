@@ -290,8 +290,13 @@ class BLevel {
 #ifdef BRANGE
       range_ = blevel_->FindBRangeByKey_(start_key);
       range_end_ = blevel_->ranges_[range_].physical_entry_start+blevel_->ranges_[range_].entries;
-      end = std::min<uint64_t>(blevel_->ranges_[range_+1].logical_entry_start-1, end);
-      entry_idx_ = blevel_->FindByRange_(start_key, range_, blevel_->GetPhysical_(blevel_->ranges_[range_], end), nullptr);
+      begin = (begin >= blevel_->ranges_[range_].logical_entry_start) ?
+               blevel_->GetPhysical_(blevel_->ranges_[range_], begin) :
+               blevel_->ranges_[range_].physical_entry_start;
+      end   = (end < blevel_->ranges_[range_+1].logical_entry_start) ?
+               blevel_->GetPhysical_(blevel_->ranges_[range_], end) :
+               blevel_->ranges_[range_].physical_entry_start+blevel_->ranges_[range_].entries-1;
+      entry_idx_ = blevel_->BinarySearch_(start_key, begin, end);
 #else
       entry_idx_ = blevel_->Find_(start_key, begin, end);
 #endif
@@ -418,8 +423,13 @@ class BLevel {
 #ifdef BRANGE
       range_ = blevel_->FindBRangeByKey_(start_key);
       range_end_ = blevel_->ranges_[range_].physical_entry_start+blevel_->ranges_[range_].entries;
-      end = std::min<uint64_t>(blevel_->ranges_[range_+1].logical_entry_start-1, end);
-      entry_idx_ = blevel_->FindByRange_(start_key, range_, blevel_->GetPhysical_(blevel_->ranges_[range_], end), nullptr);
+      begin = (begin >= blevel_->ranges_[range_].logical_entry_start) ?
+               blevel_->GetPhysical_(blevel_->ranges_[range_], begin) :
+               blevel_->ranges_[range_].physical_entry_start;
+      end   = (end < blevel_->ranges_[range_+1].logical_entry_start) ?
+               blevel_->GetPhysical_(blevel_->ranges_[range_], end) :
+               blevel_->ranges_[range_].physical_entry_start+blevel_->ranges_[range_].entries-1;
+      entry_idx_ = blevel_->BinarySearch_(start_key, begin, end);
 #else
       entry_idx_ = blevel_->Find_(start_key, begin, end);
 #endif
@@ -628,6 +638,7 @@ class BLevel {
   void FinishExpansion_();
   uint64_t Find_(uint64_t key, uint64_t begin, uint64_t end, std::atomic<size_t>** interval) const;
   uint64_t FindByRange_(uint64_t key, int range, uint64_t end, std::atomic<size_t>** interval) const;
+  uint64_t BinarySearch_(uint64_t key, uint64_t begin, uint64_t end) const;
 #else
   uint64_t Find_(uint64_t key, uint64_t begin, uint64_t end) const;
 #endif
