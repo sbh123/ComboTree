@@ -290,7 +290,7 @@ class BLevel {
 #ifdef BRANGE
       range_ = blevel_->FindBRangeByKey_(start_key);
       range_end_ = blevel_->ranges_[range_].physical_entry_start+blevel_->ranges_[range_].entries;
-      end = std::min(blevel_->ranges_[range_+1].logical_entry_start-1, end);
+      end = std::min<uint64_t>(blevel_->ranges_[range_+1].logical_entry_start-1, end);
       entry_idx_ = blevel_->FindByRange_(start_key, range_, blevel_->GetPhysical_(blevel_->ranges_[range_], end), nullptr);
 #else
       entry_idx_ = blevel_->Find_(start_key, begin, end);
@@ -418,7 +418,7 @@ class BLevel {
 #ifdef BRANGE
       range_ = blevel_->FindBRangeByKey_(start_key);
       range_end_ = blevel_->ranges_[range_].physical_entry_start+blevel_->ranges_[range_].entries;
-      end = std::min(blevel_->ranges_[range_+1].logical_entry_start-1, end);
+      end = std::min<uint64_t>(blevel_->ranges_[range_+1].logical_entry_start-1, end);
       entry_idx_ = blevel_->FindByRange_(start_key, range_, blevel_->GetPhysical_(blevel_->ranges_[range_], end), nullptr);
 #else
       entry_idx_ = blevel_->Find_(start_key, begin, end);
@@ -575,11 +575,11 @@ class BLevel {
 #endif
 
 #ifdef BRANGE
-  struct BRange {
+  struct __attribute__((aligned(64))) BRange {
     uint64_t start_key;
-    uint64_t logical_entry_start;
-    uint64_t physical_entry_start;
-    uint64_t entries;
+    uint32_t logical_entry_start;
+    uint32_t physical_entry_start;
+    uint32_t entries;
   } ranges_[EXPAND_THREADS+1];
 
   // logical continuous interval, every interval contains interval_size_ entries,

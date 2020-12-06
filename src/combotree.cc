@@ -69,7 +69,7 @@ int64_t ComboTree::CLevelTime() const {
 void ComboTree::ChangeToComboTree_() {
   State tmp = State::USING_PMEMKV;
   // must change status first
-  if (!status_.compare_exchange_strong(tmp, State::PMEMKV_TO_COMBO_TREE))
+  if (!status_.compare_exchange_strong(tmp, State::PMEMKV_TO_COMBO_TREE, std::memory_order_release))
     return;
 
   permit_delete_.store(false);
@@ -95,7 +95,7 @@ void ComboTree::ChangeToComboTree_() {
   manifest_->SetIsComboTree(true);
   State s = State::PMEMKV_TO_COMBO_TREE;
   // must change status before wating no ref
-  if (!status_.compare_exchange_strong(s, State::USING_COMBO_TREE))
+  if (!status_.compare_exchange_strong(s, State::USING_COMBO_TREE, std::memory_order_release))
     LOG(Debug::ERROR, "can not change state from PMEMKV_TO_COMBO_TREE to USING_COMBO_TREE!");
 
   PmemKV::SetReadUnvalid();
@@ -110,7 +110,7 @@ void ComboTree::ChangeToComboTree_() {
 void ComboTree::ExpandComboTree_() {
 #ifdef BRANGE
   State s = State::USING_COMBO_TREE;
-  if (!status_.compare_exchange_strong(s, State::PREPARE_EXPANDING))
+  if (!status_.compare_exchange_strong(s, State::PREPARE_EXPANDING, std::memory_order_release))
     return;
 
   LOG(Debug::INFO, "preparing to expand combotree. current size is %ld", Size());
@@ -127,7 +127,7 @@ void ComboTree::ExpandComboTree_() {
   blevel_->PrepareExpansion(old_blevel_);
 
   s = State::PREPARE_EXPANDING;
-  if (!status_.compare_exchange_strong(s, State::COMBO_TREE_EXPANDING))
+  if (!status_.compare_exchange_strong(s, State::COMBO_TREE_EXPANDING, std::memory_order_release))
     assert(0);
 
   blevel_->Expansion(old_blevel_);
@@ -143,7 +143,7 @@ void ComboTree::ExpandComboTree_() {
   }
 
   s = State::COMBO_TREE_EXPANDING;
-  if (!status_.compare_exchange_strong(s, State::USING_COMBO_TREE))
+  if (!status_.compare_exchange_strong(s, State::USING_COMBO_TREE, std::memory_order_release))
     assert(0);
 
   expand_time += timer.End();
@@ -154,7 +154,7 @@ void ComboTree::ExpandComboTree_() {
 #else // BRANGE
 
   State s = State::USING_COMBO_TREE;
-  if (!status_.compare_exchange_strong(s, State::COMBO_TREE_EXPANDING))
+  if (!status_.compare_exchange_strong(s, State::COMBO_TREE_EXPANDING, std::memory_order_release))
     return;
 
   permit_delete_.store(false);
@@ -174,7 +174,7 @@ void ComboTree::ExpandComboTree_() {
 
   // change status
   s = State::COMBO_TREE_EXPANDING;
-  if (!status_.compare_exchange_strong(s, State::USING_COMBO_TREE)) {
+  if (!status_.compare_exchange_strong(s, State::USING_COMBO_TREE, std::memory_order_release)) {
     LOG(Debug::ERROR,
         "can not change state from COMBO_TREE_EXPANDING to USING_COMBO_TREE!");
   }
@@ -191,22 +191,22 @@ bool ComboTree::Put(uint64_t key, uint64_t value) {
   int wait = 0;
   while (true) {
     // the order of comparison should not be changed
-    if (status_.load() == State::USING_PMEMKV) {
+    if (status_.load(std::memory_order_acquire) == State::USING_PMEMKV) {
       ret = pmemkv_->Put(key, value);
       if (Size() >= PMEMKV_THRESHOLD)
         ChangeToComboTree_();
       break;
-    } else if (status_.load() == State::PMEMKV_TO_COMBO_TREE) {
+    } else if (status_.load(std::memory_order_acquire) == State::PMEMKV_TO_COMBO_TREE) {
       std::this_thread::sleep_for(std::chrono::milliseconds(1));
       continue;
-    } else if (status_.load() == State::USING_COMBO_TREE) {
+    } else if (status_.load(std::memory_order_acquire) == State::USING_COMBO_TREE) {
       ret = alevel_->Put(key, value);
       if (!ret) continue;
       if (Size() >= EXPANSION_FACTOR * BLEVEL_EXPAND_BUF_KEY * blevel_->Entries())
         ExpandComboTree_();
       ret = true;
       break;
-    } else if (status_.load() == State::PREPARE_EXPANDING) {
+    } else if (status_.load(std::memory_order_acquire) == State::PREPARE_EXPANDING) {
       if (need_sleep_) {
         std::unique_lock<std::mutex> lock(BLevel::expand_wait_lock);
         if (need_sleep_ && sleeped_threads_ < EXPAND_THREADS) {
@@ -222,7 +222,7 @@ bool ComboTree::Put(uint64_t key, uint64_t value) {
         wait++;
       }
       continue;
-    } else if (status_.load() == State::COMBO_TREE_EXPANDING) {
+    } else if (status_.load(std::memory_order_acquire) == State::COMBO_TREE_EXPANDING) {
 #ifndef BRANGE
       std::this_thread::sleep_for(std::chrono::milliseconds(10));
       continue;
@@ -264,16 +264,16 @@ bool ComboTree::Get(uint64_t key, uint64_t& value) const {
   bool ret;
   while (true) {
     // the order of comparison should not be changed
-    if (status_.load() == State::USING_PMEMKV) {
+    if (status_.load(std::memory_order_acquire) == State::USING_PMEMKV) {
       ret = pmemkv_->Get(key, value);
       break;
-    } else if (status_.load() == State::PMEMKV_TO_COMBO_TREE) {
+    } else if (status_.load(std::memory_order_acquire) == State::PMEMKV_TO_COMBO_TREE) {
       ret = pmemkv_->Get(key, value);
       break;
-    } else if (status_.load() == State::USING_COMBO_TREE) {
+    } else if (status_.load(std::memory_order_acquire) == State::USING_COMBO_TREE) {
       ret = alevel_->Get(key, value);
       break;
-    } else if (status_.load() == State::COMBO_TREE_EXPANDING) {
+    } else if (status_.load(std::memory_order_acquire) == State::COMBO_TREE_EXPANDING) {
       std::this_thread::sleep_for(std::chrono::milliseconds(10));
       continue;
     }
@@ -285,16 +285,16 @@ bool ComboTree::Delete(uint64_t key) {
   bool ret;
   while (true) {
     // the order of comparison should not be changed
-    if (status_.load() == State::USING_PMEMKV) {
+    if (status_.load(std::memory_order_acquire) == State::USING_PMEMKV) {
       ret = pmemkv_->Delete(key);
       break;
-    } else if (status_.load() == State::PMEMKV_TO_COMBO_TREE) {
+    } else if (status_.load(std::memory_order_acquire) == State::PMEMKV_TO_COMBO_TREE) {
       std::this_thread::sleep_for(std::chrono::milliseconds(1));
       continue;
-    } else if (status_.load() == State::USING_COMBO_TREE) {
+    } else if (status_.load(std::memory_order_acquire) == State::USING_COMBO_TREE) {
       ret = alevel_->Delete(key, nullptr);
       break;
-    } else if (status_.load() == State::COMBO_TREE_EXPANDING) {
+    } else if (status_.load(std::memory_order_acquire) == State::COMBO_TREE_EXPANDING) {
       std::this_thread::sleep_for(std::chrono::milliseconds(10));
       continue;
     }

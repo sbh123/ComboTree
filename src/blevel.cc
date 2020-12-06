@@ -433,7 +433,7 @@ void BLevel::ExpandRange_(BLevel* old_blevel, int thread_id) {
   uint64_t physical_begin = old_blevel->ranges_[begin_range].physical_entry_start +
                             expand_meta.begin_interval * old_blevel->interval_size_;
   uint64_t physical_end   = old_blevel->ranges_[end_range].physical_entry_start +
-                            std::min(old_blevel->ranges_[end_range].entries,
+                            std::min<uint64_t>(old_blevel->ranges_[end_range].entries,
                                      (expand_meta.end_interval+1)*old_blevel->interval_size_);
 
   int target_range = expand_meta.target_range;
@@ -466,9 +466,7 @@ void BLevel::ExpandRange_(BLevel* old_blevel, int thread_id) {
         expand_meta.clevel_count++;
         Entry::Iter biter(old_entry, old_mem);
         uint64_t total_cnt = 0;
-        uint64_t last_key = 0;
         do {
-          last_key = biter.key();
           total_cnt++;
           ExpandPut_(expand_meta, biter.key(), biter.value());
         } while(biter.next());
