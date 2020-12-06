@@ -197,7 +197,7 @@ bool ComboTree::Put(uint64_t key, uint64_t value) {
         ChangeToComboTree_();
       break;
     } else if (status_.load(std::memory_order_acquire) == State::PMEMKV_TO_COMBO_TREE) {
-      std::this_thread::sleep_for(std::chrono::milliseconds(1));
+      std::this_thread::sleep_for(std::chrono::microseconds(10));
       continue;
     } else if (status_.load(std::memory_order_acquire) == State::USING_COMBO_TREE) {
       ret = alevel_->Put(key, value);
@@ -218,13 +218,13 @@ bool ComboTree::Put(uint64_t key, uint64_t value) {
           LOG(Debug::INFO, "thread finish waiting for cv");
         }
       } else {
-        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
         wait++;
       }
       continue;
     } else if (status_.load(std::memory_order_acquire) == State::COMBO_TREE_EXPANDING) {
 #ifndef BRANGE
-      std::this_thread::sleep_for(std::chrono::milliseconds(10));
+      std::this_thread::sleep_for(std::chrono::milliseconds(5));
       continue;
 #else
       if (need_sleep_) {
@@ -239,13 +239,13 @@ bool ComboTree::Put(uint64_t key, uint64_t value) {
         }
         continue;
       } else {
+        // std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        // continue;
         int range;
         uint64_t end;
         if (blevel_->IsKeyExpanded(key, range, end)) {
           ret = blevel_->PutRange(key, value, range, end);
         } else {
-          // std::this_thread::sleep_for(std::chrono::milliseconds(10));
-          // continue;
           std::shared_lock<std::shared_mutex> lock(alevel_lock_);
           ret = alevel_->Put(key, value);
         }
@@ -255,7 +255,7 @@ bool ComboTree::Put(uint64_t key, uint64_t value) {
 #endif // BRANGE
     }
   }
-  if (wait > 10)
+  if (wait > 100)
     LOG(Debug::WARNING, "wait too many! %d", wait);
   return ret;
 }
@@ -274,7 +274,7 @@ bool ComboTree::Get(uint64_t key, uint64_t& value) const {
       ret = alevel_->Get(key, value);
       break;
     } else if (status_.load(std::memory_order_acquire) == State::COMBO_TREE_EXPANDING) {
-      std::this_thread::sleep_for(std::chrono::milliseconds(10));
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
       continue;
     }
   }
@@ -295,7 +295,7 @@ bool ComboTree::Delete(uint64_t key) {
       ret = alevel_->Delete(key, nullptr);
       break;
     } else if (status_.load(std::memory_order_acquire) == State::COMBO_TREE_EXPANDING) {
-      std::this_thread::sleep_for(std::chrono::milliseconds(10));
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
       continue;
     }
   }
