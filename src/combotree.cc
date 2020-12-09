@@ -239,8 +239,6 @@ bool ComboTree::Put(uint64_t key, uint64_t value) {
         }
         continue;
       } else {
-        // std::this_thread::sleep_for(std::chrono::milliseconds(5));
-        // continue;
         int range;
         uint64_t end;
         if (blevel_->IsKeyExpanded(key, range, end)) {
@@ -310,8 +308,6 @@ bool ComboTree::Update(uint64_t key, uint64_t value) {
         }
         continue;
       } else {
-        // std::this_thread::sleep_for(std::chrono::milliseconds(5));
-        // continue;
         int range;
         uint64_t end;
         if (blevel_->IsKeyExpanded(key, range, end)) {

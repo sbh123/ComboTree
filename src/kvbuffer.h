@@ -215,15 +215,19 @@ struct KVBuffer {
   }
 #else
   int GetSortedIndex(int sorted_index[buf_size/9]) const {
-    uint64_t keys[buf_size/9];
-    for (int i = 0; i < entries; ++i) {
-      keys[i] = key(i, 0);  // prefix does not matter
-      sorted_index[i] = i;
-    }
-    std::sort(&sorted_index[0], &sorted_index[entries],
-      [&keys](uint64_t a, uint64_t b) { return keys[a] < keys[b]; });
-    for (int i = 0; i < entries - 1; ++i) {
-      assert(keys[sorted_index[i]] < keys[sorted_index[i + 1]]);
+    if (suffix_bytes == 1) {
+      for (int i = 0; i < entries; ++i)
+        sorted_index[i] = i;
+      std::sort(&sorted_index[0], &sorted_index[entries],
+        [&](uint64_t a, uint64_t b) { return buf[a] < buf[b]; });
+    } else {
+      uint64_t keys[buf_size/9];
+      for (int i = 0; i < entries; ++i) {
+        keys[i] = key(i, 0);  // prefix does not matter
+        sorted_index[i] = i;
+      }
+      std::sort(&sorted_index[0], &sorted_index[entries],
+        [&keys](uint64_t a, uint64_t b) { return keys[a] < keys[b]; });
     }
     return entries;
   }

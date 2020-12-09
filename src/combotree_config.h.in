@@ -31,9 +31,6 @@
 #ifndef ENTRY_SIZE_FACTOR
 #define ENTRY_SIZE_FACTOR     @ENTRY_SIZE_FACTOR@
 #endif
-#if defined(BRANGE) && !defined(BRANGE_COUNT)
-#define BRANGE_COUNT          @BRANGE_COUNT@
-#endif
 #if defined(BRANGE) && !defined(EXPAND_THREADS)
 #define EXPAND_THREADS        @EXPAND_THREADS@
 #endif

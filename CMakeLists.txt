@@ -23,13 +23,12 @@ endif(SERVER)
 
 if(BRANGE)
   set(EXPAND_THREADS      4)
-  set(BRANGE_COUNT        192)
 endif(BRANGE)
 
 set(BLEVEL_EXPAND_BUF_KEY 6)
 set(EXPANSION_FACTOR      4)
 set(DEFAULT_SPAN          2)
-set(PMEMKV_THRESHOLD      1024)
+set(PMEMKV_THRESHOLD      3000)
 set(ENTRY_SIZE_FACTOR     1.2)
 
 configure_file(
