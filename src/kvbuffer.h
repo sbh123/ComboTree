@@ -148,8 +148,8 @@ struct KVBuffer {
     memcpy(pvalue(pos), &value, value_size);
     memcpy(pkey(pos), new_key, suffix_bytes);
     entries++;
-    flush(&meta);
     flush(pvalue(pos));
+    flush(&meta);
     fence();
     return true;
 #else
@@ -158,7 +158,6 @@ struct KVBuffer {
     memcpy(pvalue(pos), &value, value_size);
     entries++;
     flush(pvalue(pos));
-    fence();
     flush(&meta);
     fence();
     return true;
