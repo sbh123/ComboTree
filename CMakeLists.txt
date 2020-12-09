@@ -83,6 +83,9 @@ include_directories(src)
 ## generate_data
 add_executable(generate_data tests/generate_data.cc)
 
+## sortbuffer_test
+add_executable(sortbuffer_test tests/sortbuffer_test.cc)
+
 ## clevel_test
 add_executable(clevel_test tests/clevel_test.cc src/clevel.cc)
 target_link_libraries(clevel_test pmem)

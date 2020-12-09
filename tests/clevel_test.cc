@@ -8,7 +8,7 @@
 using combotree::CLevel;
 using combotree::Random;
 
-#define TEST_SIZE 1000000
+#define TEST_SIZE 300000
 
 int main(void) {
   std::vector<uint64_t> key;
