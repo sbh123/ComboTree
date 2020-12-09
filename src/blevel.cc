@@ -133,6 +133,7 @@ BLevel::Entry::Entry(uint64_t key, int prefix_len)
 
 // return true if not exist before, return false if update.
 bool BLevel::Entry::Put(CLevel::MemControl* mem, uint64_t key, uint64_t value) {
+#ifdef BUF_SORT
   bool exist;
   int pos = buf.Find(key, exist);
   // already in, update
@@ -142,17 +143,30 @@ bool BLevel::Entry::Put(CLevel::MemControl* mem, uint64_t key, uint64_t value) {
     fence();
     return false;
   } else {
-#ifdef BUF_SORT
     if (buf.Full()) {
-#else
-    if ((!clevel.HasSetup() && buf.entries == buf.max_entries - 1) || buf.Full()) {
-#endif
       FlushToCLevel(mem);
       pos = 0;
     }
     return buf.Put(pos, key, value);
   }
+#else
+  if ((!clevel.HasSetup() && buf.entries == buf.max_entries - 1) || buf.Full())
+    FlushToCLevel(mem);
+  return buf.Put(buf.entries, key, value);
+#endif
 };
+
+bool BLevel::Entry::Update(CLevel::MemControl* mem, uint64_t key, uint64_t value) {
+  bool exist;
+  int pos = buf.Find(key, exist);
+  // already in, update
+  if (exist)
+    return buf.Update(pos, value);
+  else if (clevel.HasSetup())
+    return clevel.Update(mem, key, value);
+  else
+    assert(0);
+}
 
 bool BLevel::Entry::Get(CLevel::MemControl* mem, uint64_t key, uint64_t& value) const {
   bool exist;
@@ -699,6 +713,11 @@ bool BLevel::PutRange(uint64_t key, uint64_t value, int range, uint64_t end) {
   return Put_(key, value, idx, interval_size);
 }
 
+bool BLevel::UpdateRange(uint64_t key, uint64_t value, int range, uint64_t end) {
+  uint64_t idx = Find_(key, range, end, nullptr);
+  return Update_(key, value, idx);
+}
+
 bool BLevel::GetRange(uint64_t key, uint64_t& value, int range, uint64_t end) const {
   uint64_t idx = Find_(key, range, end, nullptr);
   return Get_(key, value, idx);
@@ -720,6 +739,15 @@ bool BLevel::Put(uint64_t key, uint64_t value, uint64_t begin, uint64_t end) {
   uint64_t idx = Find_(key, begin, end);
   return Put_(key, value, idx);
 #endif
+}
+
+bool BLevel::Update(uint64_t key, uint64_t value, uint64_t begin, uint64_t end) {
+#ifdef BRANGE
+  uint64_t idx = Find_(key, begin, end, nullptr);
+#else
+  uint64_t idx = Find_(key, begin, end);
+#endif
+  return Update_(key, value, idx);
 }
 
 bool BLevel::Get(uint64_t key, uint64_t& value, uint64_t begin, uint64_t end) const {

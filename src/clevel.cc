@@ -227,6 +227,16 @@ CLevel::Node* CLevel::Node::Put(MemControl* mem, uint64_t key, uint64_t value, N
 #endif // BUF_SORT
 }
 
+bool CLevel::Node::Update(MemControl* mem, uint64_t key, uint64_t value) {
+  Node* leaf = (Node*)FindLeaf(mem, key);
+  bool exist;
+  int pos = leaf->leaf_buf.Find(key, exist);
+  if (exist)
+    return leaf->leaf_buf.Update(pos, value);
+  else
+    assert(0);
+}
+
 bool CLevel::Node::Get(MemControl* mem, uint64_t key, uint64_t& value) const {
   const Node* leaf = FindLeaf(mem, key);
   bool exist;

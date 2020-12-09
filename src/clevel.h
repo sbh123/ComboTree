@@ -38,11 +38,12 @@ class __attribute__((packed)) CLevel {
     };
     union {
       // contains 2 bytes meta
-      KVBuffer<48+64,8> leaf_buf;   // used when type == LEAF
-      KVBuffer<48+64,6> index_buf;  // used when type == INDEX
+      KVBuffer<112,8> leaf_buf;   // used when type == LEAF
+      KVBuffer<112,6> index_buf;  // used when type == INDEX
     };
 
     Node* Put(MemControl* mem, uint64_t key, uint64_t value, Node* parent);
+    bool Update(MemControl* mem, uint64_t key, uint64_t value);
     bool Get(MemControl* mem, uint64_t key, uint64_t& value) const;
     bool Delete(MemControl* mem, uint64_t key, uint64_t* value);
 #ifndef BUF_SORT
@@ -310,6 +311,10 @@ class __attribute__((packed)) CLevel {
   void Setup(MemControl* mem, int suffix_len);
   void Setup(MemControl* mem, KVBuffer<48+64,8>& buf);
   bool Put(MemControl* mem, uint64_t key, uint64_t value);
+
+  ALWAYS_INLINE bool Update(MemControl* mem, uint64_t key, uint64_t value) {
+    return root(mem->BaseAddr())->Update(mem, key, value);
+  }
 
   ALWAYS_INLINE bool Get(MemControl* mem, uint64_t key, uint64_t& value) const {
     return root(mem->BaseAddr())->Get(mem, key, value);

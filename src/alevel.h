@@ -14,19 +14,25 @@ class ALevel {
  public:
   ALevel(BLevel* blevel, int span = DEFAULT_SPAN);
 
-  bool Put(uint64_t key, uint64_t value) {
+  ALWAYS_INLINE bool Put(uint64_t key, uint64_t value) {
     uint64_t begin, end;
     GetBLevelRange_(key, begin, end);
     return blevel_->Put(key, value, begin, end);
   }
 
-  bool Get(uint64_t key, uint64_t& value) const {
+  ALWAYS_INLINE bool Update(uint64_t key, uint64_t value) {
+    uint64_t begin, end;
+    GetBLevelRange_(key, begin, end);
+    return blevel_->Update(key, value, begin, end);
+  }
+
+  ALWAYS_INLINE bool Get(uint64_t key, uint64_t& value) const {
     uint64_t begin, end;
     GetBLevelRange_(key, begin, end);
     return blevel_->Get(key, value, begin, end);
   }
 
-  bool Delete(uint64_t key, uint64_t* value) {
+  ALWAYS_INLINE bool Delete(uint64_t key, uint64_t* value) {
     uint64_t begin, end;
     GetBLevelRange_(key, begin, end);
     return blevel_->Delete(key, value, begin, end);

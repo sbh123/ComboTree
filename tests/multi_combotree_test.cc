@@ -58,6 +58,18 @@ int main(void) {
     t.join();
   threads.clear();
 
+  // UPDATE
+  for (int i = 0; i < thread_num; ++i) {
+    threads.emplace_back([=,&key](){
+      uint64_t start_pos = i*per_thread_size;
+      for (size_t j = 0; j < per_thread_size; ++j)
+        assert(tree->Update(key[start_pos+j], key[start_pos+j]+1) == true);
+    });
+  }
+  for (auto& t : threads)
+    t.join();
+  threads.clear();
+
   // Multi GET
   for (int i = 0; i < thread_num; ++i) {
     threads.emplace_back([=,&key](){
@@ -65,7 +77,7 @@ int main(void) {
       uint64_t value;
       for (size_t j = 0; j < per_thread_size; ++j) {
         assert(tree->Get(key[start_pos+j], value) == true);
-        assert(value == key[start_pos+j]);
+        assert(value == key[start_pos+j]+1);
       }
     });
   }
@@ -77,7 +89,7 @@ int main(void) {
   for (auto& k : key) {
     uint64_t value;
     assert(tree->Get(k, value) == true);
-    assert(value == k);
+    assert(value == k+1);
   }
 
   // Single GET

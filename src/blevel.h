@@ -19,7 +19,7 @@ class BLevel {
   struct __attribute__((aligned(64))) Entry {
     uint64_t entry_key;
     CLevel clevel;
-    KVBuffer<48+64,8> buf;  // contains 2 bytes meta
+    KVBuffer<112,8> buf;  // contains 2 bytes meta
 
     Entry(uint64_t key, int prefix_len);
     Entry(uint64_t key, uint64_t value, int prefix_len);
@@ -33,6 +33,7 @@ class BLevel {
     }
 
     bool Put(CLevel::MemControl* mem, uint64_t key, uint64_t value);
+    bool Update(CLevel::MemControl* mem, uint64_t key, uint64_t value);
     bool Get(CLevel::MemControl* mem, uint64_t key, uint64_t& value) const;
     bool Delete(CLevel::MemControl* mem, uint64_t key, uint64_t* value);
 
@@ -44,11 +45,11 @@ class BLevel {
 
     class Iter {
 #ifdef BUF_SORT
-#define entry_key(idx)    entry_->key(idx)
-#define entry_value(idx)  entry_->value(idx)
+#define entry_key(idx)    entry_->key((idx))
+#define entry_value(idx)  entry_->value((idx))
 #else
-#define entry_key(idx)    entry_->key(sorted_index_[idx])
-#define entry_value(idx)  entry_->value(sorted_index_[idx])
+#define entry_key(idx)    entry_->key(sorted_index_[(idx)])
+#define entry_value(idx)  entry_->value(sorted_index_[(idx)])
 #endif
 
      public:
@@ -226,10 +227,12 @@ class BLevel {
   ~BLevel();
 
   bool Put(uint64_t key, uint64_t value, uint64_t begin, uint64_t end);
+  bool Update(uint64_t key, uint64_t value, uint64_t begin, uint64_t end);
   bool Get(uint64_t key, uint64_t& value, uint64_t begin, uint64_t end) const;
   bool Delete(uint64_t key, uint64_t* value, uint64_t begin, uint64_t end);
 
   bool PutRange(uint64_t key, uint64_t value, int range, uint64_t end);
+  bool UpdateRange(uint64_t key, uint64_t value, int range, uint64_t end);
   bool GetRange(uint64_t key, uint64_t& value, int range, uint64_t end) const;
   bool DeleteRange(uint64_t key, uint64_t* value, int range, uint64_t end);
 
@@ -663,6 +666,15 @@ class BLevel {
     interval_size->fetch_add(1, std::memory_order_relaxed);
 #endif
     return true;
+  }
+
+  ALWAYS_INLINE bool Update_(uint64_t key, uint64_t value, uint64_t physical_idx) const {
+#ifndef NO_LOCK
+    std::lock_guard<std::shared_mutex> lock(lock_[physical_idx]);
+#endif
+    if (!entries_[physical_idx].IsValid())
+      return false;
+    return entries_[physical_idx].Update((CLevel::MemControl*)&clevel_mem_, key, value);
   }
 
   ALWAYS_INLINE bool Get_(uint64_t key, uint64_t& value, uint64_t physical_idx) const {

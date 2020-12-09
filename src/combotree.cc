@@ -260,6 +260,77 @@ bool ComboTree::Put(uint64_t key, uint64_t value) {
   return ret;
 }
 
+bool ComboTree::Update(uint64_t key, uint64_t value) {
+  bool ret;
+  int wait = 0;
+  while (true) {
+    // the order of comparison should not be changed
+    if (status_.load(std::memory_order_acquire) == State::USING_PMEMKV) {
+      ret = pmemkv_->Put(key, value);
+      if (Size() >= PMEMKV_THRESHOLD)
+        ChangeToComboTree_();
+      break;
+    } else if (status_.load(std::memory_order_acquire) == State::PMEMKV_TO_COMBO_TREE) {
+      std::this_thread::sleep_for(std::chrono::microseconds(10));
+      continue;
+    } else if (status_.load(std::memory_order_acquire) == State::USING_COMBO_TREE) {
+      ret = alevel_->Update(key, value);
+      if (!ret) continue;
+      break;
+    } else if (status_.load(std::memory_order_acquire) == State::PREPARE_EXPANDING) {
+      if (need_sleep_) {
+        std::unique_lock<std::mutex> lock(BLevel::expand_wait_lock);
+        if (need_sleep_ && sleeped_threads_ < EXPAND_THREADS) {
+          sleeped_threads_++;
+          if (sleeped_threads_ == EXPAND_THREADS)
+            need_sleep_.store(false);
+          LOG(Debug::INFO, "thread waiting for cv");
+          BLevel::expand_wait_cv.wait(lock);
+          LOG(Debug::INFO, "thread finish waiting for cv");
+        }
+      } else {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        wait++;
+      }
+      continue;
+    } else if (status_.load(std::memory_order_acquire) == State::COMBO_TREE_EXPANDING) {
+#ifndef BRANGE
+      std::this_thread::sleep_for(std::chrono::milliseconds(5));
+      continue;
+#else
+      if (need_sleep_) {
+        std::unique_lock<std::mutex> lock(BLevel::expand_wait_lock);
+        if (need_sleep_ && sleeped_threads_ < EXPAND_THREADS) {
+          sleeped_threads_++;
+          if (sleeped_threads_ == EXPAND_THREADS)
+            need_sleep_.store(false);
+          LOG(Debug::INFO, "thread waiting for cv");
+          BLevel::expand_wait_cv.wait(lock);
+          LOG(Debug::INFO, "thread finish waiting for cv");
+        }
+        continue;
+      } else {
+        // std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        // continue;
+        int range;
+        uint64_t end;
+        if (blevel_->IsKeyExpanded(key, range, end)) {
+          ret = blevel_->UpdateRange(key, value, range, end);
+        } else {
+          std::shared_lock<std::shared_mutex> lock(alevel_lock_);
+          ret = alevel_->Update(key, value);
+        }
+        if (!ret) continue;
+        break;
+      }
+#endif // BRANGE
+    }
+  }
+  if (wait > 100)
+    LOG(Debug::WARNING, "wait too many! %d", wait);
+  return ret;
+}
+
 bool ComboTree::Get(uint64_t key, uint64_t& value) const {
   bool ret;
   while (true) {

@@ -1,0 +1,158 @@
+\documentclass{mydoc}
+
+\author{张丘洋}
+\title{ComboTree 实现}
+
+\begin{document}
+
+\maketitle
+
+\section{概览}
+
+根据 ComboTree 的设计，将数据结构分为 \code{CLevel}、\code{BLevel} 和 \code{ALevel}。
+其中 \code{BLevel::Entry} 中的键值对缓存与 \code{CLevel::Node} 使用相同的数据结构
+\code{KVBuffer} 来保存数据。
+
+\section{KVBuffer}
+
+\code{KVBuffer} 使用\textbf{前缀压缩}保存若干键值对数据。其数据结构定义为：
+
+\begin{codes}{C++}
+struct KVBuffer {
+  union {
+    uint16_t meta;
+    struct {
+      uint16_t prefix_bytes : 4;  // 共同前缀字节数
+      uint16_t suffix_bytes : 4;  // 后缀字节数，与前缀之和为8
+      uint16_t entries      : 4;  // 目前保存的键值对数
+      uint16_t max_entries  : 4;  // 最大可保存的键值对数
+    };
+  };
+  uint8_t buf[112];
+};
+\end{codes}
+
+\code{KVBuffer} 包含了 2 个字节的元数据 \code{meta}，以及 112 个字节的 \code{buf}
+来保存键值对。键值对的保存是\textbf{排序}的。
+
+当后缀字节数为 1，一个 \code{KVBuffer} 能够保存 12 个键值对；当后缀字节数为 2
+时，能够保存 11 个键值对。
+
+由于使用了前缀压缩，键的大小是不固定的，但是值的大小固定为 8 个字节，为了使值
+在保存时能够 8 字节\textbf{对齐}，\code{buf} 从左到右顺序保存键，从右到左顺序保存值，如
+下图所示。
+
+\begin{figure}[!htbp]
+\centering
+\begin{tikzpicture}[x=1em,y=1em,every node/.style={draw,line width=1pt,inner sep=.5em,minimum height=2.2em,minimum width=2.5em}]
+  \node at (0,0)                          (0) {key(0)};
+  \node[right=-1pt of 0.east,anchor=west] (1) {key(1)};
+  \node[right=-1pt of 1.east,anchor=west] (2) {...};
+  \node[right=-1pt of 2.east,anchor=west] (3) {key(n)};
+  \node[right=-1pt of 3.east,anchor=west] (4) {...};
+  \node[right=-1pt of 4.east,anchor=west] (5) {value(n)};
+  \node[right=-1pt of 5.east,anchor=west] (6) {...};
+  \node[right=-1pt of 6.east,anchor=west] (7) {value(1)};
+  \node[right=-1pt of 7.east,anchor=west] (8) {value(0)};
+\end{tikzpicture}
+\end{figure}
+
+\section{CLevel}
+
+\begin{codes}{C++}
+// sizeof(Node) == 128
+struct __attribute__((aligned(64))) Node {
+  enum class Type : uint8_t {
+    INVALID,
+    INDEX,
+    LEAF,
+  };
+
+  Type type;
+  uint8_t __padding[7]; // used to align data
+  union {
+    // uint48_t pointer
+    uint8_t next[6];    // used when type == LEAF. LSB == 1 means NULL
+    uint8_t first_child[6]; // used when type == INDEX
+  };
+  union {
+    // contains 2 bytes meta
+    KVBuffer leaf_buf;  // used when type == LEAF, value size is 8
+    KVBuffer index_buf; // used when type == INDEX, value size is 6
+  };
+};
+
+// sizeof(CLevel) == 6
+class CLevel {
+  ......
+ private:
+  uint8_t root_[6]; // uint48_t pointer, LSB == 1 means NULL
+};
+\end{codes}
+
+CLevel 采用的是 \textbf{B+ 树}，每个节点大小为 \textbf{128 字节，两个 Cache 行}，
+与 \code{BLevel::Entry} 的大小相同。节点使用 \code{KVBuffer} 来保存键值对和子节点。
+节点\textbf{没有保存父指针}，通过函数的递归来传递父指针，这样避免了扩展时父指针的修改，
+也减少了父指针的存储。
+
+C 层的中间节点在保存子节点\textbf{指针时使用 6 个字节来保存}，也就是 \code{KVBuffer}
+键值对中的值大小为6，从而有更大的扇出。
+
+无论是子节点指针还是根节点指针都通过将指针的\textbf{最低比特位置 1} 来表示 NULL，
+这样避免了多字节的拷贝，并且 \emph{Optimizing Systems for Byte-Addressable NVM
+by Reducing Bit Flipping} 论文中提到这种方式可以减少比特翻转从而提高 NVM 寿命。
+
+整个 C 层 \code{KVBuffer} 的\textbf{前缀压缩字节数是一样的}，前缀字节数和共同前缀可以由
+对应的 \code{BLevel::Entry} 来确定。
+
+\textbf{C 层无锁}，由 \code{BLevel::Entry} 对应的锁来提供并发访问控制。
+
+\section{BLevel}
+
+B 层的主要数据结构定义如下所示：
+
+\begin{codes}{C++}
+// sizeof(Entry) == 128
+struct __attribute__((aligned(64))) Entry {
+  uint64_t entry_key;     // 8 bytes
+  CLevel clevel;          // 6 bytes
+  KVBuffer<48+64,8> buf;  // 114 bytes
+};
+
+struct BRange {
+  uint64_t start_key;
+  uint32_t logical_entry_start;
+  uint32_t physical_entry_start;
+  uint32_t entries;
+};
+
+class BLevel {
+  ......
+ private:
+  ......
+  Entry* __attribute__((aligned(64))) entries_;
+  size_t nr_entries_;
+  std::atomic<size_t> size_;
+
+  // 锁粒度为 Entry
+  std::shared_mutex* lock_;
+
+  // B 层分为 EXPAND_THREADS 个 range，这里多分配一个 range 减少编程难度
+  BRange ranges_[EXPAND_THREADS+1];
+
+  // 每个 range 分为多个小区间，记录每个小区间中的键值对数
+  uint64_t interval_size_;
+  uint64_t intervals_[EXPAND_THREADS];
+  std::atomic<size_t>* size_per_interval_[EXPAND_THREADS];
+
+  // 记录扩展时每个区间已经扩展的 entry 数目以及最大的键
+  static std::atomic<uint64_t> expanded_max_key_[EXPAND_THREADS];
+  static std::atomic<uint64_t> expanded_entries_[EXPAND_THREADS];
+};
+\end{codes}
+
+\section{ALevel}
+
+\section{NVM 管理}
+
+\end{document}

@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.0)
 
 # use `cmake -DSERVER:BOOL=ON ..` when running in server
 option(SERVER           "Run in server"           ON)
-option(BUF_SORT         "Sort buffer in KVBufer"  ON)
+option(BUF_SORT         "Sort buffer in KVBufer"  OFF)
 option(STREAMING_LOAD   "Use Non-temporal Load"   OFF)
 option(STREAMING_STORE  "Use Non-temporal Store"  OFF)
 option(NO_LOCK          "Don't use lock"          OFF)

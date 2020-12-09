@@ -90,7 +90,7 @@ struct KVBuffer {
     find = false;
     return left;
 #else
-    for (int i = 0; i < entries; ++i) {
+    for (int i = entries-1; i >= 0; --i) {
       if (!memcmp(pkey(i), &target, suffix_bytes)) {
         find = true;
         return i;
@@ -147,22 +147,29 @@ struct KVBuffer {
 
     memcpy(pvalue(pos), &value, value_size);
     memcpy(pkey(pos), new_key, suffix_bytes);
-
     entries++;
-
     flush(&meta);
     flush(pvalue(pos));
     fence();
     return true;
 #else
+    // pos == entries
     memcpy(pkey(pos), new_key, suffix_bytes);
     memcpy(pvalue(pos), &value, value_size);
     entries++;
     flush(pvalue(pos));
     fence();
     flush(&meta);
+    fence();
     return true;
 #endif // BUF_SORT
+  }
+
+  ALWAYS_INLINE bool Update(int pos, uint64_t value) {
+    memcpy(pvalue(pos), &value, value_size);
+    flush(pvalue(pos));
+    fence();
+    return true;
   }
 
   ALWAYS_INLINE bool Put(int pos, uint64_t new_key, uint64_t value) {
@@ -185,10 +192,10 @@ struct KVBuffer {
       // if system crashed after key move and before update
       // of entries, it will be fixed during recovery.
       memcpy(pkey(pos), pkey(entries - 1), suffix_bytes);
-      memcpy(pvalue(pos), pvalue(entries - 1), value_size);
       flush(pkey(pos));
-      flush(pvalue(pos));
       fence();
+      memcpy(pvalue(pos), pvalue(entries - 1), value_size);
+      flush(pvalue(pos));
     }
     entries--;
     flush(&meta);
