@@ -11,9 +11,10 @@
 #include "random.h"
 #include "timer.h"
 
-size_t TEST_SIZE      = 10000000;
-size_t LAST_EXPAND    = 6000000;
-size_t GET_SIZE       = 1000000;
+size_t LOAD_SIZE   = 10000000;
+size_t PUT_SIZE    = 6000000;
+size_t GET_SIZE    = 1000000;
+size_t DELETE_SIZE = 1000000;
 size_t SCAN_TEST_SIZE = 500000000;
 
 int thread_num        = 4;
@@ -55,9 +56,10 @@ void show_help(char* prog) {
     std::endl <<
     "  Option:" << std::endl <<
     "    --thread[-t]             thread number" << std::endl <<
-    "    --test-size              TEST_SIZE" << std::endl <<
-    "    --last-expand            LAST_EXPAND" << std::endl <<
+    "    --load-size              LOAD_SIZE" << std::endl <<
+    "    --put-size               PUT_SIZE" << std::endl <<
     "    --get-size               GET_SIZE" << std::endl <<
+    "    --delete-size            DELETE_SIZE" << std::endl <<
     "    --scan-test-size         SCAN_TEST_SIZE" << std::endl <<
     "    --scan[-s]               add scan" << std::endl <<
     "    --sort-scan              add sort scan" << std::endl <<
@@ -69,9 +71,10 @@ int main(int argc, char** argv) {
   static struct option opts[] = {
   /* NAME               HAS_ARG            FLAG  SHORTNAME*/
     {"thread",          required_argument, NULL, 't'},
-    {"test-size",       required_argument, NULL, 0},
-    {"last-expand",     required_argument, NULL, 0},
+    {"load-size",       required_argument, NULL, 0},
+    {"put-size",        required_argument, NULL, 0},
     {"get-size",        required_argument, NULL, 0},
+    {"delete-size",     required_argument, NULL, 0},
     {"scan-test-size",  required_argument, NULL, 0},
     {"scan",            required_argument, NULL, 's'},
     {"sort-scan",       required_argument, NULL, 0},
@@ -87,14 +90,15 @@ int main(int argc, char** argv) {
       case 0:
         switch (opt_idx) {
           case 0: thread_num = atoi(optarg); break;
-          case 1: TEST_SIZE = atoi(optarg); break;
-          case 2: LAST_EXPAND = atoi(optarg); break;
+          case 1: LOAD_SIZE = atoi(optarg); break;
+          case 2: PUT_SIZE = atoi(optarg); break;
           case 3: GET_SIZE = atoi(optarg); break;
-          case 4: SCAN_TEST_SIZE = atoi(optarg); break;
-          case 5: scan_size.push_back(atoi(optarg)); break;
-          case 6: sort_scan_size.push_back(atoi(optarg)); break;
-          case 7: use_data_file = true; break;
-          case 8: show_help(argv[0]); return 0;
+          case 4: DELETE_SIZE = atoi(optarg); break;
+          case 5: SCAN_TEST_SIZE = atoi(optarg); break;
+          case 6: scan_size.push_back(atoi(optarg)); break;
+          case 7: sort_scan_size.push_back(atoi(optarg)); break;
+          case 8: use_data_file = true; break;
+          case 9: show_help(argv[0]); return 0;
           default: std::cerr << "Parse Argument Error!" << std::endl; abort();
         }
         break;
@@ -107,12 +111,12 @@ int main(int argc, char** argv) {
     }
   }
 
-  if (LAST_EXPAND > TEST_SIZE) {
-    std::cerr << "LAST_EXPAND < TEST_SIZE!" << std::endl;
+  if (GET_SIZE > LOAD_SIZE+PUT_SIZE) {
+    std::cerr << "GET_SIZE > TEST_SIZE+PUT_SIZE!" << std::endl;
     return -1;
   }
-  if (GET_SIZE > TEST_SIZE) {
-    std::cerr << "GET_SIZE < TEST_SIZE!" << std::endl;
+  if (DELETE_SIZE > LOAD_SIZE+PUT_SIZE) {
+    std::cerr << "DELETE_SIZE > TEST_SIZE+PUT_SIZE!" << std::endl;
     return -1;
   }
 
@@ -120,9 +124,10 @@ int main(int argc, char** argv) {
 #ifdef BRANGE
   std::cout << "EXPAND_THREADS:        " << EXPAND_THREADS << std::endl;
 #endif
-  std::cout << "TEST_SIZE:             " << TEST_SIZE << std::endl;
-  std::cout << "LAST_EXPAND:           " << LAST_EXPAND << std::endl;
+  std::cout << "LOAD_SIZE:             " << LOAD_SIZE << std::endl;
+  std::cout << "PUT_SIZE:              " << PUT_SIZE << std::endl;
   std::cout << "GET_SIZE:              " << GET_SIZE << std::endl;
+  std::cout << "DELETE_SIZE:           " << DELETE_SIZE << std::endl;
   std::cout << "SCAN_TEST_SIZE:        " << SCAN_TEST_SIZE << std::endl;
   for (auto &sz : scan_size)
     std::cout << "SCAN:                  " << sz << std::endl;
@@ -154,7 +159,7 @@ int main(int argc, char** argv) {
 
   if (use_data_file) {
     std::ifstream data("./data.dat");
-    for (size_t i = 0; i < TEST_SIZE; ++i) {
+    for (size_t i = 0; i < LOAD_SIZE+PUT_SIZE; ++i) {
       uint64_t k;
       data >> k;
       key.push_back(k);
@@ -162,10 +167,10 @@ int main(int argc, char** argv) {
     }
     std::cout << "finish read data.dat" << std::endl;
   } else {
-    Random rnd(0, TEST_SIZE-1);
-    for (size_t i = 0; i < TEST_SIZE; ++i)
+    Random rnd(0, LOAD_SIZE+PUT_SIZE-1);
+    for (size_t i = 0; i < LOAD_SIZE+PUT_SIZE; ++i)
       key.push_back(i);
-    for (size_t i = 0; i < TEST_SIZE; ++i)
+    for (size_t i = 0; i < LOAD_SIZE+PUT_SIZE; ++i)
       std::swap(key[i],key[rnd.Next()]);
   }
 
@@ -179,45 +184,47 @@ int main(int argc, char** argv) {
   std::vector<std::thread> threads;
   size_t per_thread_size;
 
-  // LOAD
-  per_thread_size = LAST_EXPAND / thread_num;
+  std::cout << std::fixed << std::setprecision(2);
+
+  // Load
+  per_thread_size = LOAD_SIZE / thread_num;
   timer.Record("start");
   for (int i = 0; i < thread_num; ++i) {
     threads.emplace_back([=,&key](){
       size_t start_pos = i*per_thread_size;
-      size_t size = (i == thread_num-1) ? LAST_EXPAND-(thread_num-1)*per_thread_size : per_thread_size;
+      size_t size = (i == thread_num-1) ? LOAD_SIZE-(thread_num-1)*per_thread_size : per_thread_size;
       for (size_t j = 0; j < size; ++j)
         assert(tree->Put(key[start_pos+j], key[start_pos+j]) == true);
     });
   }
   for (auto& t : threads)
     t.join();
+  timer.Record("stop");
   threads.clear();
+  uint64_t total_time = timer.Microsecond("stop", "start");
+  std::cout << "load: " << total_time/1000000.0 << " " << (double)LOAD_SIZE/(double)total_time*1000000.0 << std::endl;
 
-  timer.Record("mid");
-  per_thread_size = (TEST_SIZE - LAST_EXPAND) / thread_num;
+  // Put
+  per_thread_size = PUT_SIZE / thread_num;
+  timer.Clear();
+  timer.Record("start");
   for (int i = 0; i < thread_num; ++i) {
     threads.emplace_back([=,&key](){
-      size_t start_pos = i*per_thread_size+LAST_EXPAND;
-      size_t size = (i == thread_num-1) ? TEST_SIZE-LAST_EXPAND-(thread_num-1)*per_thread_size : per_thread_size;
+      size_t start_pos = i*per_thread_size+LOAD_SIZE;
+      size_t size = (i == thread_num-1) ? PUT_SIZE-(thread_num-1)*per_thread_size : per_thread_size;
       for (size_t j = 0; j < size; ++j)
         assert(tree->Put(key[start_pos+j], key[start_pos+j]) == true);
     });
   }
   for (auto& t : threads)
     t.join();
-  threads.clear();
   timer.Record("stop");
+  threads.clear();
+  total_time = timer.Microsecond("stop", "start");
+  std::cout << "put:  " << total_time/1000000.0 << " " << (double)PUT_SIZE/(double)total_time*1000000.0 << std::endl;
 
-  std::cout << std::fixed << std::setprecision(2);
-
-  uint64_t total_time = timer.Microsecond("mid", "start");
-  std::cout << "load: " << total_time/1000000.0 << " " << (double)TEST_SIZE/(double)total_time*1000000.0 << std::endl;
-  uint64_t mid_time = timer.Microsecond("stop", "mid");
-  std::cout << "put:  " << mid_time/1000000.0 << " " << (double)(TEST_SIZE-LAST_EXPAND)/(double)mid_time*1000000.0 << std::endl;
-
+  // statistic
   std::cout << "clevel time:    " << tree->CLevelTime()/1000000.0 << std::endl;
-
   std::cout << "entries:        " << tree->BLevelEntries() << std::endl;
   std::cout << "clevels:        " << tree->CLevelCount() << std::endl;
   std::cout << "clevel percent: " << (double)tree->CLevelCount() / tree->BLevelEntries() * 100.0 << "%" << std::endl;
@@ -232,6 +239,9 @@ int main(int argc, char** argv) {
   system(cmd_buf);
 
   // Get
+  Random get_rnd(0, GET_SIZE-1);
+  for (size_t i = 0; i < GET_SIZE; ++i)
+    std::swap(key[i],key[get_rnd.Next()]);
   per_thread_size = GET_SIZE / thread_num;
   timer.Clear();
   timer.Record("start");
@@ -248,19 +258,14 @@ int main(int argc, char** argv) {
   }
   for (auto& t : threads)
     t.join();
-  threads.clear();
   timer.Record("stop");
+  threads.clear();
   total_time = timer.Microsecond("stop", "start");
   std::cout << "get: " << total_time/1000000.0 << " " << (double)GET_SIZE/(double)total_time*1000000.0 << std::endl;
 
-  for (size_t i = TEST_SIZE; i < TEST_SIZE+10000; ++i) {
-    uint64_t value;
-    assert(tree->Get(i, value) == false);
-  }
-
   // scan
   for (auto scan : scan_size) {
-    size_t total_size = std::min(SCAN_TEST_SIZE / scan, TEST_SIZE);
+    size_t total_size = std::min(SCAN_TEST_SIZE / scan, LOAD_SIZE+PUT_SIZE);
     per_thread_size = total_size / thread_num;
     timer.Clear();
     timer.Record("start");
@@ -283,15 +288,15 @@ int main(int argc, char** argv) {
     }
     for (auto& t : threads)
       t.join();
-    threads.clear();
     timer.Record("stop");
+    threads.clear();
     total_time = timer.Microsecond("stop", "start");
     std::cout << "scan " << scan << ": " << total_time/1000000.0 << " " << (double)total_size/(double)total_time*1000000.0 << std::endl;
   }
 
   // sort_scan
   for (auto scan : sort_scan_size) {
-    size_t total_size = std::min(SCAN_TEST_SIZE / scan, TEST_SIZE);
+    size_t total_size = std::min(SCAN_TEST_SIZE / scan, LOAD_SIZE+PUT_SIZE);
     per_thread_size = total_size / thread_num;
     timer.Clear();
     timer.Record("start");
@@ -315,19 +320,35 @@ int main(int argc, char** argv) {
     }
     for (auto& t : threads)
       t.join();
-    threads.clear();
     timer.Record("stop");
+    threads.clear();
     total_time = timer.Microsecond("stop", "start");
     std::cout << "sort scan " << scan << ": " << total_time/1000000.0 << " " << (double)total_size/(double)total_time*1000000.0 << std::endl;
   }
 
   // Delete
-  // for (auto& k : key) {
-  //   assert(tree->Delete(k) == true);
-  // }
-  // for (auto& k : key) {
-  //   assert(tree->Get(k, value) == false);
-  // }
+  Random delete_rnd(0, DELETE_SIZE-1);
+  for (size_t i = 0; i < DELETE_SIZE; ++i)
+    std::swap(key[i],key[delete_rnd.Next()]);
+  per_thread_size = DELETE_SIZE / thread_num;
+  timer.Clear();
+  timer.Record("start");
+  for (int i = 0; i < thread_num; ++i) {
+    threads.emplace_back([=,&key](){
+      size_t start_pos = i*per_thread_size;
+      size_t size = (i == thread_num-1) ? DELETE_SIZE-(thread_num-1)*per_thread_size : per_thread_size;
+      for (size_t j = 0; j < size; ++j)
+        assert(tree->Delete(key[start_pos+j]) == true);
+    });
+  }
+  for (auto& t : threads)
+    t.join();
+  timer.Record("stop");
+  threads.clear();
+  total_time = timer.Microsecond("stop", "start");
+  std::cout << "delete: " << total_time/1000000.0 << " " << (double)DELETE_SIZE/(double)total_time*1000000.0 << std::endl;
+
+  delete tree;
 
   return 0;
 }

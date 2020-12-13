@@ -1,0 +1,2 @@
+export VMMALLOC_POOL_SIZE=$((200*1024*1024*1024))
+export VMMALLOC_POOL_DIR="/pmem0"
