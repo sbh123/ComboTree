@@ -186,6 +186,11 @@ int main(int argc, char** argv) {
 
   std::cout << std::fixed << std::setprecision(2);
 
+  int pid = getpid();
+  char cmd_buf[100];
+  sprintf(cmd_buf, "pmap %d > ./usage_before.txt", pid);
+  system(cmd_buf);
+
   // Load
   per_thread_size = LOAD_SIZE / thread_num;
   timer.Record("start");
@@ -233,9 +238,7 @@ int main(int argc, char** argv) {
   std::cout << "bytes-per-pair: " << (double)tree->Usage() / tree->Size() << std::endl;
   tree->BLevelCompression();
 
-  int pid = getpid();
-  char cmd_buf[100];
-  sprintf(cmd_buf, "pmap %d > ./usage.txt", pid);
+  sprintf(cmd_buf, "pmap %d > ./usage_after.txt", pid);
   system(cmd_buf);
 
   // Get
