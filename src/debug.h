@@ -49,6 +49,12 @@ inline __attribute__((always_inline)) const char* level_string__(Debug level) {
            level_string__(level), __FUNCTION__, ##__VA_ARGS__);        \
   } while (0)
 
+#elif defined(NDEBUG)
+
+#define LOG(level, format, ...)
+
+#endif  // NDEBUG
+
 // microseconds timer
 class Timer {
  public:
@@ -63,18 +69,5 @@ class Timer {
   std::chrono::time_point<std::chrono::high_resolution_clock> start_;
   std::chrono::time_point<std::chrono::high_resolution_clock> end_;
 };
-
-#elif defined(NDEBUG)
-
-#define LOG(level, format, ...)
-
-// microseconds timer
-class Timer {
- public:
-  void Start() {}
-  double End() { return 0.0; }
-};
-
-#endif  // NDEBUG
 
 }  // namespace combotree

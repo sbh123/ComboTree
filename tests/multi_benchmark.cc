@@ -5,6 +5,7 @@
 #include <sstream>
 #include <thread>
 #include <getopt.h>
+#include <unistd.h>
 #include "combotree/combotree.h"
 #include "combotree_config.h"
 #include "random.h"
@@ -133,6 +134,10 @@ int main(int argc, char** argv) {
   std::cout << "PMEMKV_THRESHOLD:      " << PMEMKV_THRESHOLD << std::endl;
   std::cout << "ENTRY_SIZE_FACTOR:     " << ENTRY_SIZE_FACTOR << std::endl;
 
+#ifdef USE_LIBPMEM
+  std::cout << "USE_LIBPMEM = 1" << std::endl;
+#endif
+
 #ifdef BUF_SORT
   std::cout << "BUF_SORT = 1" << std::endl;
 #endif
@@ -220,6 +225,11 @@ int main(int argc, char** argv) {
   std::cout << "usage:          " << human_readable(tree->Usage()) << std::endl;
   std::cout << "bytes-per-pair: " << (double)tree->Usage() / tree->Size() << std::endl;
   tree->BLevelCompression();
+
+  int pid = getpid();
+  char cmd_buf[100];
+  sprintf(cmd_buf, "pmap %d > ./usage.txt", pid);
+  system(cmd_buf);
 
   // Get
   per_thread_size = GET_SIZE / thread_num;

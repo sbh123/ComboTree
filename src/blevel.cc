@@ -216,11 +216,12 @@ BLevel::BLevel(size_t data_size)
     , lock_(nullptr)
 #endif
 {
+  physical_nr_entries_ = ((data_size+1+BLEVEL_EXPAND_BUF_KEY-1)/BLEVEL_EXPAND_BUF_KEY) * ENTRY_SIZE_FACTOR;
+  size_t file_size = sizeof(Entry) * physical_nr_entries_;
+#ifdef USE_LIBPMEM
   pmem_file_ = std::string(BLEVEL_PMEM_FILE) + std::to_string(file_id_);
   int is_pmem;
   std::filesystem::remove(pmem_file_);
-  physical_nr_entries_ = ((data_size+1+BLEVEL_EXPAND_BUF_KEY-1)/BLEVEL_EXPAND_BUF_KEY) * ENTRY_SIZE_FACTOR;
-  size_t file_size = sizeof(Entry) * physical_nr_entries_;
   pmem_addr_ = pmem_map_file(pmem_file_.c_str(), file_size + 64,
                PMEM_FILE_CREATE | PMEM_FILE_EXCL, 0666, &mapped_len_, &is_pmem);
   assert(is_pmem == 1);
@@ -228,6 +229,21 @@ BLevel::BLevel(size_t data_size)
     perror("BLevel::BLevel(): pmem_map_file");
     exit(1);
   }
+  // aligned at 64-bytes
+  entries_ = (Entry*)pmem_addr_;
+  if (((uintptr_t)entries_ & (uintptr_t)63) != 0) {
+    // not aligned
+    entries_ = (Entry*)(((uintptr_t)entries_+64) & ~(uintptr_t)63);
+  }
+
+  entries_offset_ = (uint64_t)entries_ - (uint64_t)pmem_addr_;
+#else // libvmmalloc
+  pmem_file_ = "";
+  pmem_addr_ = nullptr;
+  entries_offset_ = 0;
+  entries_ = (Entry*)new (std::align_val_t{64}) uint8_t[file_size];
+  assert(((uint64_t)entries_ & 63) == 0);
+#endif
 
 #ifdef BRANGE
   interval_size_ = std::max(8UL, physical_nr_entries_ / EXPAND_THREADS / 128);
@@ -246,15 +262,6 @@ BLevel::BLevel(size_t data_size)
   ranges_[EXPAND_THREADS].entries = -1;
 #endif
 
-  // aligned at 64-bytes
-  entries_ = (Entry*)pmem_addr_;
-  if (((uintptr_t)entries_ & (uintptr_t)63) != 0) {
-    // not aligned
-    entries_ = (Entry*)(((uintptr_t)entries_+64) & ~(uintptr_t)63);
-  }
-
-  entries_offset_ = (uint64_t)entries_ - (uint64_t)pmem_addr_;
-
 #ifndef NO_LOCK
   // plus one because of scan
   lock_ = new std::shared_mutex[physical_nr_entries_+1];
@@ -262,9 +269,11 @@ BLevel::BLevel(size_t data_size)
 }
 
 BLevel::~BLevel() {
-  if (pmem_addr_ != nullptr) {
+  if (!pmem_file_.empty() && pmem_addr_) {
     pmem_unmap(pmem_addr_, mapped_len_);
     std::filesystem::remove(pmem_file_);
+  } else {
+    delete (uint8_t*)entries_;
   }
 #ifndef NO_LOCK
   if (lock_) delete lock_;
@@ -793,7 +802,7 @@ int64_t BLevel::CLevelTime() const {
 }
 
 uint64_t BLevel::Usage() const {
-  return clevel_mem_.Usage() + Entries() * sizeof(Entry);
+  return clevel_mem_.Usage() + physical_nr_entries_ * sizeof(Entry);
 }
 
 }

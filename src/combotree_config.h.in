@@ -1,6 +1,7 @@
 #pragma once
 
 #cmakedefine SERVER
+#cmakedefine USE_LIBPMEM
 #cmakedefine BUF_SORT
 #cmakedefine STREAMING_STORE
 #cmakedefine STREAMING_LOAD

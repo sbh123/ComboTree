@@ -1,7 +1,7 @@
 \documentclass{mydoc}
 
 \author{张丘洋}
-\title{ComboTree 实现}
+\title{\dabiaosong ComboTree 设计与实现}
 
 \begin{document}
 
@@ -10,8 +10,11 @@
 \section{概览}
 
 根据 ComboTree 的设计，将数据结构分为 \code{CLevel}、\code{BLevel} 和 \code{ALevel}。
-其中 \code{BLevel::Entry} 中的键值对缓存与 \code{CLevel::Node} 使用相同的数据结构
-\code{KVBuffer} 来保存数据。
+其中 \code{BLevel::Entry} 中的键值对缓存使用 \code{KVBuffer}，\code{CLevel::Node}
+使用 \code{SortBuffer} 来保存数据。
+
+下面介绍的一致性都是系统的崩溃一致性，只能保证在整个系统崩溃后通过重启来恢复，
+若某个线程在中途崩溃了则无法修复，因为该机制没有运行时检查。
 
 \section{KVBuffer}
 
@@ -33,14 +36,14 @@ struct KVBuffer {
 \end{codes}
 
 \code{KVBuffer} 包含了 2 个字节的元数据 \code{meta}，以及 112 个字节的 \code{buf}
-来保存键值对。键值对的保存是\textbf{排序}的。
+来保存键值对。键值对的保存是\textbf{追加}的。
 
 当后缀字节数为 1，一个 \code{KVBuffer} 能够保存 12 个键值对；当后缀字节数为 2
 时，能够保存 11 个键值对。
 
 由于使用了前缀压缩，键的大小是不固定的，但是值的大小固定为 8 个字节，为了使值
-在保存时能够 8 字节\textbf{对齐}，\code{buf} 从左到右顺序保存键，从右到左顺序保存值，如
-下图所示。
+在保存时能够 8 字节\textbf{对齐}，以及使键聚集在一起，让\textbf{所有键都位于同一个
+Cache Line 中}，\code{buf} 从左到右顺序保存键，从右到左顺序保存值，如下图所示。
 
 \begin{figure}[!htbp]
 \centering
@@ -56,6 +59,89 @@ struct KVBuffer {
   \node[right=-1pt of 7.east,anchor=west] (8) {value(0)};
 \end{tikzpicture}
 \end{figure}
+
+\subsection{崩溃一致性}
+
+\subsubsection{插入}
+
+插入操作首先将值和键追加到相应的位置，刷写一次 Cache Line，之后更新
+8 字节元数据使其生效。元数据小于 8 个字节所以是原子操作。
+
+\subsubsection{更新}
+
+更新操作只需要更新 8 个字节的值，是原子操作。
+
+\subsubsection{删除}
+
+由于 B 层数据结构比较紧凑，现在没有设置删除标记位。
+
+目前删除操作的执行步骤为：
+
+\begin{enumerate}
+  \item 查找该键对应的位置
+  \item 若键处于最后一个位置，则直接原子性更新元数据即可。若不是，执行下一步
+  \item 将处于最后一个位置的键拷贝到当前位置。若该步骤完成后系统崩溃，则在
+        下一次启动时可以通过扫描重复的键判断出此步骤出错
+  \item 将处于最后一个位置的值拷贝到当前的位置。此步骤完成后出错与上一步相同
+  \item 原子性更新元数据，这样就把最后一个位置的键值对移动到了被删除的地方
+\end{enumerate}
+
+\section{SortBuffer}
+
+\code{SortBuffer} 是 C 层每个节点保存数据的数据结构。\code{SortBuffer} 整体上
+与 \code{KVBuffer} 类似，不同之处是有额外的 6 个字节来保存排序索引。
+
+\code{SortBuffer} 的定义如下所示，能够看到与 \code{SortBuffer} 相比多了一个
+\code{sorted\_index}。
+
+\begin{codes}{C++}
+struct SortBuffer {
+  union {
+    uint64_t header;
+    struct {
+      union {
+        uint16_t meta;
+        struct {
+          uint16_t prefix_bytes : 4;  // LSB
+          uint16_t suffix_bytes : 4;
+          uint16_t entries      : 4;
+          uint16_t max_entries  : 4;  // MSB
+        };
+      };
+      uint8_t sorted_index[6];
+    };
+  };
+  uint8_t buf[112];
+};
+\end{codes}
+
+\code{sorted\_index} 虽然是个 \code {uint8\_t} 数组，但是作为 \code{uint4\_t[12]}
+使用的，也就是 12 个 4 比特数组。之前说过每个缓存中最多能保存 12 个数据，而 4
+个比特可以表示 0--11。这个比特数组中第 n 个数据表示从小到大第 n 个键在 \code{buf}
+里的下标。
+
+\code{sorted\_index} 和其他的元数据一起组成了 8 个字节，所以同时修改他们是原子
+的。
+
+\code{sorted\_index} 数组除了用于保存排序数据之外，还用于\textbf{垃圾回收}，
+由于该数据包含了 12 个数据，在保存时，数组从前往后是目前有效数据的排序数组，
+从后往前是空闲位置的下标。
+
+\subsection{崩溃一致性}
+
+\subsubsection{插入}
+
+插入数据时，首先从 \code{sorted\_index} 的最后取出一个空闲的位置，将
+键值对写入对应的位置中，并刷写一次 Cache Line，之后原子更新 8 个字节
+的头部数据即可。
+
+\subsubsection{更新}
+
+更新操作只需要更新 8 个字节的值，是原子操作。
+
+\subsubsection{删除}
+
+删除只需要修改 8 个字节的头部数据即可（修改目前的有效键值数量以及 \code{sorted\_index}）。
 
 \section{CLevel}
 
@@ -91,9 +177,13 @@ class CLevel {
 \end{codes}
 
 CLevel 采用的是 \textbf{B+ 树}，每个节点大小为 \textbf{128 字节，两个 Cache 行}，
-与 \code{BLevel::Entry} 的大小相同。节点使用 \code{KVBuffer} 来保存键值对和子节点。
-节点\textbf{没有保存父指针}，通过函数的递归来传递父指针，这样避免了扩展时父指针的修改，
-也减少了父指针的存储。
+与 \code{BLevel::Entry} 的大小相同。节点使用 \textbf{\code{SortBuffer}} 来保存
+键值对和子节点。节点\textbf{没有保存父指针}，通过函数的递归来传递父指针，这样
+避免了扩展时父指针的修改，也减少了父指针的存储。
+
+\textbf{C 层使用 \code{SortBuffer} 的原因是}：在扩展时，需要按顺序依次扩展，
+若 C 层无序，则扩展时每个 C 层节点都必须重新排序，导致扩展时间较长。另外若采用
+\code{KVBfuffer}，在 C 层分裂删除旧节点中后半部分数据时会比较费时。
 
 C 层的中间节点在保存子节点\textbf{指针时使用 6 个字节来保存}，也就是 \code{KVBuffer}
 键值对中的值大小为6，从而有更大的扇出。
@@ -106,6 +196,37 @@ by Reducing Bit Flipping} 论文中提到这种方式可以减少比特翻转从
 对应的 \code{BLevel::Entry} 来确定。
 
 \textbf{C 层无锁}，由 \code{BLevel::Entry} 对应的锁来提供并发访问控制。
+
+\subsection{崩溃一致性}
+
+\subsubsection{插入}
+
+若插入时不涉及到分裂，则一致性由 \code{SortBuffer} 提供。下面主要叙述节点
+分裂的步骤：
+
+\begin{enumerate}
+  \item 创建新的节点，将旧节点后半部分数据拷贝到新的节点，更新新节点的 \code{next}
+        指针，持久化新节点。此时对旧节点没有任何的修改，若此步骤后崩溃没有任何问题。
+        注意，分裂会在插入之后进行，也就是说\textbf{先插入后分裂}而不是先分裂后插入。
+  \item 将新的节点插入到父节点中。插入的一致性由 \code{SortBuffer} 保证。若此步骤
+        后崩溃，在重启扫描时会发现该问题进行修复。
+  \item 修改旧节点的 \code{next} 指针。此步骤后崩溃与上一步骤一样。
+  \item 修改旧节点的元数据信息，从而删除后半部分数据。此步骤后崩溃，则下一步
+        父节点可能需要分裂但却没有执行，在重启扫描时可以修复该问题。
+  \item 函数返回到父节点，父节点判断当前节点是否满，若满则该节点从第 1 步开始
+        执行分裂，若不满，则分裂完成。这里父节点需要判断是否分裂是因为
+        需要\textbf{先插入后分裂}，否则第 2 步执行时若父节点满则会出现问题。
+        此步骤后崩溃可能父节点分裂没有执行，重启扫描可以修复。
+\end{enumerate}
+
+\subsubsection{更新}
+
+更新一致性由 \code{SortBuffer} 提供。
+
+\subsubsection{删除}
+
+为了实现简单，删除目前\textbf{不会合并节点}，只会在子节点的 \code{SortBuffer}
+中删除对应的数据，一致性由 \code{SortBuffer} 提供。
 
 \section{BLevel}
 
@@ -151,8 +272,51 @@ class BLevel {
 };
 \end{codes}
 
+B 层是由 \code{BLevel::Entry} 组成的数组。每个 \code{Entry} 的大小
+为 \textbf{128 字节，两个 Cache 行}，与 \code{CLevel::Node} 的大小相同。
+节点使用 \textbf{\code{KVBuffer}} 来保存键值对和子节点。
+
+在插入数据时，会先插入到 Entry 的 \code{KVBuffer} 缓存中，如果发现缓存满了，
+会先把 \code{KVBuffer} 刷入到对应的 C 层再进行插入。
+
+\code{BLevel::Entry} 中的 \code{buf} 和 \code{CLevel::Node} 的 \code{buf}
+大小相同，在 B 层 Entry \textbf{第一次将数据刷写到 C 层时，会直接复制 \code{buf}}，
+而不需要一个一个地将数据插入到 C 层（由于 C 层节点有排序数组所以还需要获得
+排序数组）。
+
+\subsection{B 层的大区间 \code{BRange} 和小区间 \code{interval}}
+
+为了能够实现多线程扩展，将 B 层分为多个 \code{BRange}，\code{BRange}
+内部是连续的，\code{BRange} 之间不一定连续。\code{BRange} 的个数等于
+扩展线程的个数，扩展时每个线程扩展一个 \code{BRange}。
+
+为了尽量让每个线程扩展的数据量相同，将每个 \code{BRange} 再细分为多个
+\code{interval}，\code{interval} 目前最大为 128。每个 \code{interval}
+会记录该区间内的键值对数，在开始扩展时，会将所有 \code{BRange} 的
+\code{interval} 合在一起，并将其根据键值数尽量等分，分给不同的扩展线程。
+也就是说，在扩展时，每个扩展线程对应一个新的 \code{BRange}，但并不对应
+一个旧的 \code{BRange}。
+
+\subsection{崩溃一致性}
+
+\subsubsection{插入、更新和删除}
+
+由 \code{KVBuffer} 和 C 层提供一致性。
+
+\subsubsection{扩展}
+
+B 层扩展时，会持久化每个 range 中当前已经扩展的最大键值（目前的实现没有持久化），
+旧的 B 层只会在扩展完成后才会被删除。
+
 \section{ALevel}
 
+A 层与原论文一致。A 层不需要修改，整个位于内存中，重启时重新生成即可。
+
 \section{NVM 管理}
+
+使用 PMDK 中的 \code{libpmem} 来管理 NVM。
+
+B 层和 C 层保存在 NVM DAX 文件系统的两个文件中，在扩展时会创建新的文件，扩展完成后
+删除旧的文件。
 
 \end{document}

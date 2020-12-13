@@ -99,6 +99,7 @@ class __attribute__((packed)) CLevel {
     MemControl(std::string pmem_file, size_t file_size)
       : pmem_file_(pmem_file+std::to_string(file_id_++))
     {
+#ifdef USE_LIBPMEM
       int is_pmem;
       std::filesystem::remove(pmem_file_);
       pmem_addr_ = pmem_map_file(pmem_file_.c_str(), file_size + 64,
@@ -118,12 +119,22 @@ class __attribute__((packed)) CLevel {
 
       cur_addr_ = base_addr_;
       end_addr_ = (uint8_t*)pmem_addr_ + mapped_len_;
+#else // libvmmalloc
+      pmem_file_ = "";
+      pmem_addr_ = nullptr;
+      base_addr_ = (uint64_t)new (std::align_val_t{64}) uint8_t[file_size];
+      assert((base_addr_ & 63) == 0);
+      cur_addr_  = base_addr_;
+      end_addr_  = (uint8_t*)base_addr_ + file_size;
+#endif
     }
 
     ~MemControl() {
-      if (pmem_addr_) {
+      if (!pmem_file_.empty() && pmem_addr_) {
         pmem_unmap(pmem_addr_, mapped_len_);
         std::filesystem::remove(pmem_file_);
+      } else {
+        delete (uint8_t*)base_addr_;
       }
     }
 
