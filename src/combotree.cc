@@ -24,6 +24,30 @@ ComboTree::ComboTree(std::string pool_dir, size_t pool_size, bool create)
   manifest_ = new Manifest(pool_dir_);
   pmemkv_ = new PmemKV(manifest_->PmemKVPath());
   status_ = State::USING_PMEMKV;
+
+#ifdef BRANGE
+  std::cout << "EXPAND_THREADS:        " << EXPAND_THREADS << std::endl;
+#endif
+  std::cout << "BLEVEL_EXPAND_BUF_KEY: " << BLEVEL_EXPAND_BUF_KEY << std::endl;
+  std::cout << "EXPANSION_FACTOR:      " << EXPANSION_FACTOR << std::endl;
+  std::cout << "PMEMKV_THRESHOLD:      " << PMEMKV_THRESHOLD << std::endl;
+  std::cout << "ENTRY_SIZE_FACTOR:     " << ENTRY_SIZE_FACTOR << std::endl;
+
+#ifdef USE_LIBPMEM
+  std::cout << "USE_LIBPMEM = 1" << std::endl;
+#endif
+
+#ifdef BUF_SORT
+  std::cout << "BUF_SORT = 1" << std::endl;
+#endif
+
+#ifdef STREAMING_STORE
+  std::cout << "STREAMING_STORE = 1" << std::endl;
+#endif
+
+#ifdef STREAMING_LOAD
+  std::cout << "STREAMING_LOAD  = 1" << std::endl;
+#endif
 }
 
 ComboTree::~ComboTree() {

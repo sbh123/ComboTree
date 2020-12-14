@@ -121,9 +121,6 @@ int main(int argc, char** argv) {
   }
 
   std::cout << "THREAD NUMBER:         " << thread_num << std::endl;
-#ifdef BRANGE
-  std::cout << "EXPAND_THREADS:        " << EXPAND_THREADS << std::endl;
-#endif
   std::cout << "LOAD_SIZE:             " << LOAD_SIZE << std::endl;
   std::cout << "PUT_SIZE:              " << PUT_SIZE << std::endl;
   std::cout << "GET_SIZE:              " << GET_SIZE << std::endl;
@@ -134,26 +131,6 @@ int main(int argc, char** argv) {
   for (auto &sz : sort_scan_size)
     std::cout << "SORT_SCAN:             " << sz << std::endl;
   std::cout << std::endl;
-  std::cout << "BLEVEL_EXPAND_BUF_KEY: " << BLEVEL_EXPAND_BUF_KEY << std::endl;
-  std::cout << "EXPANSION_FACTOR:      " << EXPANSION_FACTOR << std::endl;
-  std::cout << "PMEMKV_THRESHOLD:      " << PMEMKV_THRESHOLD << std::endl;
-  std::cout << "ENTRY_SIZE_FACTOR:     " << ENTRY_SIZE_FACTOR << std::endl;
-
-#ifdef USE_LIBPMEM
-  std::cout << "USE_LIBPMEM = 1" << std::endl;
-#endif
-
-#ifdef BUF_SORT
-  std::cout << "BUF_SORT = 1" << std::endl;
-#endif
-
-#ifdef STREAMING_STORE
-  std::cout << "STREAMING_STORE = 1" << std::endl;
-#endif
-
-#ifdef STREAMING_LOAD
-  std::cout << "STREAMING_LOAD  = 1" << std::endl;
-#endif
 
   std::vector<uint64_t> key;
 

@@ -19,17 +19,6 @@ int main(void) {
 #endif
 
   std::cout << "TEST_SIZE:             " << TEST_SIZE << std::endl;
-  std::cout << "BLEVEL_EXPAND_BUF_KEY: " << BLEVEL_EXPAND_BUF_KEY << std::endl;
-  std::cout << "EXPANSION_FACTOR:      " << EXPANSION_FACTOR << std::endl;
-  std::cout << "PMEMKV_THRESHOLD:      " << PMEMKV_THRESHOLD << std::endl;
-
-#ifdef STREAMING_STORE
-  std::cout << "STREAMING_STORE = 1" << std::endl;
-#endif
-
-#ifdef STREAMING_LOAD
-  std::cout << "STREAMING_LOAD  = 1" << std::endl;
-#endif
 
   std::vector<uint64_t> key;
   std::map<uint64_t, uint64_t> right_kv;

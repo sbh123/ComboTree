@@ -57,18 +57,6 @@ int main(int argc, char** argv) {
 
   std::cout << "TEST_SIZE:             " << TEST_SIZE << std::endl;
   std::cout << "LAST_EXPAND:           " << LAST_EXPAND << std::endl;
-  std::cout << "BLEVEL_EXPAND_BUF_KEY: " << BLEVEL_EXPAND_BUF_KEY << std::endl;
-  std::cout << "EXPANSION_FACTOR:      " << EXPANSION_FACTOR << std::endl;
-  std::cout << "PMEMKV_THRESHOLD:      " << PMEMKV_THRESHOLD << std::endl;
-  std::cout << "SCAN_SIZE:             " << SCAN_SIZE << std::endl;
-
-#ifdef STREAMING_STORE
-  std::cout << "STREAMING_STORE = 1" << std::endl;
-#endif
-
-#ifdef STREAMING_LOAD
-  std::cout << "STREAMING_LOAD  = 1" << std::endl;
-#endif
 
   std::vector<uint64_t> key;
 
