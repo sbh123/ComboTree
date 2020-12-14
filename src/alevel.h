@@ -13,6 +13,7 @@ class ComboTree;
 class ALevel {
  public:
   ALevel(BLevel* blevel, int span = DEFAULT_SPAN);
+  ~ALevel();
 
   ALWAYS_INLINE bool Put(uint64_t key, uint64_t value) {
     uint64_t begin, end;
@@ -59,6 +60,12 @@ class ALevel {
   uint64_t nr_blevel_entry_;
   uint64_t nr_entry_;
   Entry* entry_;
+
+  // pmem
+  void* pmem_addr_;
+  size_t mapped_len_;
+  std::string pmem_file_;
+  static int file_id_;
 
   double CalculateCDF_(uint64_t key) const {
     return (double)(key - min_key_) / (double)(max_key_ - min_key_);
