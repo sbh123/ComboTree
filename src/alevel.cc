@@ -17,7 +17,7 @@ ALevel::ALevel(BLevel* blevel, int span)
   nr_entry_ = ((nr_blevel_entry_ + 1) / span_) + 1;
 
   size_t file_size = nr_entry_ * sizeof(Entry);
-  pmem_file_ = std::string(ALEVEL_PMEM_FILE) + std::to_string(file_id_);
+  pmem_file_ = std::string(ALEVEL_PMEM_FILE) + std::to_string(file_id_++);
   int is_pmem;
   std::filesystem::remove(pmem_file_);
   pmem_addr_ = pmem_map_file(pmem_file_.c_str(), file_size + 64,

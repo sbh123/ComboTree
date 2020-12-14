@@ -219,7 +219,7 @@ BLevel::BLevel(size_t data_size)
   physical_nr_entries_ = ((data_size+1+BLEVEL_EXPAND_BUF_KEY-1)/BLEVEL_EXPAND_BUF_KEY) * ENTRY_SIZE_FACTOR;
   size_t file_size = sizeof(Entry) * physical_nr_entries_;
 #ifdef USE_LIBPMEM
-  pmem_file_ = std::string(BLEVEL_PMEM_FILE) + std::to_string(file_id_);
+  pmem_file_ = std::string(BLEVEL_PMEM_FILE) + std::to_string(file_id_++);
   int is_pmem;
   std::filesystem::remove(pmem_file_);
   pmem_addr_ = pmem_map_file(pmem_file_.c_str(), file_size + 64,
