@@ -40,20 +40,12 @@ inline __attribute__((always_inline)) const char* level_string__(Debug level) {
 
 }  // anonymous namespace
 
-#ifndef NDEBUG
-
 #define LOG(level, format, ...)                                        \
   do {                                                                 \
     std::lock_guard<std::mutex> lock(log_mutex);                       \
     printf("%s " ANSI_COLOR_GREEN "%s: " ANSI_COLOR_RESET format "\n", \
            level_string__(level), __FUNCTION__, ##__VA_ARGS__);        \
   } while (0)
-
-#elif defined(NDEBUG)
-
-#define LOG(level, format, ...)
-
-#endif  // NDEBUG
 
 // microseconds timer
 class Timer {
