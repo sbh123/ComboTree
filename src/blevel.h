@@ -613,6 +613,7 @@ class BLevel {
       if (logical_idx >= ranges_[i].logical_entry_start)
         return i;
     assert(0);
+    return -1;
   }
 
   ALWAYS_INLINE int FindBRangeByKey_(uint64_t key) const {
@@ -620,6 +621,7 @@ class BLevel {
       if (key >= ranges_[i].start_key)
         return i;
     assert(0);
+    return -1;
   }
 
   ALWAYS_INLINE uint64_t GetPhysical_(const BRange& range, uint64_t logical_idx) const {

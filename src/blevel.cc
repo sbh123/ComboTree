@@ -166,6 +166,7 @@ bool BLevel::Entry::Update(CLevel::MemControl* mem, uint64_t key, uint64_t value
     return clevel.Update(mem, key, value);
   else
     assert(0);
+  return false;
 }
 
 bool BLevel::Entry::Get(CLevel::MemControl* mem, uint64_t key, uint64_t& value) const {
@@ -199,8 +200,11 @@ void BLevel::Entry::FlushToCLevel(CLevel::MemControl* mem) {
   if (!clevel.HasSetup()) {
     clevel.Setup(mem, buf);
   } else {
-    for (int i = 0; i < buf.entries; ++i)
-      assert(clevel.Put(mem, buf.key(i, entry_key), buf.value(i)) == true);
+    for (int i = 0; i < buf.entries; ++i) {
+      if (clevel.Put(mem, buf.key(i, entry_key), buf.value(i)) != true) {
+        assert(0);
+      }
+    }
   }
   buf.Clear();
 

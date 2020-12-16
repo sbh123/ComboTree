@@ -122,8 +122,10 @@ bool CLevel::Node::Update(MemControl* mem, uint64_t key, uint64_t value) {
   int pos = leaf->leaf_buf.Find(key, exist);
   if (exist)
     return leaf->leaf_buf.Update(pos, value);
-  else
+  else {
     assert(0);
+    return false;
+  }
 }
 
 bool CLevel::Node::Get(MemControl* mem, uint64_t key, uint64_t& value) const {

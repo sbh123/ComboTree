@@ -136,11 +136,14 @@ int main(int argc, char** argv) {
 
   if (use_data_file) {
     std::ifstream data("./data.dat");
+    if (!data.good()) {
+      std::cout << "can not open data.dat!" << std::endl;
+      assert(0);
+    }
     for (size_t i = 0; i < LOAD_SIZE+PUT_SIZE; ++i) {
       uint64_t k;
       data >> k;
       key.push_back(k);
-      assert(data.good());
     }
     std::cout << "finish read data.dat" << std::endl;
   } else {
@@ -166,7 +169,10 @@ int main(int argc, char** argv) {
   int pid = getpid();
   char cmd_buf[100];
   sprintf(cmd_buf, "pmap %d > ./usage_before.txt", pid);
-  system(cmd_buf);
+  if (system(cmd_buf) != 0) {
+    std::cerr << "command error: " << cmd_buf << std::endl;
+    return -1;
+  }
 
   // Load
   per_thread_size = LOAD_SIZE / thread_num;
@@ -175,8 +181,13 @@ int main(int argc, char** argv) {
     threads.emplace_back([=,&key](){
       size_t start_pos = i*per_thread_size;
       size_t size = (i == thread_num-1) ? LOAD_SIZE-(thread_num-1)*per_thread_size : per_thread_size;
-      for (size_t j = 0; j < size; ++j)
-        assert(tree->Put(key[start_pos+j], key[start_pos+j]) == true);
+      for (size_t j = 0; j < size; ++j) {
+        bool ret = tree->Put(key[start_pos+j], key[start_pos+j]);
+        if (ret != true) {
+          std::cout << "load error!" << std::endl;
+          assert(0);
+        }
+      }
     });
   }
   for (auto& t : threads)
@@ -194,8 +205,13 @@ int main(int argc, char** argv) {
     threads.emplace_back([=,&key](){
       size_t start_pos = i*per_thread_size+LOAD_SIZE;
       size_t size = (i == thread_num-1) ? PUT_SIZE-(thread_num-1)*per_thread_size : per_thread_size;
-      for (size_t j = 0; j < size; ++j)
-        assert(tree->Put(key[start_pos+j], key[start_pos+j]) == true);
+      for (size_t j = 0; j < size; ++j) {
+        bool ret = tree->Put(key[start_pos+j], key[start_pos+j]);
+        if (ret != true) {
+          std::cout << "put error!" << std::endl;
+          assert(0);
+        }
+      }
     });
   }
   for (auto& t : threads)
@@ -216,7 +232,10 @@ int main(int argc, char** argv) {
   tree->BLevelCompression();
 
   sprintf(cmd_buf, "pmap %d > ./usage_after.txt", pid);
-  system(cmd_buf);
+  if (system(cmd_buf) != 0) {
+    std::cerr << "command error: " << cmd_buf << std::endl;
+    return -1;
+  }
 
   // Get
   Random get_rnd(0, GET_SIZE-1);
@@ -231,8 +250,11 @@ int main(int argc, char** argv) {
       size_t size = (i == thread_num-1) ? GET_SIZE-(thread_num-1)*per_thread_size : per_thread_size;
       size_t value;
       for (size_t j = 0; j < size; ++j) {
-        assert(tree->Get(key[start_pos+j], value) == true);
-        assert(value == key[start_pos+j]);
+        bool ret = tree->Get(key[start_pos+j], value);
+        if (ret != true) {
+          std::cout << "get error!" << std::endl;
+          assert(0);
+        }
       }
     });
   }
@@ -259,7 +281,10 @@ int main(int argc, char** argv) {
           if (iter.end())
             continue;
           for (size_t k = 0; k < scan; ++k) {
-            assert(iter.key() == iter.value());
+            if (iter.key() != iter.value()) {
+              std::cout << "scan error" << std::endl;
+              assert(0);
+            }
             if (!iter.next())
               break;
           }
@@ -290,8 +315,14 @@ int main(int argc, char** argv) {
           if (iter.end())
             continue;
           for (size_t k = 0; k < scan; ++k) {
-            assert(iter.key() == start_key + k);
-            assert(iter.value() == start_key + k);
+            if (iter.key() != start_key + k) {
+              std::cout << "scan error!" << std::endl;
+              assert(0);
+            }
+            if (iter.value() != start_key + k) {
+              std::cout << "scan error!" << std::endl;
+              assert(0);
+            }
             if (!iter.next())
               break;
           }
@@ -317,8 +348,12 @@ int main(int argc, char** argv) {
     threads.emplace_back([=,&key](){
       size_t start_pos = i*per_thread_size;
       size_t size = (i == thread_num-1) ? DELETE_SIZE-(thread_num-1)*per_thread_size : per_thread_size;
-      for (size_t j = 0; j < size; ++j)
-        assert(tree->Delete(key[start_pos+j]) == true);
+      for (size_t j = 0; j < size; ++j) {
+        if (tree->Delete(key[start_pos+j]) != true) {
+          std::cout << "delete error!" << std::endl;
+          assert(0);
+        }
+      }
     });
   }
   for (auto& t : threads)
