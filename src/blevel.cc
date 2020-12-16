@@ -246,7 +246,7 @@ BLevel::BLevel(size_t data_size)
 #endif
 
 #ifdef BRANGE
-  interval_size_ = std::max(8UL, physical_nr_entries_ / EXPAND_THREADS / 128);
+  interval_size_ = std::max(1UL, physical_nr_entries_ / EXPAND_THREADS / 128);
   uint64_t entries_per_range = physical_nr_entries_ / EXPAND_THREADS;
   for (int i = 0; i < EXPAND_THREADS; ++i) {
     ranges_[i].physical_entry_start = i * entries_per_range;
