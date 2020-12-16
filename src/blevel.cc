@@ -245,23 +245,6 @@ BLevel::BLevel(size_t data_size)
   assert(((uint64_t)entries_ & 63) == 0);
 #endif
 
-#ifdef BRANGE
-  interval_size_ = std::max(1UL, physical_nr_entries_ / EXPAND_THREADS / 128);
-  uint64_t entries_per_range = physical_nr_entries_ / EXPAND_THREADS;
-  for (int i = 0; i < EXPAND_THREADS; ++i) {
-    ranges_[i].physical_entry_start = i * entries_per_range;
-    if (i != EXPAND_THREADS - 1)
-      ranges_[i].entries = entries_per_range;
-    else
-      ranges_[i].entries = physical_nr_entries_-((EXPAND_THREADS-1)*entries_per_range);
-    intervals_[i] = (ranges_[i].entries+interval_size_-1)/interval_size_;
-    size_per_interval_[i] = new std::atomic<size_t>[intervals_[i]]{};
-    assert(size_per_interval_[i][0] == 0);
-  }
-  ranges_[EXPAND_THREADS].physical_entry_start = physical_nr_entries_;
-  ranges_[EXPAND_THREADS].entries = -1;
-#endif
-
 #ifndef NO_LOCK
   // plus one because of scan
   lock_ = new std::shared_mutex[physical_nr_entries_+1];
@@ -347,6 +330,7 @@ void BLevel::Expansion(std::vector<std::pair<uint64_t,uint64_t>>& data) {
 #ifdef BRANGE
   uint64_t range_size = entry_count / EXPAND_THREADS;
 
+  interval_size_ = std::max(4UL, entry_count / EXPAND_THREADS / 128);
   nr_entries_ = 0;
   for (int i = 0; i < EXPAND_THREADS; ++i) {
     ranges_[i].entries = (i < EXPAND_THREADS-1) ? range_size : entry_count-(EXPAND_THREADS-1)*range_size;
@@ -355,6 +339,7 @@ void BLevel::Expansion(std::vector<std::pair<uint64_t,uint64_t>>& data) {
     ranges_[i].start_key = entries_[nr_entries_].entry_key;
     nr_entries_ += ranges_[i].entries;
     intervals_[i] = (ranges_[i].entries+interval_size_-1) / interval_size_;
+    size_per_interval_[i] = new std::atomic<size_t>[intervals_[i]]{};
     for (uint64_t j = 0; j < intervals_[i] - 1; ++j)
       size_per_interval_[i][j].fetch_add(interval_size_*BLEVEL_EXPAND_BUF_KEY);
     size_per_interval_[i][intervals_[i]-1].fetch_add(
@@ -375,6 +360,20 @@ void BLevel::Expansion(std::vector<std::pair<uint64_t,uint64_t>>& data) {
 void BLevel::PrepareExpansion(BLevel* old_blevel) {
   uint64_t sum_interval = 0;
   std::vector<uint64_t> sums;
+
+  interval_size_ = std::max(8UL, physical_nr_entries_ / EXPAND_THREADS / 128);
+  uint64_t entries_per_range = physical_nr_entries_ / EXPAND_THREADS;
+  for (int i = 0; i < EXPAND_THREADS; ++i) {
+    ranges_[i].physical_entry_start = i * entries_per_range;
+    if (i != EXPAND_THREADS - 1)
+      ranges_[i].entries = entries_per_range;
+    else
+      ranges_[i].entries = physical_nr_entries_-((EXPAND_THREADS-1)*entries_per_range);
+    intervals_[i] = (ranges_[i].entries+interval_size_-1)/interval_size_;
+    size_per_interval_[i] = new std::atomic<size_t>[intervals_[i]]{};
+  }
+  ranges_[EXPAND_THREADS].physical_entry_start = physical_nr_entries_;
+  ranges_[EXPAND_THREADS].entries = -1;
 
   for (int i = 0; i < EXPAND_THREADS; ++i) {
     for (uint64_t j = 0; j < old_blevel->intervals_[i]; ++j) {
