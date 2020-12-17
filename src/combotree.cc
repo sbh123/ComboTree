@@ -55,6 +55,10 @@ ComboTree::ComboTree(std::string pool_dir, size_t pool_size, bool create)
 #ifdef NO_LOCK
   std::cout << "NO_LOCK = 1" << std::endl;
 #endif
+
+#ifdef NDEBUG
+  std::cout << "NDEBUG = 1" << std::endl;
+#endif
 }
 
 ComboTree::~ComboTree() {
