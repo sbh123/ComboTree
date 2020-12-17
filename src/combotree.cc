@@ -27,11 +27,14 @@ ComboTree::ComboTree(std::string pool_dir, size_t pool_size, bool create)
 
 #ifdef BRANGE
   std::cout << "EXPAND_THREADS:        " << EXPAND_THREADS << std::endl;
+#else
+  std::cout << "BRANGE = 0" << std::endl;
 #endif
   std::cout << "BLEVEL_EXPAND_BUF_KEY: " << BLEVEL_EXPAND_BUF_KEY << std::endl;
   std::cout << "EXPANSION_FACTOR:      " << EXPANSION_FACTOR << std::endl;
   std::cout << "PMEMKV_THRESHOLD:      " << PMEMKV_THRESHOLD << std::endl;
   std::cout << "ENTRY_SIZE_FACTOR:     " << ENTRY_SIZE_FACTOR << std::endl;
+  std::cout << "DEFAULT_SPAN:          " << DEFAULT_SPAN << std::endl;
 
 #ifdef USE_LIBPMEM
   std::cout << "USE_LIBPMEM = 1" << std::endl;
@@ -46,7 +49,11 @@ ComboTree::ComboTree(std::string pool_dir, size_t pool_size, bool create)
 #endif
 
 #ifdef STREAMING_LOAD
-  std::cout << "STREAMING_LOAD  = 1" << std::endl;
+  std::cout << "STREAMING_LOAD = 1" << std::endl;
+#endif
+
+#ifdef NO_LOCK
+  std::cout << "NO_LOCK = 1" << std::endl;
 #endif
 }
 
