@@ -43,6 +43,10 @@ class ALevel {
     return blevel_->Size();
   }
 
+  uint64_t Usage() const {
+    return nr_entry_ * sizeof(Entry);
+  }
+
   friend ComboTree;
 
  private:

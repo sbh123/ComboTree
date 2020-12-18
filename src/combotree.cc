@@ -94,7 +94,7 @@ void ComboTree::BLevelCompression() const {
 }
 
 uint64_t ComboTree::Usage() const {
-  return blevel_->Usage();
+  return alevel_->Usage() + blevel_->Usage();
 }
 
 int64_t ComboTree::CLevelTime() const {
