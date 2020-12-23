@@ -1,6 +1,6 @@
 #include <cassert>
 #include <filesystem>
-#include <libpmemkv.hpp>
+// #include <libpmemkv.hpp>
 #include "combotree_config.h"
 #include "pmemkv.h"
 
@@ -9,25 +9,26 @@ namespace combotree {
 std::atomic<bool> PmemKV::read_valid_  = true;
 std::atomic<bool> PmemKV::write_valid_ = true;
 
-using pmem::kv::config;
-using pmem::kv::status;
-using pmem::kv::db;
+// using pmem::kv::config;
+// using pmem::kv::status;
+// using pmem::kv::db;
 
 PmemKV::PmemKV(std::string path, size_t size,
                std::string engine, bool force_create)
-    : db_(new db()), write_ref_(0), read_ref_(0)
+    : write_ref_(0), read_ref_(0)
 {
   std::filesystem::remove(path);
-  config cfg;
-  [[maybe_unused]] auto s = cfg.put_string("path", path);
-  assert(s == status::OK);
-  s = cfg.put_uint64("size", size);
-  assert(s == status::OK);
-  s = cfg.put_uint64("force_create", force_create ? 1 : 0);
-  assert(s == status::OK);
+  // // config cfg;
+  // [[maybe_unused]] auto s = cfg.put_string("path", path);
+  // assert(s == status::OK);
+  // s = cfg.put_uint64("size", size);
+  // assert(s == status::OK);
+  // s = cfg.put_uint64("force_create", force_create ? 1 : 0);
+  // assert(s == status::OK);
 
-  s = db_->open(engine, std::move(cfg));
-  assert(s == status::OK);
+  // s = db_->open(engine, std::move(cfg));
+
+  // assert(s == status::OK);
 }
 
 namespace {
@@ -39,42 +40,35 @@ inline void int2char(uint64_t integer, char* buf) {
 } // anonymous namespace
 
 bool PmemKV::Put(uint64_t key, uint64_t value) {
+  bool ret = false;
   WriteRef_();
   if (!write_valid_.load(std::memory_order_acquire))
     return false;
-  char key_buf[sizeof(uint64_t)];
-  char value_buf[sizeof(uint64_t)];
-  int2char(key, key_buf);
-  int2char(value, value_buf);
-
-  auto s = db_->put(string_view(key_buf, sizeof(uint64_t)),
-                    string_view(value_buf, sizeof(uint64_t)));
+  kv_data.insert(std::make_pair(key, value));
   WriteUnRef_();
-  return s == status::OK;
+  return true;
 }
 
 bool PmemKV::Get(uint64_t key, uint64_t& value) const {
+  bool ret = false;
   ReadRef_();
   if (!read_valid_.load(std::memory_order_acquire))
     return false;
-  char key_buf[sizeof(uint64_t)];
-  int2char(key, key_buf);
-
-  auto s = db_->get(string_view(key_buf, sizeof(uint64_t)),
-      [&](string_view value_str){ value = *(uint64_t*)value_str.data(); });
+  if(kv_data.find(key) != kv_data.end()) {
+    value = (*(kv_data.find(key))).second;
+    ret = true;
+  }
   ReadUnRef_();
-  return s == status::OK;
+  return ret;
 }
 
 bool PmemKV::Delete(uint64_t key) {
   WriteRef_();
   if (!write_valid_.load(std::memory_order_acquire))
     return false;
-  char key_buf[sizeof(uint64_t)];
-  int2char(key, key_buf);
-  auto s = db_->remove(string_view(key_buf, sizeof(uint64_t)));
+  kv_data.erase(key);
   WriteUnRef_();
-  return s == status::OK || s == status::NOT_FOUND;
+  return true;
 }
 
 size_t PmemKV::Scan(uint64_t min_key, uint64_t max_key, uint64_t max_size,
@@ -82,14 +76,9 @@ size_t PmemKV::Scan(uint64_t min_key, uint64_t max_key, uint64_t max_size,
   ReadRef_();
   char key_buf[sizeof(uint64_t)];
   int2char(min_key, key_buf);
-  db_->get_all(
-    [&](string_view key_str, string_view value_str) {
-      uint64_t key = *(uint64_t*)key_str.data();
-      uint64_t value = *(uint64_t*)value_str.data();
-      if (key <= max_key && key >= min_key)
-        kv.emplace_back(key, value);
-      return 0;
-    });
+  for(auto kv_pair:kv_data) {
+    kv.emplace_back(kv_pair);
+  }
   ReadUnRef_();
   std::sort(kv.begin(), kv.end());
   if (kv.size() > max_size)

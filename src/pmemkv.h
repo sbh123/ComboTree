@@ -2,17 +2,18 @@
 
 #include <cassert>
 #include <cstdlib>
-#include <libpmemkv.hpp>
+// #include <libpmemkv.hpp>
 #include <vector>
 #include <atomic>
 #include <mutex>
 #include <algorithm>
 #include <vector>
+#include <map>
 
 namespace combotree {
 
-using pmem::kv::status;
-using pmem::kv::string_view;
+// using pmem::kv::status;
+// using pmem::kv::string_view;
 
 namespace {
 
@@ -39,8 +40,7 @@ class PmemKV {
     if (!read_valid_.load(std::memory_order_acquire))
       return -1;
     size_t size;
-    [[maybe_unused]] auto s = db_->count_all(size);
-    assert(s == status::OK);
+    size = kv_data.size();
     ReadUnRef_();
     return size;
   }
@@ -65,7 +65,8 @@ class PmemKV {
   }
 
  private:
-  pmem::kv::db* db_;
+  // pmem::kv::db* db_;
+  std::map<uint64_t, uint64_t> kv_data;
   mutable std::atomic<int> write_ref_;
   mutable std::atomic<int> read_ref_;
 

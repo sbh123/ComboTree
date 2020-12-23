@@ -1,6 +1,9 @@
 project(ComboTree)
 cmake_minimum_required(VERSION 3.0)
 
+SET(CMAKE_C_COMPILER /usr/local/bin/gcc)
+SET(CMAKE_CXX_COMPILER /usr/local/bin/g++)
+
 # use `cmake -DSERVER:BOOL=ON ..` when running in server
 option(SERVER           "Run in server"           ON)
 option(BUF_SORT         "Sort buffer in KVBufer"  OFF)
@@ -60,7 +63,7 @@ set(COMBO_TREE_SRC
 )
 
 add_library(combotree SHARED ${COMBO_TREE_SRC})
-target_link_libraries(combotree pmem pmemkv pthread)
+target_link_libraries(combotree pmem pmemobj pthread)
 
 # benchmark
 add_executable(benchmark tests/benchmark.cc)
