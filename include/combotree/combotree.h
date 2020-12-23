@@ -8,7 +8,7 @@
 #include <shared_mutex>
 
 namespace combotree {
-
+class PGM_Index;
 class ALevel;
 class BLevel;
 class Manifest;
@@ -92,6 +92,7 @@ class ComboTree {
 
   std::string pool_dir_;
   size_t pool_size_;
+  PGM_Index *pgm_index_;
   ALevel* alevel_;
   BLevel* blevel_;
   BLevel* old_blevel_;

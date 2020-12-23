@@ -1,6 +1,5 @@
 #include <cassert>
 #include <filesystem>
-#include <libpmemkv.hpp>
 #include "combotree_config.h"
 #include "pmemkv.h"
 
@@ -9,6 +8,7 @@ namespace combotree {
 std::atomic<bool> PmemKV::read_valid_  = true;
 std::atomic<bool> PmemKV::write_valid_ = true;
 
+#ifdef USE_PMEM_KV
 using pmem::kv::config;
 using pmem::kv::status;
 using pmem::kv::db;
@@ -105,5 +105,6 @@ size_t PmemKV::Scan(uint64_t min_key, uint64_t max_key, uint64_t max_size,
     callback(pair.first, pair.second, arg);
   return kv.size();
 }
+#endif
 
 } // namespace combotree

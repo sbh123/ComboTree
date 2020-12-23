@@ -638,6 +638,7 @@ class BLevel {
   }
 #endif
 
+public:
 #ifdef BRANGE
   void ExpandRange_(BLevel* old_blevel, int thread_id);
   void FinishExpansion_();

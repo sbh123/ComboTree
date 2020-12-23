@@ -5,6 +5,7 @@
 #include <unistd.h>
 #include "combotree/combotree.h"
 #include "combotree_config.h"
+#include "pgm_index.h"
 #include "alevel.h"
 #include "blevel.h"
 #include "manifest.h"
@@ -15,6 +16,7 @@ namespace combotree {
 
 std::mutex log_mutex;
 int64_t expand_time = 0;
+static int prints_count = 0;
 
 ComboTree::ComboTree(std::string pool_dir, size_t pool_size, bool create)
     : pool_dir_(pool_dir), pool_size_(pool_size), alevel_(nullptr),
@@ -125,6 +127,7 @@ void ComboTree::ChangeToComboTree_() {
   {
     std::lock_guard<std::shared_mutex> lock(alevel_lock_);
     alevel_ = new ALevel(blevel_);
+    pgm_index_ = new PGM_Index(blevel_);
   }
   // change manifest first
   manifest_->SetIsComboTree(true);
@@ -172,7 +175,9 @@ void ComboTree::ExpandComboTree_() {
   {
     std::lock_guard<std::shared_mutex> lock(alevel_lock_);
     delete alevel_;
+    delete pgm_index_;
     alevel_ = new ALevel(blevel_);
+    pgm_index_ = new PGM_Index(blevel_);
     delete old_blevel_;
     old_blevel_ = blevel_;
   }
@@ -203,6 +208,7 @@ void ComboTree::ExpandComboTree_() {
   blevel_ = new BLevel(old_blevel->Size());
   blevel_->Expansion(old_blevel);
   alevel_ = new ALevel(blevel_);
+  pgm_index_ = new PGM_Index(blevel_);
 
   delete old_alevel;
   delete old_blevel;
@@ -236,6 +242,26 @@ bool ComboTree::Put(uint64_t key, uint64_t value) {
       continue;
     } else if (status_.load(std::memory_order_acquire) == State::USING_COMBO_TREE) {
       ret = alevel_->Put(key, value);
+      {
+        uint64_t abegin, aend;
+        uint64_t pbegin, pend;
+        alevel_->GetBLevelRange_(key, abegin, aend);
+        pgm_index_->GetBLevelRange_(key, pbegin, pend);
+        #ifdef BRANGE
+          std::atomic<size_t>* interval_size;
+          uint64_t idx1 = blevel_->Find_(key, abegin, aend, &interval_size);
+          uint64_t idx2 = blevel_->Find_(key, pbegin, pend, &interval_size);
+        #else
+          uint64_t idx1 = Find_(key, abegin, abegin);
+          uint64_t idx2 = Find_(key, pbegin, pend);
+        #endif
+        if(idx1 != idx2) {
+          std::cout << "alevel find range is: " << abegin << " : " <<  aend << std::endl;
+          std::cout << "belevel find at alevel is " << idx1 << std::endl;
+          std::cout << "belevel find at pgmindex is " << idx2 << std::endl;
+          std::cout << "pgm index find range is: " << pbegin << " : " <<  pend << std::endl;
+        }
+      }
       if (!ret) continue;
       if (Size() >= EXPANSION_FACTOR * BLEVEL_EXPAND_BUF_KEY * blevel_->Entries())
         ExpandComboTree_();

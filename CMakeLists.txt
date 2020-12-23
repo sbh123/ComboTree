@@ -1,14 +1,18 @@
 project(ComboTree)
 cmake_minimum_required(VERSION 3.0)
 
+# cmake -D CMAKE_C_COMPILER=/usr/local/bin/gcc CMAKE_CXX_COMPILER=/usr/local/bin/g++ ../
+SET(CMAKE_C_COMPILER /usr/local/bin/gcc)
+SET(CMAKE_CXX_COMPILER /usr/local/bin/g++)
+
 # use `cmake -DSERVER:BOOL=ON ..` when running in server
-option(SERVER           "Run in server"           ON)
+option(SERVER           "Run in server"           OFF)
 option(USE_LIBPMEM      "libpmem or libvmmalloc"  ON)
 option(BUF_SORT         "Sort buffer in KVBufer"  OFF)
 option(STREAMING_LOAD   "Use Non-temporal Load"   OFF)
 option(STREAMING_STORE  "Use Non-temporal Store"  OFF)
 option(NO_LOCK          "Don't use lock"          OFF)
-option(BRANGE           "Multi-thread expanding"  ON)
+option(BRANGE           "Multi-thread expanding"  OFF)
 
 # ComboTree Configuration
 # use `make clean && make CXX_DEFINES="-DNAME=VALUE"` to override during compile
@@ -17,11 +21,13 @@ if(SERVER)
   set(CLEVEL_PMEM_FILE      \"/pmem0/combotree-clevel-\")
   set(BLEVEL_PMEM_FILE      \"/pmem0/combotree-blevel-\")
   set(ALEVEL_PMEM_FILE      \"/pmem0/combotree-alevel-\")
+  set(PGM_INDEX_PMEM_FILE      \"/pmem0/combotree-pgmindex-\")
 else()
   set(CLEVEL_PMEM_FILE_SIZE "(1024*1024*512UL)")
   set(CLEVEL_PMEM_FILE      \"/mnt/pmem0/combotree-clevel-\")
   set(BLEVEL_PMEM_FILE      \"/mnt/pmem0/combotree-blevel-\")
   set(ALEVEL_PMEM_FILE      \"/mnt/pmem0/combotree-alevel-\")
+  set(PGM_INDEX_PMEM_FILE      \"/pmem0/combotree-pgmindex-\")
 endif(SERVER)
 
 if(BRANGE)
@@ -62,6 +68,7 @@ include_directories(include)
 
 set(COMBO_TREE_SRC
       src/alevel.cc
+      src/pgm_index.cc
       src/blevel.cc
       src/clevel.cc
       src/combotree.cc
@@ -69,7 +76,7 @@ set(COMBO_TREE_SRC
 )
 
 add_library(combotree SHARED ${COMBO_TREE_SRC})
-target_link_libraries(combotree pmem pmemkv pthread)
+target_link_libraries(combotree pmem pmemobj pthread)
 
 # benchmark
 add_executable(benchmark tests/benchmark.cc)
@@ -103,3 +110,8 @@ add_test(combotree_test combotree_test)
 add_executable(multi_combotree_test tests/multi_combotree_test.cc)
 target_link_libraries(multi_combotree_test combotree)
 add_test(multi_combotree_test multi_combotree_test)
+
+## pgm_index_test
+add_executable(pgm_index_test tests/pgm_index_test.cc)
+target_link_libraries(pgm_index_test pmem)
+add_test(pgm_index_test pgm_index_test)

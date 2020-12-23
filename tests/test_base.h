@@ -15,7 +15,7 @@ class TestBase {
     int is_pmem;
     pmemaddr_ = pmem_map_file(pmem_file.c_str(), pmem_size+64,
                 PMEM_FILE_CREATE | PMEM_FILE_EXCL, 0666, &mapped_len, &is_pmem);
-    assert(is_pmem == 1);
+    // assert(is_pmem == 1);
     if (pmemaddr_ == NULL) {
       perror("pmem_map_file");
       exit(1);
