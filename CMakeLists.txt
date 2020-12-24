@@ -27,7 +27,7 @@ else()
   set(CLEVEL_PMEM_FILE      \"/mnt/pmem0/combotree-clevel-\")
   set(BLEVEL_PMEM_FILE      \"/mnt/pmem0/combotree-blevel-\")
   set(ALEVEL_PMEM_FILE      \"/mnt/pmem0/combotree-alevel-\")
-  set(PGM_INDEX_PMEM_FILE      \"/pmem0/combotree-pgmindex-\")
+  set(PGM_INDEX_PMEM_FILE      \"/mnt/pmem0/combotree-pgmindex-\")
 endif(SERVER)
 
 if(BRANGE)
@@ -51,6 +51,14 @@ set(CMAKE_CXX_FLAGS "-march=native -Wall")
 # Require C++17
 set(CMAKE_CXX_STANDARD_REQUIRED on)
 set(CMAKE_CXX_STANDARD 17)
+
+FIND_PACKAGE( OpenMP REQUIRED)
+if(OPENMP_FOUND)
+message("OPENMP FOUND")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
+set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
+endif()
 
 # Debug or Release
 # Use command `cmake -DCMAKE_BUILD_TYPE=Release ..` to make a release build

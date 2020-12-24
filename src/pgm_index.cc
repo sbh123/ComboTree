@@ -16,7 +16,7 @@ PGM_Index::PGM_Index(BLevel* blevel, int span)
   nr_blevel_entry_ = blevel_->Entries() - 1;
   min_key_ = blevel_->EntryKey(1);
   max_key_ = blevel_->EntryKey(nr_blevel_entry_);
-  nr_entry_ = ((nr_blevel_entry_ + 1) / span_) + 1;
+  nr_entry_ = nr_blevel_entry_ + 1;
 
   size_t file_size = nr_entry_ * sizeof(uint64_t);
   pmem_file_ = std::string(PGM_INDEX_PMEM_FILE) + std::to_string(file_id_++);
@@ -40,11 +40,13 @@ PGM_Index::PGM_Index(BLevel* blevel, int span)
   int index = 0;
   while(offset <  blevel_->Entries()) {
       key_index[index ++] = blevel_->EntryKey(offset + 1);
-      offset += span;
+      offset ++;
+      // std::cout << "Key index " << index << " : " << key_index[index-1] << std::endl;
   }
   key_index[nr_entry_ - 1] = max_key_;
-  pgm_index = pgm::PGMIndex<uint64_t>(key_index, key_index + nr_entry_);
-  LOG(Debug::INFO, "PGM-Index segments is %ld.", pgm_index.segments_count());
+  pgm_index = pgm::PGMIndex<uint64_t, epsilon>(key_index, key_index + nr_entry_);
+  LOG(Debug::INFO, "PGM-Index segments is %ld, max key is %lx. %lx", 
+        pgm_index.segments_count(), key_index[nr_entry_ - 1], key_index[nr_entry_ - 2]);
   {
     //store segments and levelsize and levelcount
   }
@@ -69,9 +71,9 @@ void PGM_Index::GetBLevelRange_(uint64_t key, uint64_t& begin, uint64_t& end) co
 
   auto range = pgm_index.search(key);
 
-  end = std::lower_bound(key_index + range.lo,  key_index + range.hi, key) - key_index;
-  end *= span_;
-  begin = end - span_;
+  // end = std::lower_bound(key_index + range.lo,  key_index + range.hi, key) - key_index;
+  begin = range.lo;
+  end = range.hi;
 }
 
 } // namespace combotree

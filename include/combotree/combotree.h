@@ -49,6 +49,7 @@ class ComboTree {
  private:
   class IterImpl;
   class NoSortIterImpl;
+  bool CheckKey(uint64_t key) const;
 
  public:
   class Iter {
@@ -92,8 +93,8 @@ class ComboTree {
 
   std::string pool_dir_;
   size_t pool_size_;
+  // ALevel* alevel_;
   PGM_Index *pgm_index_;
-  ALevel* alevel_;
   BLevel* blevel_;
   BLevel* old_blevel_;
   PmemKV* pmemkv_;
