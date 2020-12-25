@@ -643,10 +643,12 @@ public:
   void ExpandRange_(BLevel* old_blevel, int thread_id);
   void FinishExpansion_();
   uint64_t Find_(uint64_t key, uint64_t begin, uint64_t end, std::atomic<size_t>** interval) const;
+  uint64_t FindNearPos_(uint64_t key, uint64_t pos, std::atomic<size_t>** interval) const;
   uint64_t FindByRange_(uint64_t key, int range, uint64_t end, std::atomic<size_t>** interval) const;
   uint64_t BinarySearch_(uint64_t key, uint64_t begin, uint64_t end) const;
 #else
   uint64_t Find_(uint64_t key, uint64_t begin, uint64_t end) const;
+  uint64_t FindNearPos_(uint64_t key, uint64_t pos) const;
 #endif
   void ExpandSetup_(ExpandData& data);
   void ExpandPut_(ExpandData& data, uint64_t key, uint64_t value);

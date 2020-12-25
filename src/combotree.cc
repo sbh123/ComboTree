@@ -106,24 +106,23 @@ int64_t ComboTree::CLevelTime() const {
 }
 
 bool ComboTree::CheckKey(uint64_t key) const {
-  // uint64_t abegin, aend;
-  // uint64_t pbegin, pend;
-  // alevel_->GetBLevelRange_(key, abegin, aend);
-  // pgm_index_->GetBLevelRange_(key, pbegin, pend);
-  // #ifdef BRANGE
-  //   std::atomic<size_t>* interval_size;
-  //   uint64_t idx1 = blevel_->Find_(key, abegin, aend, &interval_size);
-  //   uint64_t idx2 = blevel_->Find_(key, pbegin, pend, &interval_size);
-  // #else
-  //   uint64_t idx1 = Find_(key, abegin, abegin);
-  //   uint64_t idx2 = Find_(key, pbegin, pend);
-  // #endif
-  // if(idx1 != idx2) {
-  //   std::cout << "alevel find range is: " << abegin << " : " <<  aend << std::endl;
-  //   std::cout << "belevel find at alevel is " << idx1 << std::endl;
-  //   std::cout << "belevel find at pgmindex is " << idx2 << std::endl;
-  //   std::cout << "pgm index find range is: " << pbegin << " : " <<  pend << std::endl;
-  // }
+  uint64_t pbegin, pend;
+  pgm_index_->GetBLevelRange_(key, pbegin, pend);
+  uint64_t pos = (pbegin +  pend) / 2;
+#ifdef BRANGE
+  std::atomic<size_t>* interval_size;
+  uint64_t idx1 = blevel_->FindNearPos_(key, pos, &interval_size);
+  uint64_t idx2 = blevel_->Find_(key, pbegin, pend, &interval_size);
+#else
+  uint64_t idx1 = FindNearPos_(key, abegin, abegin);
+  uint64_t idx2 = Find_(key, pbegin, pend);
+#endif
+  if(idx1 != idx2) {
+    std::cout << "belevel find at pos near is " << idx1 << std::endl;
+    std::cout << "belevel find at range is " << idx2 << std::endl;
+    std::cout << "pgm index find range is: " << pbegin << " : " <<  pend << std::endl;
+    assert(0);
+  }
   return true;
 }
 void ComboTree::ChangeToComboTree_() {
