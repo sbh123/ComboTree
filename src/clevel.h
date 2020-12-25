@@ -104,7 +104,7 @@ class __attribute__((packed)) CLevel {
       std::filesystem::remove(pmem_file_);
       pmem_addr_ = pmem_map_file(pmem_file_.c_str(), file_size + 64,
                    PMEM_FILE_CREATE | PMEM_FILE_EXCL, 0666, &mapped_len_, &is_pmem);
-      assert(is_pmem == 1);
+      // assert(is_pmem == 1);
       if (pmem_addr_ == nullptr) {
         perror("CLevel::MemControl(): pmem_map_file");
         exit(1);

@@ -69,7 +69,7 @@ set(COMBO_TREE_SRC
 )
 
 add_library(combotree SHARED ${COMBO_TREE_SRC})
-target_link_libraries(combotree pmem pmemkv pthread)
+target_link_libraries(combotree pmem pmemobj pthread)
 
 # benchmark
 add_executable(benchmark tests/benchmark.cc)
