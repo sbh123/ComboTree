@@ -231,6 +231,11 @@ class BLevel {
   bool Get(uint64_t key, uint64_t& value, uint64_t begin, uint64_t end) const;
   bool Delete(uint64_t key, uint64_t* value, uint64_t begin, uint64_t end);
 
+  bool PutNearPos(uint64_t key, uint64_t value, uint64_t pos);
+  bool UpdateNearPos(uint64_t key, uint64_t value, uint64_t pos);
+  bool GetNearPos(uint64_t key, uint64_t& value, uint64_t pos) const;
+  bool DeleteNearPos(uint64_t key, uint64_t* value, uint64_t pos);
+
   bool PutRange(uint64_t key, uint64_t value, int range, uint64_t end);
   bool UpdateRange(uint64_t key, uint64_t value, int range, uint64_t end);
   bool GetRange(uint64_t key, uint64_t& value, int range, uint64_t end) const;
@@ -644,11 +649,13 @@ public:
   void FinishExpansion_();
   uint64_t Find_(uint64_t key, uint64_t begin, uint64_t end, std::atomic<size_t>** interval) const;
   uint64_t FindNearPos_(uint64_t key, uint64_t pos, std::atomic<size_t>** interval) const;
+  uint64_t NearPosRange_(uint64_t key, uint64_t pos, uint64_t &begin, uint64_t &end);
   uint64_t FindByRange_(uint64_t key, int range, uint64_t end, std::atomic<size_t>** interval) const;
   uint64_t BinarySearch_(uint64_t key, uint64_t begin, uint64_t end) const;
 #else
   uint64_t Find_(uint64_t key, uint64_t begin, uint64_t end) const;
   uint64_t FindNearPos_(uint64_t key, uint64_t pos) const;
+  uint64_t NearPosRange_(uint64_t key, uint64_t pos, uint64_t &begin, uint64_t &end);
 #endif
   void ExpandSetup_(ExpandData& data);
   void ExpandPut_(ExpandData& data, uint64_t key, uint64_t value);

@@ -5,6 +5,7 @@
 #include <unistd.h>
 #include "combotree/combotree.h"
 #include "combotree_config.h"
+#include "rmi_index.h"
 #include "pgm_index.h"
 #include "alevel.h"
 #include "blevel.h"
@@ -18,7 +19,7 @@ std::mutex log_mutex;
 int64_t expand_time = 0;
 
 ComboTree::ComboTree(std::string pool_dir, size_t pool_size, bool create)
-    : pool_dir_(pool_dir), pool_size_(pool_size), pgm_index_(nullptr), // alevel_(nullptr),
+    : pool_dir_(pool_dir), pool_size_(pool_size), learn_index_(nullptr),
       blevel_(nullptr), old_blevel_(nullptr), pmemkv_(nullptr), permit_delete_(true)
 {
   ValidPoolDir_();
@@ -67,8 +68,7 @@ ComboTree::~ComboTree() {
     std::this_thread::sleep_for(std::chrono::microseconds(10));
   }
   if (pmemkv_) delete pmemkv_;
-  // if (alevel_) delete alevel_;
-  if (pgm_index_) delete pgm_index_;
+  if (learn_index_) delete learn_index_;
   if (blevel_) delete blevel_;
   if (old_blevel_ && old_blevel_ != blevel_) delete old_blevel_;
 }
@@ -79,8 +79,7 @@ size_t ComboTree::Size() const {
     return pmemkv_->Size();
   } else {
     // FIXME: size when expanding?
-    // return alevel_->Size();
-    return pgm_index_->Size();
+    return learn_index_->Size();
   }
 }
 
@@ -97,8 +96,7 @@ void ComboTree::BLevelCompression() const {
 }
 
 uint64_t ComboTree::Usage() const {
-  // return alevel_->Usage() + blevel_->Usage();
-  return pgm_index_->Usage() + blevel_->Usage();
+  return learn_index_->Usage() + blevel_->Usage();
 }
 
 int64_t ComboTree::CLevelTime() const {
@@ -106,23 +104,24 @@ int64_t ComboTree::CLevelTime() const {
 }
 
 bool ComboTree::CheckKey(uint64_t key) const {
-  uint64_t pbegin, pend;
-  pgm_index_->GetBLevelRange_(key, pbegin, pend);
-  uint64_t pos = (pbegin +  pend) / 2;
-#ifdef BRANGE
-  std::atomic<size_t>* interval_size;
-  uint64_t idx1 = blevel_->FindNearPos_(key, pos, &interval_size);
-  uint64_t idx2 = blevel_->Find_(key, pbegin, pend, &interval_size);
-#else
-  uint64_t idx1 = FindNearPos_(key, abegin, abegin);
-  uint64_t idx2 = Find_(key, pbegin, pend);
-#endif
-  if(idx1 != idx2) {
-    std::cout << "belevel find at pos near is " << idx1 << std::endl;
-    std::cout << "belevel find at range is " << idx2 << std::endl;
-    std::cout << "pgm index find range is: " << pbegin << " : " <<  pend << std::endl;
-    assert(0);
-  }
+//   uint64_t pbegin, pend;
+//   pgm_index_->GetBLevelRange_(key, pbegin, pend);
+//   uint64_t pos = learn_index_->GetNearPos_(key);
+
+// #ifdef BRANGE
+//   std::atomic<size_t>* interval_size;
+//   uint64_t idx1 = blevel_->FindNearPos_(key, pos, &interval_size);
+//   uint64_t idx2 = blevel_->Find_(key, pbegin, pend, &interval_size);
+// #else
+//   uint64_t idx1 = FindNearPos_(key, abegin, abegin);
+//   uint64_t idx2 = Find_(key, pbegin, pend);
+// #endif
+//   if(idx1 != idx2) {
+//     std::cout << "belevel find at pos near is " << idx1 << std::endl;
+//     std::cout << "belevel find at range is " << idx2 << std::endl;
+//     std::cout << "pgm index find range is: " << pbegin << " : " <<  pend << std::endl;
+//     assert(0);
+//   }
   return true;
 }
 void ComboTree::ChangeToComboTree_() {
@@ -148,8 +147,7 @@ void ComboTree::ChangeToComboTree_() {
 
   {
     std::lock_guard<std::shared_mutex> lock(alevel_lock_);
-    // alevel_ = new ALevel(blevel_);
-    pgm_index_ = new PGM_Index(blevel_);
+    learn_index_ = new learn_index_t(blevel_);
   }
   // change manifest first
   manifest_->SetIsComboTree(true);
@@ -196,10 +194,8 @@ void ComboTree::ExpandComboTree_() {
 
   {
     std::lock_guard<std::shared_mutex> lock(alevel_lock_);
-    // delete alevel_;
-    // alevel_ = new ALevel(blevel_);
-    delete pgm_index_;
-    pgm_index_ = new PGM_Index(blevel_);
+    delete learn_index_;
+    learn_index_ = new learn_index_t(blevel_);
     delete old_blevel_;
     old_blevel_ = blevel_;
   }
@@ -224,17 +220,16 @@ void ComboTree::ExpandComboTree_() {
   Timer timer;
   timer.Start();
 
-  // ALevel* old_alevel = alevel_;
-  PGM_Index *old_pgm_index = pgm_index_;
+  learn_index_t *old_rmi_index = learn_index_;
   BLevel* old_blevel = blevel_;
 
   blevel_ = new BLevel(old_blevel->Size());
   blevel_->Expansion(old_blevel);
-  // alevel_ = new ALevel(blevel_);
-  pgm_index_ = new PGM_Index(blevel_);
+  learn_index_ = new learn_index_t(blevel_);
 
   // delete old_alevel;
-  delete old_pgm_index;
+  // delete old_pgm_index;
+  delete old_rmi_index;
   delete old_blevel;
 
   // change status
@@ -265,11 +260,8 @@ bool ComboTree::Put(uint64_t key, uint64_t value) {
       std::this_thread::sleep_for(std::chrono::microseconds(10));
       continue;
     } else if (status_.load(std::memory_order_acquire) == State::USING_COMBO_TREE) {
-      // ret = alevel_->Put(key, value);
-      ret = pgm_index_->Put(key, value);
-      {
-        CheckKey(key);
-      }
+      ret = learn_index_->Put(key, value);
+      CheckKey(key);
       if (!ret) continue;
       if (Size() >= EXPANSION_FACTOR * BLEVEL_EXPAND_BUF_KEY * blevel_->Entries())
         ExpandComboTree_();
@@ -314,8 +306,7 @@ bool ComboTree::Put(uint64_t key, uint64_t value) {
           ret = blevel_->PutRange(key, value, range, end);
         } else {
           std::shared_lock<std::shared_mutex> lock(alevel_lock_);
-          // ret = alevel_->Put(key, value);
-          ret = pgm_index_->Put(key, value);
+          ret = learn_index_->Put(key, value);
           CheckKey(key);
         }
         if (!ret) continue;
@@ -343,8 +334,7 @@ bool ComboTree::Update(uint64_t key, uint64_t value) {
       std::this_thread::sleep_for(std::chrono::microseconds(10));
       continue;
     } else if (status_.load(std::memory_order_acquire) == State::USING_COMBO_TREE) {
-      // ret = alevel_->Update(key, value);
-      ret = pgm_index_->Update(key, value);
+      ret = learn_index_->Update(key, value);
       CheckKey(key);
       if (!ret) continue;
       break;
@@ -387,8 +377,7 @@ bool ComboTree::Update(uint64_t key, uint64_t value) {
           ret = blevel_->UpdateRange(key, value, range, end);
         } else {
           std::shared_lock<std::shared_mutex> lock(alevel_lock_);
-          // ret = alevel_->Update(key, value);
-          ret = pgm_index_->Update(key, value);
+          ret = learn_index_->Update(key, value);
           CheckKey(key);
         }
         if (!ret) continue;
@@ -413,8 +402,7 @@ bool ComboTree::Get(uint64_t key, uint64_t& value) const {
       ret = pmemkv_->Get(key, value);
       break;
     } else if (status_.load(std::memory_order_acquire) == State::USING_COMBO_TREE) {
-      // ret = alevel_->Get(key, value);
-      ret = pgm_index_->Get(key, value);
+      ret = learn_index_->Get(key, value);
       CheckKey(key);
       break;
     } else if (status_.load(std::memory_order_acquire) == State::COMBO_TREE_EXPANDING) {
@@ -436,8 +424,7 @@ bool ComboTree::Delete(uint64_t key) {
       std::this_thread::sleep_for(std::chrono::milliseconds(1));
       continue;
     } else if (status_.load(std::memory_order_acquire) == State::USING_COMBO_TREE) {
-      // ret = alevel_->Delete(key, nullptr);
-      ret = pgm_index_->Delete(key, nullptr);
+      ret = learn_index_->Delete(key, nullptr);
       CheckKey(key);
       break;
     } else if (status_.load(std::memory_order_acquire) == State::COMBO_TREE_EXPANDING) {
@@ -467,8 +454,7 @@ class ComboTree::IterImpl {
   {
     if (tree_->blevel_ != nullptr) {
       uint64_t begin, end;
-      // tree_->alevel_->GetBLevelRange_(start_key, begin, end);
-      tree_->pgm_index_->GetBLevelRange_(start_key, begin, end);
+      tree_->learn_index_->GetBLevelRange_(start_key, begin, end);
       biter_ = new BLevel::Iter(tree_->blevel_, start_key, begin, end);
     } else {
       assert(0);
@@ -521,8 +507,7 @@ class ComboTree::NoSortIterImpl {
   {
     if (tree_->blevel_ != nullptr) {
       uint64_t begin, end;
-      // tree_->alevel_->GetBLevelRange_(start_key, begin, end);
-      tree_->pgm_index_->GetBLevelRange_(start_key, begin, end);
+      tree_->learn_index_->GetBLevelRange_(start_key, begin, end);
       biter_ = new BLevel::NoSortIter(tree_->blevel_, start_key, begin, end);
     } else {
       assert(0);

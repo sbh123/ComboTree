@@ -8,12 +8,13 @@
 #include <shared_mutex>
 
 namespace combotree {
-class PGM_Index;
-class ALevel;
+// class PGM_Index;
+// class RMI_Index;
+// class ALevel;
 class BLevel;
 class Manifest;
 class PmemKV;
-
+typedef class RMI_Index learn_index_t;
 struct Pair {
   uint64_t key;
   uint64_t value;
@@ -93,8 +94,7 @@ class ComboTree {
 
   std::string pool_dir_;
   size_t pool_size_;
-  // ALevel* alevel_;
-  PGM_Index *pgm_index_;
+  learn_index_t *learn_index_;
   BLevel* blevel_;
   BLevel* old_blevel_;
   PmemKV* pmemkv_;

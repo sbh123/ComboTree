@@ -5,6 +5,9 @@ cmake_minimum_required(VERSION 3.0)
 SET(CMAKE_C_COMPILER /usr/local/bin/gcc)
 SET(CMAKE_CXX_COMPILER /usr/local/bin/g++)
 
+set(MKL_LINK_DIRECTORY "/opt/intel/mkl/lib/intel64")
+set(MKL_INCLUDE_DIRECTORY "/opt/intel/mkl/include")
+
 # use `cmake -DSERVER:BOOL=ON ..` when running in server
 option(SERVER           "Run in server"           OFF)
 option(USE_LIBPMEM      "libpmem or libvmmalloc"  ON)
@@ -12,7 +15,7 @@ option(BUF_SORT         "Sort buffer in KVBufer"  OFF)
 option(STREAMING_LOAD   "Use Non-temporal Load"   OFF)
 option(STREAMING_STORE  "Use Non-temporal Store"  OFF)
 option(NO_LOCK          "Don't use lock"          OFF)
-option(BRANGE           "Multi-thread expanding"  OFF)
+option(BRANGE           "Multi-thread expanding"  ON)
 
 # ComboTree Configuration
 # use `make clean && make CXX_DEFINES="-DNAME=VALUE"` to override during compile
@@ -71,12 +74,17 @@ else()
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g")
 endif()
 
+# MK for RMI
+link_directories(${MKL_LINK_DIRECTORY})
+include_directories(${MKL_INCLUDE_DIRECTORY})
+
 # combotree shared library
 include_directories(include)
 
 set(COMBO_TREE_SRC
       src/alevel.cc
       src/pgm_index.cc
+      src/rmi_index.cc
       src/blevel.cc
       src/clevel.cc
       src/combotree.cc
@@ -84,7 +92,7 @@ set(COMBO_TREE_SRC
 )
 
 add_library(combotree SHARED ${COMBO_TREE_SRC})
-target_link_libraries(combotree pmem pmemobj pthread)
+target_link_libraries(combotree pmem pmemobj mkl_rt pthread)
 
 # benchmark
 add_executable(benchmark tests/benchmark.cc)

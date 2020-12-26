@@ -710,13 +710,13 @@ uint64_t BLevel::FindNearPos_(uint64_t key, uint64_t pos
     size_t step = 1;
     right = pos;
     left = right - step;
-    while (left >= 0 && entries_[left].entry_key > key) {
+    while (left >= begin && entries_[left].entry_key > key) {
       step = step * 2;
       right = left;
       left = right - step;
     } 
-    if (left < 0) {
-      left = 0;
+    if (left < begin) {
+      left = begin;
     }
   }
   if(left > right) {
@@ -746,6 +746,53 @@ uint64_t BLevel::FindNearPos_(uint64_t key, uint64_t pos
   }
 #endif
   return right;
+}
+
+uint64_t BLevel::NearPosRange_(uint64_t key, uint64_t pos, uint64_t &range_begin, uint64_t &range_end) {
+  #ifdef BRANGE
+  int target_range = FindBRangeByKey_(key);
+  pos = (pos < ranges_[target_range+1].logical_entry_start) ?
+            GetPhysical_(ranges_[target_range], pos) :
+            ranges_[target_range].physical_entry_start+ranges_[target_range].entries-1;
+  int begin = ranges_[target_range].physical_entry_start;
+  int end = ranges_[target_range].physical_entry_start+ranges_[target_range].entries-1;
+#else
+  int end = nr_entries_;
+#endif // BRANGE
+
+  // binary search
+  int left, right;
+  // exponential search
+  if(entries_[pos].entry_key <= key) {
+    size_t step = 1;
+    left = pos;
+    right = pos + step;
+    while (right < (int)end && entries_[right].entry_key <= key) {
+      step = step * 2;
+      left = right;
+      right = left + step;
+    }  
+    if (right > (int)end) {
+      right = (int)end;
+    }
+  } else {
+    size_t step = 1;
+    right = pos;
+    left = right - step;
+    while (left >= 0 && entries_[left].entry_key > key) {
+      step = step * 2;
+      right = left;
+      left = right - step;
+    } 
+    if (left < 0) {
+      left = 0;
+    }
+  }
+  if(left > right) {
+    left = right;
+  }
+  range_begin = left;
+  range_end = right;
 }
 
 #ifdef BRANGE
@@ -855,6 +902,46 @@ bool BLevel::Delete(uint64_t key, uint64_t* value, uint64_t begin, uint64_t end)
   return Delete_(key, value, idx, interval_size);
 #else
   uint64_t idx = Find_(key, begin, end);
+  return Delete_(key, value, idx);
+#endif
+}
+
+bool BLevel::PutNearPos(uint64_t key, uint64_t value, uint64_t pos) {
+#ifdef BRANGE
+  std::atomic<size_t>* interval_size;
+  uint64_t idx = FindNearPos_(key, pos, &interval_size);
+  return Put_(key, value, idx, interval_size);
+#else
+  uint64_t idx = FindNearPos_(key, pos);
+  return Put_(key, value, idx);
+#endif
+}
+
+bool BLevel::UpdateNearPos(uint64_t key, uint64_t value, uint64_t pos) {
+#ifdef BRANGE
+  uint64_t idx = FindNearPos_(key, pos, nullptr);
+#else
+  uint64_t idx = FindNearPos_(key, pos);
+#endif
+  return Update_(key, value, idx);
+}
+
+bool BLevel::GetNearPos(uint64_t key, uint64_t& value, uint64_t pos) const {
+#ifdef BRANGE
+  uint64_t idx = FindNearPos_(key, pos, nullptr);
+#else
+  uint64_t idx = FindNearPos_(key, pos);
+#endif
+  return Get_(key, value, idx);
+}
+
+bool BLevel::DeleteNearPos(uint64_t key, uint64_t* value, uint64_t pos) {
+#ifdef BRANGE
+  std::atomic<size_t>* interval_size;
+  uint64_t idx = FindNearPos_(key, pos, &interval_size);
+  return Delete_(key, value, idx, interval_size);
+#else
+  uint64_t idx = FindNearPos_(key, pos);
   return Delete_(key, value, idx);
 #endif
 }
