@@ -10,11 +10,12 @@
 namespace combotree {
 // class PGM_Index;
 // class RMI_Index;
+// class Learn_Index;
 // class ALevel;
 class BLevel;
 class Manifest;
 class PmemKV;
-typedef class RMI_Index learn_index_t;
+typedef class Learn_Index learn_index_t;
 struct Pair {
   uint64_t key;
   uint64_t value;

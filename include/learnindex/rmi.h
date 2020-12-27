@@ -8,13 +8,13 @@ namespace RMI
 {
 static const size_t desired_training_key_n = 10000000;
 
-template <class key_t,  bool seq>
+template <class key_t,  size_t root_error_bound>
 class TwoStageRMI;
 
 template <class key_t>
 class LinearModel {
   typedef std::array<double, key_t::model_key_size()> model_key_t;
-  template <class key_t_, bool seq>
+  template <class key_t_, size_t root_error_bound>
   friend class TwoStageRMI;
 
 public:
@@ -36,13 +36,15 @@ private:
 };
 
 
-template <class key_t, bool seq = false>
+template <class key_t, size_t root_error_bound = 32>
 class TwoStageRMI {
 
     typedef LinearModel<key_t> linear_model_t;
     const double root_memory_constraint = 1024 * 1024;
-    const double root_error_bound = 32;
 public:
+    TwoStageRMI() {}
+
+    TwoStageRMI(const std::vector<key_t> &keys) { init(keys); }
     ~TwoStageRMI();
     void init(const std::vector<key_t> &keys);
     size_t predict(const key_t &key);;
@@ -60,7 +62,7 @@ private:
     linear_model_t rmi_1st_stage;
     linear_model_t *rmi_2nd_stage = nullptr;
     size_t rmi_2nd_stage_model_n = 0;
-    size_t group_n = 0;
+    size_t keys_n = 0;
 };
 
 class Key_64 {

@@ -5,8 +5,9 @@
 #include <unistd.h>
 #include "combotree/combotree.h"
 #include "combotree_config.h"
-#include "rmi_index.h"
+// #include "rmi_index.h"
 #include "pgm_index.h"
+#include "learn_index.h"
 #include "alevel.h"
 #include "blevel.h"
 #include "manifest.h"
@@ -105,21 +106,24 @@ int64_t ComboTree::CLevelTime() const {
 
 bool ComboTree::CheckKey(uint64_t key) const {
 //   uint64_t pbegin, pend;
-//   pgm_index_->GetBLevelRange_(key, pbegin, pend);
-//   uint64_t pos = learn_index_->GetNearPos_(key);
+//   uint64_t cbegin, cend;
+//   learn_index_->GetBLevelRange_(key, pbegin, pend);
+//   learnIndex_->GetBLevelRange_(key, cbegin, cend);
 
 // #ifdef BRANGE
 //   std::atomic<size_t>* interval_size;
-//   uint64_t idx1 = blevel_->FindNearPos_(key, pos, &interval_size);
-//   uint64_t idx2 = blevel_->Find_(key, pbegin, pend, &interval_size);
+//   uint64_t idx1 = blevel_->Find_(key, pbegin, pend, &interval_size);
+//   uint64_t idx2 = blevel_->Find_(key, cbegin, cend, &interval_size);
 // #else
-//   uint64_t idx1 = FindNearPos_(key, abegin, abegin);
-//   uint64_t idx2 = Find_(key, pbegin, pend);
+//   uint64_t idx1 = Find_(key, pbegin, pend);
+//   uint64_t idx2 = Find_(key, cbegin, cend);
 // #endif
 //   if(idx1 != idx2) {
 //     std::cout << "belevel find at pos near is " << idx1 << std::endl;
 //     std::cout << "belevel find at range is " << idx2 << std::endl;
-//     std::cout << "pgm index find range is: " << pbegin << " : " <<  pend << std::endl;
+//     std::cout << "True index find range is: " << pbegin << " : " <<  pend << std::endl;
+//     std::cout << "Test index find range is: " << cbegin << " : " <<  cend << std::endl;
+//     learnIndex_->GetBLevelRange_(key, cbegin, cend, true);
 //     assert(0);
 //   }
   return true;
@@ -196,6 +200,7 @@ void ComboTree::ExpandComboTree_() {
     std::lock_guard<std::shared_mutex> lock(alevel_lock_);
     delete learn_index_;
     learn_index_ = new learn_index_t(blevel_);
+
     delete old_blevel_;
     old_blevel_ = blevel_;
   }

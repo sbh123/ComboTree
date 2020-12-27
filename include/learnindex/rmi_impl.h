@@ -243,20 +243,20 @@ size_t LinearModel<key_t>::get_error_bound(
  * Two stage RMI implile. 
  * ***/
 
-template <class key_t,  bool seq>
-TwoStageRMI<key_t, seq>::~TwoStageRMI() {
+template <class key_t,  size_t root_error_bound>
+TwoStageRMI<key_t, root_error_bound>::~TwoStageRMI() {
     if(rmi_2nd_stage)
         delete[] rmi_2nd_stage;
 }
 
-template <class key_t,  bool seq>
-void TwoStageRMI<key_t, seq>::init(const std::vector<key_t> &train_keys) {
-    group_n = train_keys.size();
+template <class key_t,  size_t root_error_bound>
+void TwoStageRMI<key_t, root_error_bound>::init(const std::vector<key_t> &train_keys) {
+    keys_n = train_keys.size();
     adjust_rmi(train_keys);
 }
 
-template <class key_t,  bool seq>
-void TwoStageRMI<key_t, seq>::adjust_rmi(const std::vector<key_t> &train_keys) {
+template <class key_t,  size_t root_error_bound>
+void TwoStageRMI<key_t, root_error_bound>::adjust_rmi(const std::vector<key_t> &train_keys) {
   size_t max_model_n = root_memory_constraint / sizeof(linear_model_t);
   size_t max_trial_n = 10;
 
@@ -267,11 +267,11 @@ void TwoStageRMI<key_t, seq>::adjust_rmi(const std::vector<key_t> &train_keys) {
     model_n_trial = std::min(
         max_model_n,         // do not exceed memory constraint
         std::max((size_t)1,  // do not decrease to zero
-                 (size_t)(group_n / root_error_bound /
+                 (size_t)(keys_n / root_error_bound /
                           group_n_per_model_per_rmi_error_experience_factor)));
   }
 
-  DEBUG_THIS("--- start train group n "  << group_n
+  DEBUG_THIS("--- start train group n "  << keys_n
             <<  " Modle size:"<< model_n_trial);
   train_rmi(train_keys, model_n_trial);
   size_t model_n_trial_prev_prev = 0;
@@ -283,7 +283,7 @@ void TwoStageRMI<key_t, seq>::adjust_rmi(const std::vector<key_t> &train_keys) {
   for (; trial_i < max_trial_n; trial_i++) {
     std::vector<double> errors;
     max_error = 0;
-    for (size_t group_i = 0; group_i < group_n; group_i++) {
+    for (size_t group_i = 0; group_i < keys_n; group_i++) {
       errors.push_back(
           std::abs((double)group_i - predict(train_keys[group_i])) + 1);
       max_error = std::max(max_error, (double)group_i - predict(train_keys[group_i]));
@@ -327,8 +327,8 @@ void TwoStageRMI<key_t, seq>::adjust_rmi(const std::vector<key_t> &train_keys) {
              << trial_i << " trial(s)");
 }
 
-template <class key_t,  bool seq>
-inline void TwoStageRMI<key_t, seq>::train_rmi(const std::vector<key_t> &train_keys, 
+template <class key_t,  size_t root_error_bound>
+inline void TwoStageRMI<key_t, root_error_bound>::train_rmi(const std::vector<key_t> &train_keys, 
         size_t rmi_2nd_stage_model_n) {
 
   this->rmi_2nd_stage_model_n = rmi_2nd_stage_model_n;
@@ -336,9 +336,9 @@ inline void TwoStageRMI<key_t, seq>::train_rmi(const std::vector<key_t> &train_k
   rmi_2nd_stage = new linear_model_t[rmi_2nd_stage_model_n]();
 
   // train 1st stage
-  std::vector<key_t> keys(group_n);
-  std::vector<size_t> positions(group_n);
-  for (size_t group_i = 0; group_i < group_n; group_i++) {
+  std::vector<key_t> keys(keys_n);
+  std::vector<size_t> positions(keys_n);
+  for (size_t group_i = 0; group_i < keys_n; group_i++) {
     keys[group_i] = train_keys[group_i];
     positions[group_i] = group_i;
   }
@@ -363,10 +363,10 @@ inline void TwoStageRMI<key_t, seq>::train_rmi(const std::vector<key_t> &train_k
   }
 }
 
-template <class key_t,  bool seq>
-size_t TwoStageRMI<key_t, seq>::pick_next_stage_model(size_t group_i_pred) {
+template <class key_t,  size_t root_error_bound>
+size_t TwoStageRMI<key_t, root_error_bound>::pick_next_stage_model(size_t group_i_pred) {
   size_t second_stage_model_i;
-  second_stage_model_i = group_i_pred * rmi_2nd_stage_model_n / group_n;
+  second_stage_model_i = group_i_pred * rmi_2nd_stage_model_n / keys_n;
 
   if (second_stage_model_i >= rmi_2nd_stage_model_n) {
     second_stage_model_i = rmi_2nd_stage_model_n - 1;
@@ -375,11 +375,11 @@ size_t TwoStageRMI<key_t, seq>::pick_next_stage_model(size_t group_i_pred) {
   return second_stage_model_i;
 }
 
-template <class key_t,  bool seq>
-inline size_t TwoStageRMI<key_t, seq>::predict(const key_t &key) {
+template <class key_t,  size_t root_error_bound>
+inline size_t TwoStageRMI<key_t, root_error_bound>::predict(const key_t &key) {
   size_t pos_pred = rmi_1st_stage.predict(key);
   size_t next_stage_model_i = pick_next_stage_model(pos_pred);
-  return rmi_2nd_stage[next_stage_model_i].predict(key);
+  return std::min(rmi_2nd_stage[next_stage_model_i].predict(key), keys_n);
 }
 
 } // namespace RMI

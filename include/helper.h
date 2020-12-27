@@ -63,7 +63,7 @@ inline uint64_t cmpxchg(uint64_t *object, uint64_t expected,
                : "+a"(expected), "+m"(*object)
                : "r"(desired)
                : "cc");
-  fence();
+  // fence();
   return expected;
 }
 
@@ -73,7 +73,7 @@ inline uint8_t cmpxchgb(uint8_t *object, uint8_t expected,
                : "+a"(expected), "+m"(*object)
                : "r"(desired)
                : "cc");
-  fence();
+  // fence();
   return expected;
 }
 

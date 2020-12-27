@@ -3,28 +3,20 @@
 #include <cstdint>
 #include <cassert>
 #include "combotree_config.h"
+#include "learnindex/learn_index.h"
+
 #include "blevel.h"
-#include "learnindex/pgm_index.hpp"
 
 namespace combotree {
 
 class ComboTree;
+using LI::LearnIndex;
 
-// in-memory
-struct Entry {
-  Entry() : key(0), offset(0) {}
-  Entry(uint64_t _key) : key(_key), offset(0) {}
-
-  uint64_t key;
-  uint64_t offset;
-};
-
-class PGM_Index {
-
+class Learn_Index {
 static const size_t epsilon = 16;
 public:
-  PGM_Index(BLevel* blevel, int span = DEFAULT_SPAN);
-  ~PGM_Index();
+  Learn_Index(BLevel* blevel, int span = DEFAULT_SPAN);
+  ~Learn_Index();
   ALWAYS_INLINE bool Put(uint64_t key, uint64_t value) {
     uint64_t begin, end;
     GetBLevelRange_(key, begin, end);
@@ -54,10 +46,10 @@ public:
   }
 
   uint64_t Usage() const {
-    return nr_entry_ * sizeof(Entry);
+    return nr_entry_ ;
   }
   
-  void GetBLevelRange_(uint64_t key, uint64_t& begin, uint64_t& end) const;
+  void GetBLevelRange_(uint64_t key, uint64_t& begin, uint64_t& end, bool debug = false) const;
 
   friend ComboTree;
 
@@ -74,9 +66,7 @@ private:
   size_t mapped_len_;
   std::string pmem_file_;
   static int file_id_;
-  uint64_t *key_index;
-  pgm::PGMIndex<uint64_t, epsilon> pgm_index;
-
+  LearnIndex *learn_index_;
 };
 
 } // namespace combotree

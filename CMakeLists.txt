@@ -85,6 +85,7 @@ set(COMBO_TREE_SRC
       src/alevel.cc
       src/pgm_index.cc
       src/rmi_index.cc
+      src/learn_index.cc
       src/blevel.cc
       src/clevel.cc
       src/combotree.cc
@@ -129,5 +130,10 @@ add_test(multi_combotree_test multi_combotree_test)
 
 ## pgm_index_test
 add_executable(pgm_index_test tests/pgm_index_test.cc)
-target_link_libraries(pgm_index_test pmem)
+target_link_libraries(pgm_index_test)
 add_test(pgm_index_test pgm_index_test)
+
+## pgm_index_test
+add_executable(learn_index_test tests/learn_index_test.cc)
+target_link_libraries(learn_index_test mkl_rt)
+add_test(learn_index_test learn_index_test)
