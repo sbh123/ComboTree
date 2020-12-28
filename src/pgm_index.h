@@ -10,6 +10,8 @@ namespace combotree {
 
 class ComboTree;
 
+using pgm::PGMIndex;
+
 // in-memory
 struct Entry {
   Entry() : key(0), offset(0) {}
@@ -75,7 +77,7 @@ private:
   std::string pmem_file_;
   static int file_id_;
   uint64_t *key_index;
-  pgm::PGMIndex<uint64_t, epsilon> pgm_index;
+  pgm::PGMIndex<uint64_t, epsilon> *pgm_index;
 
 };
 

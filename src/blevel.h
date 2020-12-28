@@ -2,6 +2,7 @@
 
 #include <atomic>
 #include <cstdint>
+#include <iostream>
 #include <cstddef>
 #include <vector>
 #include <shared_mutex>
@@ -15,6 +16,8 @@ namespace combotree {
 class Test;
 
 class BLevel {
+  public:
+    class IndexIter;
  private:
   struct __attribute__((aligned(64))) Entry {
     uint64_t entry_key;
@@ -249,7 +252,12 @@ class BLevel {
 #else
   void Expansion(BLevel* old_blevel);
 #endif
-
+  IndexIter begin() {
+    return IndexIter(this, 0);
+  }
+  IndexIter end() {
+    return IndexIter(this, nr_entries_);
+  }
   // statistic
   size_t CountCLevel() const;
   void PrefixCompression() const;
@@ -715,6 +723,87 @@ public:
 #endif
     return true;
   }
-};
+
+  class IndexIter {
+    public:
+      IndexIter() {}
+
+      IndexIter(const BLevel * blevel)
+        : blevel_(blevel), idx_(0) {}
+
+      IndexIter(const BLevel *blevel, uint64_t idx)
+        : blevel_(blevel), idx_(idx) {}
+
+      uint64_t operator*()
+      { return blevel_->EntryKey(idx_); }
+
+      IndexIter *operator->()
+      { return this; }
+
+      IndexIter& operator++()
+      { idx_ ++; return *this; }
+
+      IndexIter operator++(int)         
+      { return IndexIter(blevel_, idx_ ++); }
+
+      IndexIter& operator-- ()  
+      { idx_ --; return *this; }
+
+      IndexIter operator--(int)         
+      { return IndexIter(blevel_, idx_ --); }
+
+      uint64_t operator[](size_t i) const
+      {
+          if((i + idx_) > blevel_->nr_entries_)
+          {
+            std::cout << "索引超过最大值" << std::endl; 
+            // 返回第一个元素
+            return blevel_->EntryKey(0);
+          }
+          return blevel_->EntryKey(i + idx_);
+      }
+
+      IndexIter& operator+=(size_t __n)
+      { idx_ += __n; return *this; }
+
+      IndexIter operator+(size_t __n) 
+      { return IndexIter(blevel_, idx_ + __n); }
+
+      IndexIter& operator-=(size_t __n)
+      { idx_ -= __n; return *this; }
+
+      IndexIter operator-(size_t __n) 
+      { return IndexIter(blevel_, idx_ - __n); }
+
+      bool operator<(const IndexIter& iter) const { return  idx_ < iter.idx_; }
+      bool operator==(const IndexIter& iter) const { return idx_ == iter.idx_ && blevel_ == iter.blevel_; }
+      bool operator!=(const IndexIter& iter) const { return idx_ != iter.idx_ || blevel_ != iter.blevel_; }
+      bool operator>(const IndexIter& iter) const { return  idx_ < iter.idx_; }
+      bool operator<=(const IndexIter& iter) const { return *this < iter || *this == iter; }
+      bool operator>=(const IndexIter& iter) const { return *this > iter || *this == iter; }
+
+      static size_t distance(const IndexIter& first, const IndexIter& last) {
+        if(last.idx_ < first.idx_) {
+          return 0;
+        }
+        return last.idx_ - first.idx_;
+      }
+
+      static IndexIter prev(const IndexIter& now) {
+        return IndexIter(now.blevel_, now.idx_ - 1);
+      }
+
+      static IndexIter next(const IndexIter& now) {
+        return IndexIter(now.blevel_, now.idx_ + 1);
+      }
+
+      const IndexIter& base() 
+      { return *this; }
+
+     private:
+      const BLevel* blevel_;
+      uint64_t idx_;
+  }; // End of BLevel Iter
+}; // End of blevel
 
 }

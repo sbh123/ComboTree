@@ -5,7 +5,7 @@
 #include <unistd.h>
 #include "combotree/combotree.h"
 #include "combotree_config.h"
-// #include "rmi_index.h"
+#include "rmi_index.h"
 #include "pgm_index.h"
 #include "learn_index.h"
 #include "alevel.h"

@@ -128,12 +128,12 @@ add_executable(multi_combotree_test tests/multi_combotree_test.cc)
 target_link_libraries(multi_combotree_test combotree)
 add_test(multi_combotree_test multi_combotree_test)
 
-## pgm_index_test
-add_executable(pgm_index_test tests/pgm_index_test.cc)
-target_link_libraries(pgm_index_test)
-add_test(pgm_index_test pgm_index_test)
+# ## pgm_index_test
+# add_executable(pgm_index_test tests/pgm_index_test.cc)
+# target_link_libraries(pgm_index_test)
+# add_test(pgm_index_test pgm_index_test)
 
-## pgm_index_test
-add_executable(learn_index_test tests/learn_index_test.cc)
-target_link_libraries(learn_index_test mkl_rt)
-add_test(learn_index_test learn_index_test)
+## learn_index_test
+# add_executable(learn_index_test tests/learn_index_test.cc)
+# target_link_libraries(learn_index_test mkl_rt)
+# add_test(learn_index_test learn_index_test)

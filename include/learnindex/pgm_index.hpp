@@ -85,14 +85,14 @@ protected:
         levels_offsets.push_back(0);
         segments.reserve(n / (epsilon * epsilon));
 
-        auto ignore_last = *std::prev(last) == std::numeric_limits<K>::max(); // max is reserved for padding
+        auto ignore_last = *iter_prev(last) == std::numeric_limits<K>::max(); // max is reserved for padding
         auto last_n = n - ignore_last;
         last -= ignore_last;
 
         auto back_check = [this, last](size_t n_segments, size_t prev_level_size) {
             if (segments.back().slope == 0) {
                 // Here, we need to ensure that keys > *(last-1) are approximated to a position == prev_level_size
-                segments.emplace_back(*std::prev(last) + 1, 0, prev_level_size);
+                segments.emplace_back(*iter_prev(last) + 1, 0, prev_level_size);
                 ++n_segments;
             }
             segments.emplace_back(prev_level_size);
@@ -132,14 +132,14 @@ protected:
         levels_offsets.push_back(0);
         segments.reserve(n / (epsilon * epsilon));
 
-        auto ignore_last = *std::prev(last) == std::numeric_limits<K>::max(); // max is reserved for padding
+        auto ignore_last = *iter_prev(last) == std::numeric_limits<K>::max(); // max is reserved for padding
         auto last_n = n - ignore_last;
         last -= ignore_last;
 
         auto back_check = [this, last](size_t n_segments, size_t prev_level_size) {
             if (segments.back().slope == 0) {
                 // Here, we need to ensure that keys > *(last-1) are approximated to a position == prev_level_size
-                segments.emplace_back(*std::prev(last) + 1, 0, prev_level_size);
+                segments.emplace_back(*iter_prev(last) + 1, 0, prev_level_size);
                 ++n_segments;
             }
             segments.emplace_back(prev_level_size);
@@ -238,7 +238,7 @@ public:
      */
     template<typename RandomIt>
     PGMIndex(RandomIt first, RandomIt last, bool only_bottom = false)
-        : n(std::distance(first, last)),
+        : n(iter_distance(first, last)),
           first_key(),
           segments(),
           levels_sizes(),

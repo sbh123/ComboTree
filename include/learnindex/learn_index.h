@@ -24,16 +24,18 @@ typedef RMI::Key_64 rmi_key_t;
 class LearnIndex {
 static const size_t epsilon = 8;
 public:
-    LearnIndex(const std::vector<uint64_t> &keys) {
-        pgm_index_ = new PGMIndex<uint64_t, epsilon>(keys.begin(), keys.end(), true);
-        std::vector<rmi_key_t> rmi_keys;
-        for(size_t i = 0; i < pgm_index_->segments_count(); i ++) {
-            uint64_t key = pgm_index_->segments[i].key;
-            rmi_keys.push_back(rmi_key_t(key));
-        }
-        rmi_index_ = new TwoStageRMI<rmi_key_t, 4>(rmi_keys);
-    }
-    LearnIndex(uint64_t *key_start, uint64_t *key_end) {
+    // LearnIndex(const std::vector<uint64_t> &keys) {
+    //     pgm_index_ = new PGMIndex<uint64_t, epsilon>(keys.begin(), keys.end(), true);
+    //     std::vector<rmi_key_t> rmi_keys;
+    //     for(size_t i = 0; i < pgm_index_->segments_count(); i ++) {
+    //         uint64_t key = pgm_index_->segments[i].key;
+    //         rmi_keys.push_back(rmi_key_t(key));
+    //     }
+    //     rmi_index_ = new TwoStageRMI<rmi_key_t, 4>(rmi_keys);
+    // }
+
+    template<typename RandomIt>
+    LearnIndex(RandomIt key_start, RandomIt key_end) {
         pgm_index_ = new PGMIndex<uint64_t, epsilon>(key_start, key_end, true);
         std::vector<rmi_key_t> rmi_keys;
         for(size_t i = 0; i < pgm_index_->segments_count(); i ++) {

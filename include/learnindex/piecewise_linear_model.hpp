@@ -30,6 +30,18 @@ typedef int omp_int_t;
 inline omp_int_t omp_get_max_threads() { return 1; }
 #endif
 
+#define SELF_ITER
+#ifdef SELF_ITER
+#define iter_distance(first, last) first.distance(first, last)
+#define iter_prev(now) now.prev(now)
+#define iter_next(now) now.next(now)
+
+#else
+#define iter_distance(first, last) std::distance(first, last)
+#define iter_prev(now) std::prev(now)
+#define iter_next(now) std::next(now)
+#endif
+
 namespace pgm::internal {
 
 template<typename T>
@@ -358,7 +370,7 @@ auto make_segmentation(RandomIt first, RandomIt last, size_t epsilon) {
     using canonical_segment = typename OptimalPiecewiseLinearModel<key_type, size_t>::CanonicalSegment;
     using pair_type = typename std::pair<key_type, size_t>;
 
-    size_t n = std::distance(first, last);
+    size_t n = iter_distance(first, last);
     std::vector<canonical_segment> out;
     out.reserve(epsilon > 0 ? n / (epsilon * epsilon) : n / 16);
 
