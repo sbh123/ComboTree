@@ -103,4 +103,33 @@ class Manifest {
 
 };
 
+enum LearnType {
+  PGMIndexType = 0,
+  RMIIndexType,
+  LearnIndexType,
+  nr_LearnIndex,
+};
+
+struct LearnIndexHead {
+  enum LearnType type;
+  uint64_t first_key;
+  uint64_t last_key;
+  size_t nr_elements;
+  union 
+  {
+    struct {
+      size_t nr_level;
+      size_t segment_count;
+    } pgm;
+    struct {
+      size_t rmi_model_n;
+    } rmi;
+    struct {
+      size_t segment_count;
+      size_t rmi_model_n;
+    } learn;
+  };
+
+}; // End of LearnIndexHead
+
 } // namespace combotree

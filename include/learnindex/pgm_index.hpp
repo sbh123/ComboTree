@@ -18,6 +18,7 @@
 #include <limits>
 #include <vector>
 #include <utility>
+#include <numeric>
 #include <algorithm>
 #include "piecewise_linear_model.hpp"
 
@@ -249,6 +250,43 @@ public:
             build(first, last, Epsilon, EpsilonRecursive);
         }
     }
+
+    void recover(const K &fist_key, const Segment *segments, 
+            const size_t nr_segment, const size_t nr_element) {
+        this->segments.clear();
+        levels_sizes.clear();
+        levels_offsets.clear();
+        for(size_t i = 0; i < nr_segment; i++) {
+            this->segments.push_back(segments[i]);
+            std::cout << "Segment: " << this->segments[i].key << " : "
+                << this->segments[i].slope << " : "
+                << this->segments[i].intercept << " : " << std::endl;
+        }
+        n = nr_element;
+        levels_offsets.push_back(0);
+        levels_sizes.push_back(nr_segment);
+        this->first_key = first_key; 
+    }
+
+    void recover(const K &fist_key, const size_t *level_sizes, const size_t *level_offsets, 
+            const size_t nr_level, const Segment *segments, 
+            const size_t nr_segment, const size_t nr_element) {
+        this->segments.clear();
+        this->levels_sizes.clear();
+        this->levels_offsets.clear();
+        for(size_t i = 0; i < nr_level; i++) {
+            this->levels_offsets.push_back(level_offsets[i]);
+            this->levels_sizes.push_back(level_sizes[i]);
+        }
+        for(size_t i = 0; i < nr_segment; i++) {
+            this->segments.push_back(segments[i]);
+            std::cout << "Segment: " << this->segments[i].key << " : "
+                << this->segments[i].slope << " : "
+                << this->segments[i].intercept << " : " << std::endl;
+        }
+        n = nr_element;
+        this->first_key = first_key; 
+    }
     /**
      * Returns the approximate position and the range where @p key can be found.
      * @param key the value of the element to search for
@@ -291,9 +329,9 @@ public:
                 --pos;
             }
         }
-        if(debug)
-        std::cout << "Range key: " << std::next(it)->key << " : " << it->key << std::endl;
         auto realpos = std::min<size_t>((*it)(k), std::next(it)->intercept);
+        if(debug)
+        std::cout << "Range key: " << std::next(it)->key << " : " << it->key <<  " : " << n << std::endl;
         auto lo = PGM_SUB_EPS(realpos, Epsilon);
         auto hi = PGM_ADD_EPS(realpos, Epsilon, n);
         return {realpos, lo, hi};
@@ -304,6 +342,20 @@ public:
      */
     size_t segments_count() const {
         return segments.empty() ? 0 : levels_sizes.front();
+    }
+
+     /**
+     * Returns the number of segments in the all level of the index.
+     * @return the number of segments
+     */
+    size_t all_segments_count() const {
+        size_t total_segments = std::accumulate(levels_sizes.begin(), levels_sizes.end(), 0);
+        size_t total_segments2 = 0;
+        for(auto size : levels_sizes) {
+            total_segments2 += size;
+        }
+        assert(total_segments == total_segments2);
+        return total_segments2;
     }
     /**
      * Returns the number of levels of the index.
@@ -320,6 +372,10 @@ public:
     size_t size_in_bytes() const {
         return segments.size() * sizeof(Segment);
     }
+
+    size_t level_size(size_t n) const { return levels_sizes[n]; }
+
+    size_t levels_offset(size_t n) const { return levels_offsets[n]; }
 };
 
 #pragma pack(push, 1)

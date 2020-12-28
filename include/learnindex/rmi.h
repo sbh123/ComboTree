@@ -1,8 +1,8 @@
-
-#include <vector>
-
 #if !defined(RMI_H)
 #define RMI_H
+
+#include <vector>
+#include <cstring>
 
 namespace RMI
 {
@@ -38,17 +38,39 @@ private:
 
 template <class key_t, size_t root_error_bound = 32>
 class TwoStageRMI {
-
+public:
     typedef LinearModel<key_t> linear_model_t;
     const double root_memory_constraint = 1024 * 1024;
 public:
-    TwoStageRMI() {}
-
+    TwoStageRMI() : rmi_2nd_stage(nullptr), rmi_2nd_stage_model_n(0), keys_n(0) {}
     TwoStageRMI(const std::vector<key_t> &keys) { init(keys); }
+
+    template<typename RandomIt>
+    TwoStageRMI(RandomIt first, RandomIt last) { init(first, last); }
     ~TwoStageRMI();
     void init(const std::vector<key_t> &keys);
+
+    template<typename RandomIt>
+    void init(RandomIt first, RandomIt last);
+
     size_t predict(const key_t &key);;
     size_t rmi_model_n() { return rmi_2nd_stage_model_n;}
+
+    linear_model_t get_1st_stage_model() {
+      return rmi_1st_stage;
+    }
+    linear_model_t *get_2nd_stage_model() {
+      return rmi_2nd_stage;
+    }
+
+    void recover(const linear_model_t *rmi_models, const size_t rmi_model_n, const size_t nr_elements) {
+      rmi_2nd_stage_model_n = rmi_model_n - 1;
+      rmi_1st_stage = rmi_models[0];
+      if(rmi_2nd_stage) delete[] rmi_2nd_stage;
+      rmi_2nd_stage = new linear_model_t[rmi_2nd_stage_model_n]();
+      memcpy(rmi_2nd_stage, &rmi_models[1], rmi_2nd_stage_model_n * sizeof(linear_model_t));
+      keys_n = nr_elements;
+    }
     // void calculate_err(const std::vector<key_t> &keys,
     //                  const std::vector<val_t> &vals, size_t group_n_trial,
     //                  double &err_at_percentile, double &max_err,
@@ -56,6 +78,12 @@ public:
 private:
     void adjust_rmi(const std::vector<key_t> &train_keys);
     void train_rmi(const std::vector<key_t> &train_keys, size_t rmi_2nd_stage_model_n);
+    
+    template<typename RandomIt>
+    void adjust_rmi(RandomIt first, RandomIt last);
+
+    template<typename RandomIt>
+    void train_rmi(RandomIt first, RandomIt last, size_t rmi_2nd_stage_model_n);
 
     size_t pick_next_stage_model(size_t pos_pred);
 

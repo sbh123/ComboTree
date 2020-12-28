@@ -9,8 +9,11 @@
 namespace combotree {
 
 class ComboTree;
-
+using RMI::TwoStageRMI;
 typedef RMI::Key_64 rmi_key_t;
+typedef RMI::TwoStageRMI<rmi_key_t> rmi_index_t;
+typedef RMI::LinearModel<rmi_key_t> linear_model_t;
+
 // in-memory
 class RMI_Index {
 
@@ -66,7 +69,7 @@ private:
   size_t mapped_len_;
   std::string pmem_file_;
   static int file_id_;
-  RMI::TwoStageRMI<rmi_key_t> rmi_index;
+  rmi_index_t *rmi_index = nullptr;
 
 };
 

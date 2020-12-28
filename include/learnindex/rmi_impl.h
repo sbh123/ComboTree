@@ -3,10 +3,11 @@
 #include <vector>
 #include <numeric>
 #include <algorithm>
-
 #include "mkl.h"
 #include "mkl_lapacke.h"
 
+
+#include "common.h"
 #include "rmi.h"
 #include "helper.h"
 
@@ -255,6 +256,14 @@ void TwoStageRMI<key_t, root_error_bound>::init(const std::vector<key_t> &train_
     adjust_rmi(train_keys);
 }
 
+
+template <class key_t,  size_t root_error_bound>
+template<typename RandomIt>
+void TwoStageRMI<key_t, root_error_bound>::init(RandomIt first, RandomIt last) {
+    keys_n = iter_distance(first, last);
+    adjust_rmi(first, last);
+}
+
 template <class key_t,  size_t root_error_bound>
 void TwoStageRMI<key_t, root_error_bound>::adjust_rmi(const std::vector<key_t> &train_keys) {
   size_t max_model_n = root_memory_constraint / sizeof(linear_model_t);
@@ -328,6 +337,80 @@ void TwoStageRMI<key_t, root_error_bound>::adjust_rmi(const std::vector<key_t> &
 }
 
 template <class key_t,  size_t root_error_bound>
+template <typename RandomIt>
+void TwoStageRMI<key_t, root_error_bound>::adjust_rmi(RandomIt first, RandomIt last) {
+  size_t max_model_n = root_memory_constraint / sizeof(linear_model_t);
+  size_t max_trial_n = 10;
+
+  size_t model_n_trial = rmi_2nd_stage_model_n;
+  if (model_n_trial == 0) {
+    max_trial_n = 100;
+    const size_t group_n_per_model_per_rmi_error_experience_factor = 4;
+    model_n_trial = std::min(
+        max_model_n,         // do not exceed memory constraint
+        std::max((size_t)1,  // do not decrease to zero
+                 (size_t)(keys_n / root_error_bound /
+                          group_n_per_model_per_rmi_error_experience_factor)));
+  }
+
+  DEBUG_THIS("--- start train group n "  << keys_n
+            <<  " Modle size:"<< model_n_trial);
+  train_rmi(first, last, model_n_trial);
+  size_t model_n_trial_prev_prev = 0;
+  size_t model_n_trial_prev = model_n_trial;
+
+  size_t trial_i = 0;
+  double mean_error = 0;
+  double max_error = 0;
+  for (; trial_i < max_trial_n; trial_i++) {
+    std::vector<double> errors;
+    max_error = 0;
+    for (size_t group_i = 0; group_i < keys_n; group_i++) {
+      errors.push_back(
+          std::abs((double)group_i - predict(key_t(first[group_i]))) + 1);
+      max_error = std::max(max_error, (double)group_i - predict(key_t(first[group_i])));
+    }
+    mean_error =
+        std::accumulate(errors.begin(), errors.end(), 0.0) / errors.size();
+    
+    if (mean_error > root_error_bound) {
+      if (rmi_2nd_stage_model_n == max_model_n) {
+        break;
+      }
+      model_n_trial = std::min(
+          max_model_n,  // do not exceed memory constraint
+          std::max(rmi_2nd_stage_model_n + 1,  // but at least increase by 1
+                   (size_t)(rmi_2nd_stage_model_n * mean_error /
+                            root_error_bound)));
+    } else if (mean_error < root_error_bound / 2) {
+      if (rmi_2nd_stage_model_n == 1) {
+        break;
+      }
+      model_n_trial = std::max(
+          (size_t)1,                           // do not decrease to zero
+          std::min(rmi_2nd_stage_model_n - 1,  // but at least decrease by 1
+                   (size_t)(rmi_2nd_stage_model_n * mean_error /
+                            (root_error_bound / 2))));
+    } else {
+      break;
+    }
+
+    train_rmi(first, last, model_n_trial);
+    if (model_n_trial == model_n_trial_prev_prev) {
+      break;
+    }
+    model_n_trial_prev_prev = model_n_trial_prev;
+    model_n_trial_prev = model_n_trial;
+  }
+
+  DEBUG_THIS("--- final rmi size: "
+             << rmi_2nd_stage_model_n << " (error=" << mean_error << "),"
+              << " (max error=" << max_error << "), after"
+             << trial_i << " trial(s)");
+}
+
+
+template <class key_t,  size_t root_error_bound>
 inline void TwoStageRMI<key_t, root_error_bound>::train_rmi(const std::vector<key_t> &train_keys, 
         size_t rmi_2nd_stage_model_n) {
 
@@ -364,6 +447,40 @@ inline void TwoStageRMI<key_t, root_error_bound>::train_rmi(const std::vector<ke
 }
 
 template <class key_t,  size_t root_error_bound>
+template <typename RandomIt>
+inline void TwoStageRMI<key_t, root_error_bound>::train_rmi(RandomIt first, RandomIt last, 
+        size_t rmi_2nd_stage_model_n) {
+  this->rmi_2nd_stage_model_n = rmi_2nd_stage_model_n;
+  delete[] rmi_2nd_stage;
+  rmi_2nd_stage = new linear_model_t[rmi_2nd_stage_model_n]();
+
+  // train 1st stage
+  std::vector<key_t> keys(keys_n);
+  std::vector<size_t> positions(keys_n);
+  for (size_t group_i = 0; group_i < keys_n; group_i++) {
+    keys[group_i] = key_t(first[group_i]);
+    positions[group_i] = group_i;
+  }
+
+  rmi_1st_stage.prepare(keys, positions);
+  // train 2nd stage
+  std::vector<std::vector<key_t>> keys_dispatched(rmi_2nd_stage_model_n);
+  std::vector<std::vector<size_t>> positions_dispatched(rmi_2nd_stage_model_n);
+
+  for (size_t key_i = 0; key_i < keys.size(); ++key_i) {
+    size_t group_i_pred = rmi_1st_stage.predict(keys[key_i]);
+    size_t next_stage_model_i = pick_next_stage_model(group_i_pred);
+    keys_dispatched[next_stage_model_i].push_back(keys[key_i]);
+    positions_dispatched[next_stage_model_i].push_back(positions[key_i]);
+  }
+
+  for (size_t model_i = 0; model_i < rmi_2nd_stage_model_n; ++model_i) {
+    std::vector<key_t> &keys = keys_dispatched[model_i];
+    std::vector<size_t> &positions = positions_dispatched[model_i];
+    rmi_2nd_stage[model_i].prepare(keys, positions);
+  }
+}
+template <class key_t,  size_t root_error_bound>
 size_t TwoStageRMI<key_t, root_error_bound>::pick_next_stage_model(size_t group_i_pred) {
   size_t second_stage_model_i;
   second_stage_model_i = group_i_pred * rmi_2nd_stage_model_n / keys_n;
@@ -374,6 +491,12 @@ size_t TwoStageRMI<key_t, root_error_bound>::pick_next_stage_model(size_t group_
 
   return second_stage_model_i;
 }
+
+template<typename RandomIt>
+    void adjust_rmi(RandomIt first, RandomIt last);
+
+    template<typename RandomIt>
+    void train_rmi(RandomIt first, RandomIt last, size_t rmi_2nd_stage_model_n);
 
 template <class key_t,  size_t root_error_bound>
 inline size_t TwoStageRMI<key_t, root_error_bound>::predict(const key_t &key) {

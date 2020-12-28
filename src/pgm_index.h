@@ -22,8 +22,10 @@ struct Entry {
 };
 
 class PGM_Index {
+  static const size_t epsilon = 16;
+  typedef PGMIndex<uint64_t, epsilon> pgm_index_t;
+  typedef PGMIndex<uint64_t, epsilon>::Segment segment_t;
 
-static const size_t epsilon = 16;
 public:
   PGM_Index(BLevel* blevel, int span = DEFAULT_SPAN);
   ~PGM_Index();
@@ -77,7 +79,7 @@ private:
   std::string pmem_file_;
   static int file_id_;
   uint64_t *key_index;
-  pgm::PGMIndex<uint64_t, epsilon> *pgm_index;
+  pgm_index_t *pgm_index;
 
 };
 

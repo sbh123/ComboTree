@@ -793,6 +793,7 @@ uint64_t BLevel::NearPosRange_(uint64_t key, uint64_t pos, uint64_t &range_begin
   }
   range_begin = left;
   range_end = right;
+  return pos;
 }
 
 #ifdef BRANGE

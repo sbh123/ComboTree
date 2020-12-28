@@ -13,7 +13,6 @@ class ComboTree;
 using LI::LearnIndex;
 
 class Learn_Index {
-static const size_t epsilon = 16;
 public:
   Learn_Index(BLevel* blevel, int span = DEFAULT_SPAN);
   ~Learn_Index();

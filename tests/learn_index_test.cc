@@ -7,6 +7,7 @@
 #include <chrono>
 #include <algorithm>
 
+#define USE_STD_ITER
 
 #include "learnindex/pgm_index.hpp"
 #include "learnindex/rmi_impl.h"
@@ -47,15 +48,11 @@ int main() {
         TwoStageRMI<Key_64> *rmi_index = nullptr;
         LearnIndex *learn_index = nullptr;
         std::vector<uint64_t> pgm_keys;
-        std::vector<Key_64> rmi_keys;
         for(int i = 0; i < size; i++) {
             uint64_t key = rnd.Next();
             pgm_keys.push_back(key);
         }
         std::sort(pgm_keys.begin(), pgm_keys.end());
-        for(int i = 0; i < size; i++) {
-            rmi_keys.push_back(Key_64(pgm_keys[i]));
-        }
 
         {
             auto startTime = std::chrono::system_clock::now();
@@ -69,7 +66,7 @@ int main() {
         }
         {
             auto startTime = std::chrono::system_clock::now();
-            learn_index = new LearnIndex(pgm_keys);
+            learn_index = new LearnIndex(pgm_keys.begin(), pgm_keys.end());
             auto endTime = std::chrono::system_clock::now();
             std::cout << "[Learn-Index]: Learn-Index train cost: " 
                 << std::chrono::duration_cast<std::chrono::microseconds>(endTime - startTime).count()
@@ -79,7 +76,7 @@ int main() {
         }
         {
             auto startTime = std::chrono::system_clock::now();
-            rmi_index = new TwoStageRMI<Key_64>(rmi_keys);
+            rmi_index = new TwoStageRMI<Key_64>(pgm_keys.begin(), pgm_keys.end());
             auto endTime = std::chrono::system_clock::now();
             std::cout << "[RMI]: RMI Index train cost: " 
                 << std::chrono::duration_cast<std::chrono::microseconds>(endTime - startTime).count()
@@ -97,22 +94,15 @@ int main() {
             auto endTime = std::chrono::system_clock::now();
             uint64_t ns = std::chrono::duration_cast<std::chrono::nanoseconds>(endTime - startTime).count();
             pgmDurations.push_back(ns);
-            // if(!(range1 == range2)) {
-            //     // auto range2 = learn_index.search(pgm_keys[i], true);
-            //     std::cout << "Range 1: " << range1.lo << " : " << range1.hi << " : " << range1.pos << std::endl;
-            //     std::cout << "Range 2: " << range2.lo << " : " << range2.hi << " : " << range2.pos << std::endl;
-            //     auto range2 = learn_index.search(pgm_keys[i], true);
-            // }
         }
         for(int i = 0; i < pgm_keys.size(); i += 10) {
             auto startTime = std::chrono::system_clock::now();
-            int predict_pos = rmi_index->predict(rmi_keys[i]);
+            int predict_pos = rmi_index->predict(rmi_key_t(pgm_keys[i]));
             auto range = near_search_key(pgm_keys, pgm_keys[i], predict_pos);
             auto endTime = std::chrono::system_clock::now();
             uint64_t ns = std::chrono::duration_cast<std::chrono::nanoseconds>(endTime - startTime).count();
             rmiDurations.push_back(ns);
-            assert(abs(predict_pos - i) < 100);
-            
+            assert(abs(predict_pos - i) < 100); 
         }
 
         for(int i = 0; i < pgm_keys.size(); i += 10) {

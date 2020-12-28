@@ -30,17 +30,7 @@ typedef int omp_int_t;
 inline omp_int_t omp_get_max_threads() { return 1; }
 #endif
 
-#define SELF_ITER
-#ifdef SELF_ITER
-#define iter_distance(first, last) first.distance(first, last)
-#define iter_prev(now) now.prev(now)
-#define iter_next(now) now.next(now)
-
-#else
-#define iter_distance(first, last) std::distance(first, last)
-#define iter_prev(now) std::prev(now)
-#define iter_next(now) std::next(now)
-#endif
+#include "common.h"
 
 namespace pgm::internal {
 

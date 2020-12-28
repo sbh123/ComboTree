@@ -6,6 +6,8 @@
 #include <vector>
 #include <algorithm>
 
+#define USE_STD_ITER
+
 #include "pgm_index.h"
 #include "random.h"
 
