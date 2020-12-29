@@ -70,3 +70,4 @@ _minted*
 *.pdfsync
 
 show_file.sh
+result/*

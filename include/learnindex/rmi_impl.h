@@ -3,6 +3,15 @@
 #include <vector>
 #include <numeric>
 #include <algorithm>
+
+#ifdef _OPENMP
+#include <omp.h>
+#else
+#pragma message ("Compilation with -fopenmp is optional but recommended")
+typedef int omp_int_t;
+inline omp_int_t omp_get_max_threads() { return 1; }
+#endif
+
 #include "mkl.h"
 #include "mkl_lapacke.h"
 
@@ -67,14 +76,36 @@ void LinearModel<key_t>::prepare_model(
   if (key_len == 1) {  // use multiple dimension LR when running tpc-c
     double x_expected = 0, y_expected = 0, xy_expected = 0,
            x_square_expected = 0;
-    for (size_t key_i = 0; key_i < nr_keys; key_i++) {
-      // double key = model_key_ptrs[key_i][0];
-      double key = key_t(first[key_i]).to_model_key()[0];
-      x_expected += key;
-      y_expected += (start + key_i);
-      x_square_expected += key * key;
-      xy_expected += key * (start + key_i);
+    size_t parallelism = std::min<size_t>(omp_get_max_threads(), 20);
+    size_t chunk_size = nr_keys / parallelism;
+    #pragma omp parallel for reduction(+:x_expected, y_expected, xy_expected, x_square_expected) num_threads(parallelism) 
+    for (auto i = 0ull; i < parallelism; ++i) 
+    {
+      double x_expected_ = 0, y_expected_ = 0, xy_expected_ = 0,
+           x_square_expected_ = 0;
+      size_t i_start = i * chunk_size;
+      size_t i_end = i == parallelism - 1 ? nr_keys : i_start + chunk_size;
+      for (size_t key_i = i_start; key_i < i_end; key_i++) {
+        // double key = model_key_ptrs[key_i][0];
+        double key = key_t(first[key_i]).to_model_key()[0];
+        x_expected_ += key;
+        y_expected_ += (start + key_i);
+        x_square_expected_ += key * key;
+        xy_expected_ += key * (start + key_i);
+      }
+      x_expected += x_expected_;
+      y_expected += y_expected_;
+      xy_expected += xy_expected_;
+      x_square_expected += x_square_expected_;
     }
+    // for (size_t key_i = 0; key_i < nr_keys; key_i++) {
+    //   // double key = model_key_ptrs[key_i][0];
+    //   double key = key_t(first[key_i]).to_model_key()[0];
+    //   x_expected += key;
+    //   y_expected += (start + key_i);
+    //   x_square_expected += key * key;
+    //   xy_expected += key * (start + key_i);
+    // }
     x_expected /= nr_keys;
     y_expected /= nr_keys;
     x_square_expected /= nr_keys;
@@ -525,6 +556,27 @@ inline void TwoStageRMI<key_t, root_error_bound>::train_rmi(RandomIt first, Rand
     RandomIt last;
     size_t start_pos;
   };
+  // prepare_model_param param;
+  // size_t prev_stage_model_i = 0;
+  // size_t model_i = 0;
+  // param.first = first;
+  // param.start_pos = 0;
+
+  // for (size_t key_i = 0; key_i < keys_n; ++key_i) {
+  //   size_t group_i_pred = rmi_1st_stage.predict(key_t(first[key_i]));
+  //   size_t next_stage_model_i = pick_next_stage_model(group_i_pred);
+  //   if(next_stage_model_i != prev_stage_model_i) {
+  //     param.last = first + key_i;
+  //     rmi_2nd_stage[model_i].prepare_model(param.first, param.last, param.start_pos);
+  //     param.first = first + key_i;
+  //     param.start_pos = key_i;
+  //     model_i ++;
+  //     prev_stage_model_i = next_stage_model_i;
+  //   }
+  // }
+  // param.last = last;
+  // rmi_2nd_stage[model_i].prepare_model(param.first, param.last, param.start_pos);
+
   std::vector<prepare_model_param> prepare_model_params(rmi_2nd_stage_model_n);
   size_t prev_stage_model_i = 0;
   prepare_model_params[prev_stage_model_i].first = first;
@@ -539,7 +591,25 @@ inline void TwoStageRMI<key_t, root_error_bound>::train_rmi(RandomIt first, Rand
       prev_stage_model_i = next_stage_model_i;
     }
   }
+  prepare_model_params[prev_stage_model_i].last = last;
 
+  // {
+  //   // Paraller train
+  //   size_t c = 0ull;
+  //   size_t parallelism = std::min<size_t>(omp_get_max_threads(), 20);
+  //   size_t chunk_size = rmi_2nd_stage_model_n / parallelism;
+
+  //   #pragma omp parallel for reduction(+:c) num_threads(parallelism)
+  //   for (auto i = 0ull; i < parallelism; ++i) {
+  //       size_t first = i * chunk_size;
+  //       size_t last = i == parallelism - 1 ? rmi_2nd_stage_model_n : first + chunk_size;
+  //       for (size_t model_i = first; model_i < last ; ++model_i) {
+  //         rmi_2nd_stage[model_i].prepare_model(prepare_model_params[model_i].first, 
+  //           prepare_model_params[model_i].last, prepare_model_params[model_i].start_pos);
+  //       }
+  //       c += last - first;
+  //   }
+  // }
   for (size_t model_i = 0; model_i < rmi_2nd_stage_model_n; ++model_i) {
     rmi_2nd_stage[model_i].prepare_model(prepare_model_params[model_i].first, 
             prepare_model_params[model_i].last, prepare_model_params[model_i].start_pos);

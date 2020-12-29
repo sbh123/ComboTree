@@ -39,10 +39,13 @@ static ApproxPos near_search_key(const std::vector<uint64_t> &keys, const uint64
     return {(lo + hi) / 2, lo, hi};
 }
 
-int main() {
+int main(int argc, char *argv[]) {
+    int size = 100000;
+    if(argc > 1) {
+        size = atoi(argv[1]);
+    }
     Random rnd(0, UINT64_MAX - 1);
     {
-        int size = 1000000;
         const int epsilon = 8; // space-time trade-off parameter
         PGMIndex<uint64_t, epsilon> *pgm_index = nullptr;
         TwoStageRMI<Key_64> *rmi_index = nullptr;
@@ -59,8 +62,8 @@ int main() {
             pgm_index = new PGMIndex<uint64_t, epsilon>(pgm_keys);
             auto endTime = std::chrono::system_clock::now();
             std::cout << "[PGM]: PGM Index train cost: " 
-                << std::chrono::duration_cast<std::chrono::microseconds>(endTime - startTime).count()
-                << " ms" << std::endl;
+                << std::chrono::duration_cast<std::chrono::microseconds>(endTime - startTime).count() / 1e6
+                << " s" << std::endl;
             std::cout << "[PGM]: Segments count " << pgm_index->segments_count()
                 << ", Height " << pgm_index->height() << std::endl;
         }
@@ -69,8 +72,8 @@ int main() {
             learn_index = new LearnIndex(pgm_keys.begin(), pgm_keys.end());
             auto endTime = std::chrono::system_clock::now();
             std::cout << "[Learn-Index]: Learn-Index train cost: " 
-                << std::chrono::duration_cast<std::chrono::microseconds>(endTime - startTime).count()
-                << " ms" << std::endl;
+                << std::chrono::duration_cast<std::chrono::microseconds>(endTime - startTime).count() / 1e6
+                << " s" << std::endl;
             // std::cout << "[Learn-Index]: Segments count " << pgm_index_bottom_segmet.segments_count()
             //     << ", Height " << pgm_index_bottom_segmet.height() << std::endl;
         }
@@ -79,21 +82,21 @@ int main() {
             rmi_index = new TwoStageRMI<Key_64>(pgm_keys.begin(), pgm_keys.end());
             auto endTime = std::chrono::system_clock::now();
             std::cout << "[RMI]: RMI Index train cost: " 
-                << std::chrono::duration_cast<std::chrono::microseconds>(endTime - startTime).count()
+                << std::chrono::duration_cast<std::chrono::microseconds>(endTime - startTime).count() / 1e6
                 << " ms" << std::endl;
             std::cout << "[RMI]: Two stage model count " << rmi_index->rmi_model_n()
                 << std::endl;
         }
-        std::vector<uint64_t> pgmDurations;
-        std::vector<uint64_t> rmiDurations;
-        std::vector<uint64_t> learnDurations;
+        std::vector<double> pgmDurations;
+        std::vector<double> rmiDurations;
+        std::vector<double> learnDurations;
         for(int i = 0; i < pgm_keys.size(); i += 10) {
             auto startTime = std::chrono::system_clock::now();
             auto range1 = pgm_index->search(pgm_keys[i]);
             // auto range2 = learn_index.search(pgm_keys[i]);
             auto endTime = std::chrono::system_clock::now();
             uint64_t ns = std::chrono::duration_cast<std::chrono::nanoseconds>(endTime - startTime).count();
-            pgmDurations.push_back(ns);
+            pgmDurations.push_back(1.0 * ns);
         }
         for(int i = 0; i < pgm_keys.size(); i += 10) {
             auto startTime = std::chrono::system_clock::now();
@@ -101,8 +104,7 @@ int main() {
             auto range = near_search_key(pgm_keys, pgm_keys[i], predict_pos);
             auto endTime = std::chrono::system_clock::now();
             uint64_t ns = std::chrono::duration_cast<std::chrono::nanoseconds>(endTime - startTime).count();
-            rmiDurations.push_back(ns);
-            assert(abs(predict_pos - i) < 100); 
+            rmiDurations.push_back(1.0 * ns);
         }
 
         for(int i = 0; i < pgm_keys.size(); i += 10) {
@@ -110,10 +112,10 @@ int main() {
             auto range = learn_index->search(pgm_keys[i]);
             auto endTime = std::chrono::system_clock::now();
             uint64_t ns = std::chrono::duration_cast<std::chrono::nanoseconds>(endTime - startTime).count();
-            learnDurations.push_back(ns);
+            learnDurations.push_back(1.0 * ns);
         }
 
-        auto summaryStats = [](const std::vector<uint64_t> &durations, const char *name = "PGM") {
+        auto summaryStats = [](const std::vector<double> &durations, const char *name = "PGM") {
             double average = std::accumulate(durations.cbegin(), durations.cend() - 1, 0.0) / durations.size();
             auto minmax = std::minmax(durations.cbegin(), durations.cend() - 1);
 
