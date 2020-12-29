@@ -52,6 +52,43 @@ void LinearModel<key_t>::prepare(
 }
 
 template <class key_t>
+template <typename RandomIt>
+void LinearModel<key_t>::prepare_model(
+    RandomIt &first, RandomIt &last, size_t start) {
+
+  size_t key_len = key_t::model_key_size();
+  size_t nr_keys = iter_distance(first, last);
+  if (nr_keys == 0) return;
+  if (nr_keys == 1) {
+    LinearModel<key_t>::weights[key_len] = start;
+    return;
+  }
+  assert(key_len == 1);
+  if (key_len == 1) {  // use multiple dimension LR when running tpc-c
+    double x_expected = 0, y_expected = 0, xy_expected = 0,
+           x_square_expected = 0;
+    for (size_t key_i = 0; key_i < nr_keys; key_i++) {
+      // double key = model_key_ptrs[key_i][0];
+      double key = key_t(first[key_i]).to_model_key()[0];
+      x_expected += key;
+      y_expected += (start + key_i);
+      x_square_expected += key * key;
+      xy_expected += key * (start + key_i);
+    }
+    x_expected /= nr_keys;
+    y_expected /= nr_keys;
+    x_square_expected /= nr_keys;
+    xy_expected /= nr_keys;
+
+    weights[0] = (xy_expected - x_expected * y_expected) /
+                 (x_square_expected - x_expected * x_expected);
+    weights[1] = (x_square_expected * y_expected - x_expected * xy_expected) /
+                 (x_square_expected - x_expected * x_expected);
+    return;
+  }
+}
+
+template <class key_t>
 void LinearModel<key_t>::prepare_model(
     const std::vector<double *> &model_key_ptrs,
     const std::vector<size_t> &positions) {
@@ -454,32 +491,61 @@ inline void TwoStageRMI<key_t, root_error_bound>::train_rmi(RandomIt first, Rand
   delete[] rmi_2nd_stage;
   rmi_2nd_stage = new linear_model_t[rmi_2nd_stage_model_n]();
 
+  // // train 1st stage
+  // std::vector<key_t> keys(keys_n);
+  // std::vector<size_t> positions(keys_n);
+  // for (size_t group_i = 0; group_i < keys_n; group_i++) {
+  //   keys[group_i] = key_t(first[group_i]);
+  //   positions[group_i] = group_i;
+  // }
+  // rmi_1st_stage.prepare(keys, positions);
+
+  // // train 2nd stage
+  // std::vector<std::vector<key_t>> keys_dispatched(rmi_2nd_stage_model_n);
+  // std::vector<std::vector<size_t>> positions_dispatched(rmi_2nd_stage_model_n);
+
+  // for (size_t key_i = 0; key_i < keys_n; ++key_i) {
+  //   size_t group_i_pred = rmi_1st_stage.predict(key_t(first[key_i]));
+  //   size_t next_stage_model_i = pick_next_stage_model(group_i_pred);
+  //   keys_dispatched[next_stage_model_i].push_back(key_t(first[key_i]));
+  //   positions_dispatched[next_stage_model_i].push_back(key_i);
+  // }
+
+  // for (size_t model_i = 0; model_i < rmi_2nd_stage_model_n; ++model_i) {
+  //   std::vector<key_t> &keys = keys_dispatched[model_i];
+  //   std::vector<size_t> &positions = positions_dispatched[model_i];
+  //   rmi_2nd_stage[model_i].prepare(keys, positions);
+  // }
+
   // train 1st stage
-  std::vector<key_t> keys(keys_n);
-  std::vector<size_t> positions(keys_n);
-  for (size_t group_i = 0; group_i < keys_n; group_i++) {
-    keys[group_i] = key_t(first[group_i]);
-    positions[group_i] = group_i;
-  }
-
-  rmi_1st_stage.prepare(keys, positions);
+  rmi_1st_stage.prepare_model(first, last, 0);
   // train 2nd stage
-  std::vector<std::vector<key_t>> keys_dispatched(rmi_2nd_stage_model_n);
-  std::vector<std::vector<size_t>> positions_dispatched(rmi_2nd_stage_model_n);
+  struct prepare_model_param{
+    RandomIt first;
+    RandomIt last;
+    size_t start_pos;
+  };
+  std::vector<prepare_model_param> prepare_model_params(rmi_2nd_stage_model_n);
+  size_t prev_stage_model_i = 0;
+  prepare_model_params[prev_stage_model_i].first = first;
+  prepare_model_params[prev_stage_model_i].start_pos = 0;
 
-  for (size_t key_i = 0; key_i < keys.size(); ++key_i) {
-    size_t group_i_pred = rmi_1st_stage.predict(keys[key_i]);
+  for (size_t key_i = 0; key_i < keys_n; ++key_i) {
+    size_t group_i_pred = rmi_1st_stage.predict(key_t(first[key_i]));
     size_t next_stage_model_i = pick_next_stage_model(group_i_pred);
-    keys_dispatched[next_stage_model_i].push_back(keys[key_i]);
-    positions_dispatched[next_stage_model_i].push_back(positions[key_i]);
+    if(next_stage_model_i != prev_stage_model_i) {
+      prepare_model_params[next_stage_model_i].first = prepare_model_params[prev_stage_model_i].last = first + key_i;
+      prepare_model_params[next_stage_model_i].start_pos = key_i;
+      prev_stage_model_i = next_stage_model_i;
+    }
   }
 
   for (size_t model_i = 0; model_i < rmi_2nd_stage_model_n; ++model_i) {
-    std::vector<key_t> &keys = keys_dispatched[model_i];
-    std::vector<size_t> &positions = positions_dispatched[model_i];
-    rmi_2nd_stage[model_i].prepare(keys, positions);
+    rmi_2nd_stage[model_i].prepare_model(prepare_model_params[model_i].first, 
+            prepare_model_params[model_i].last, prepare_model_params[model_i].start_pos);
   }
 }
+
 template <class key_t,  size_t root_error_bound>
 size_t TwoStageRMI<key_t, root_error_bound>::pick_next_stage_model(size_t group_i_pred) {
   size_t second_stage_model_i;
