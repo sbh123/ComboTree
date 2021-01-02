@@ -123,7 +123,7 @@ public:
         last_x = x;
         Point p1{x, SY(y) + epsilon};
         Point p2{x, SY(y) - epsilon};
-
+        // std::cout << "x,y: " << x << " " << y << std::endl;
         if (points_in_hull == 0) {
             first_x = x;
             rectangle[0] = p1;
@@ -204,6 +204,9 @@ public:
             lower.push(x, y);
         }
 
+        // for(int i = 0; i < 4; i++) {
+        //     std::cout << "Rect[" << i << "] " << rectangle[i].x << " "<< (double)rectangle[i].y << std::endl;
+        // }
         ++points_in_hull;
         return true;
     }

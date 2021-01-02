@@ -44,7 +44,7 @@ template <class key_t, size_t root_error_bound = 32>
 class TwoStageRMI {
 public:
     typedef LinearModel<key_t> linear_model_t;
-    const double root_memory_constraint = 1024 * 1024;
+    const double root_memory_constraint = 16 * 1024 * 1024;
 public:
     TwoStageRMI() : rmi_2nd_stage(nullptr), rmi_2nd_stage_model_n(0), keys_n(0) {}
     TwoStageRMI(const std::vector<key_t> &keys) { init(keys); }

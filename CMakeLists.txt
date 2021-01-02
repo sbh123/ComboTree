@@ -87,6 +87,7 @@ set(COMBO_TREE_SRC
       src/rmi_index.cc
       src/learn_index.cc
       src/blevel.cc
+      src/bentry.cc
       src/clevel.cc
       src/combotree.cc
       src/pmemkv.cc
@@ -137,3 +138,11 @@ add_test(pgm_index_test pgm_index_test)
 add_executable(learn_index_test tests/learn_index_test.cc)
 target_link_libraries(learn_index_test mkl_rt)
 add_test(learn_index_test learn_index_test)
+
+## bucket_test
+add_executable(bucket_test tests/bucket_test.cc)
+add_test(bucket_test bucket_test)
+
+## microbench
+add_executable(microbench tests/microbench.cc)
+add_test(microbench microbench)

@@ -20,10 +20,9 @@ BLevel::ExpandData BLevel::expand_data_[EXPAND_THREADS];
 #endif
 
 int BLevel::file_id_ = 0;
+std::atomic<int64_t> clevel_time = 0;
 
 namespace { // anonymous namespace
-
-std::atomic<int64_t> clevel_time = 0;
 
 ALWAYS_INLINE int CommonPrefixBytes(uint64_t a, uint64_t b) {
   // the result of clz is undefined if arg is 0
@@ -71,7 +70,7 @@ void stream_store_entry(void* dest, void* source) {
 
 } // anonymous namespace
 
-void BLevel::ExpandData::FlushToEntry(Entry* entry, int prefix_len, CLevel::MemControl* mem) {
+void BLevel::ExpandData::FlushToEntry(bentry_t* entry, int prefix_len, CLevel::MemControl* mem) {
   while (buf_count > entry->buf.max_entries) {
     // flush last entry.max_entries data to clevel
     // copy value
@@ -85,7 +84,7 @@ void BLevel::ExpandData::FlushToEntry(Entry* entry, int prefix_len, CLevel::MemC
     buf_count -= entry->buf.max_entries;
   }
 #ifdef STREAMING_STORE
-  Entry in_mem(entry->entry_key, prefix_len);
+  bentry_t in_mem(entry->entry_key, prefix_len);
   // copy value
   memcpy(in_mem.buf.pvalue(buf_count-1),
          &value_buf[BLEVEL_EXPAND_BUF_KEY-buf_count], 8*buf_count);
@@ -110,108 +109,6 @@ void BLevel::ExpandData::FlushToEntry(Entry* entry, int prefix_len, CLevel::MemC
   buf_count = 0;
 }
 
-
-/************************** BLevel::Entry ***************************/
-BLevel::Entry::Entry(uint64_t key, uint64_t value, int prefix_len)
-  : entry_key(key)
-{
-  buf.prefix_bytes = prefix_len;
-  buf.suffix_bytes = 8 - prefix_len;
-  buf.entries = 0;
-  buf.max_entries = buf.MaxEntries();
-  buf.Put(0, key, value);
-}
-
-BLevel::Entry::Entry(uint64_t key, int prefix_len)
-  : entry_key(key)
-{
-  buf.prefix_bytes = prefix_len;
-  buf.suffix_bytes = 8 - prefix_len;
-  buf.entries = 0;
-  buf.max_entries = buf.MaxEntries();
-}
-
-// return true if not exist before, return false if update.
-bool BLevel::Entry::Put(CLevel::MemControl* mem, uint64_t key, uint64_t value) {
-#ifdef BUF_SORT
-  bool exist;
-  int pos = buf.Find(key, exist);
-  // already in, update
-  if (exist) {
-    *(uint64_t*)buf.pvalue(pos) = value;
-    flush(buf.pvalue(pos));
-    fence();
-    return false;
-  } else {
-    if (buf.Full()) {
-      FlushToCLevel(mem);
-      pos = 0;
-    }
-    return buf.Put(pos, key, value);
-  }
-#else
-  if ((!clevel.HasSetup() && buf.entries == buf.max_entries - 1) || buf.Full())
-    FlushToCLevel(mem);
-  return buf.Put(buf.entries, key, value);
-#endif
-};
-
-bool BLevel::Entry::Update(CLevel::MemControl* mem, uint64_t key, uint64_t value) {
-  bool exist;
-  int pos = buf.Find(key, exist);
-  // already in, update
-  if (exist)
-    return buf.Update(pos, value);
-  else if (clevel.HasSetup())
-    return clevel.Update(mem, key, value);
-  else
-    assert(0);
-  return false;
-}
-
-bool BLevel::Entry::Get(CLevel::MemControl* mem, uint64_t key, uint64_t& value) const {
-  bool exist;
-  int pos = buf.Find(key, exist);
-  if (exist) {
-    value = buf.value(pos);
-    return true;
-  } else {
-    return clevel.HasSetup() ? clevel.Get(mem, key, value) : false;
-  }
-}
-
-bool BLevel::Entry::Delete(CLevel::MemControl* mem, uint64_t key, uint64_t* value) {
-  bool exist;
-  int pos = buf.Find(key, exist);
-  if (exist) {
-    if (value)
-      *value = buf.value(pos);
-    return buf.Delete(pos);
-  } else {
-    return clevel.HasSetup() ? clevel.Delete(mem, key, value) : false;
-  }
-}
-
-void BLevel::Entry::FlushToCLevel(CLevel::MemControl* mem) {
-  // TODO: let anothor thread do this? e.g. a little thread pool
-  Timer timer;
-  timer.Start();
-
-  if (!clevel.HasSetup()) {
-    clevel.Setup(mem, buf);
-  } else {
-    for (int i = 0; i < buf.entries; ++i) {
-      if (clevel.Put(mem, buf.key(i, entry_key), buf.value(i)) != true) {
-        assert(0);
-      }
-    }
-  }
-  buf.Clear();
-
-  clevel_time.fetch_add(timer.End());
-}
-
-
 /****************************** BLevel ******************************/
 BLevel::BLevel(size_t data_size)
   : nr_entries_(0), size_(0),
@@ -221,7 +118,10 @@ BLevel::BLevel(size_t data_size)
 #endif
 {
   physical_nr_entries_ = ((data_size+1+BLEVEL_EXPAND_BUF_KEY-1)/BLEVEL_EXPAND_BUF_KEY) * ENTRY_SIZE_FACTOR;
-  size_t file_size = sizeof(Entry) * physical_nr_entries_;
+  size_t file_size = sizeof(bentry_t) * physical_nr_entries_;
+  std::cout << "Blevel entry size: " << sizeof(bentry_t) << std::endl;
+  std::cout << "Kv buffer size: " << sizeof(KVBuffer<112,8>) << std::endl;
+  std::cout << "Clevel size : " << sizeof(CLevel) << std::endl;
 #ifdef USE_LIBPMEM
   pmem_file_ = std::string(BLEVEL_PMEM_FILE) + std::to_string(file_id_++);
   int is_pmem;
@@ -234,10 +134,10 @@ BLevel::BLevel(size_t data_size)
     exit(1);
   }
   // aligned at 64-bytes
-  entries_ = (Entry*)pmem_addr_;
+  entries_ = (bentry_t*)pmem_addr_;
   if (((uintptr_t)entries_ & (uintptr_t)63) != 0) {
     // not aligned
-    entries_ = (Entry*)(((uintptr_t)entries_+64) & ~(uintptr_t)63);
+    entries_ = (bentry_t*)(((uintptr_t)entries_+64) & ~(uintptr_t)63);
   }
 
   entries_offset_ = (uint64_t)entries_ - (uint64_t)pmem_addr_;
@@ -245,7 +145,7 @@ BLevel::BLevel(size_t data_size)
   pmem_file_ = "";
   pmem_addr_ = nullptr;
   entries_offset_ = 0;
-  entries_ = (Entry*)new (std::align_val_t{64}) uint8_t[file_size];
+  entries_ = (bentry_t*)new (std::align_val_t{64}) uint8_t[file_size];
   assert(((uint64_t)entries_ & 63) == 0);
 #endif
 
@@ -272,7 +172,7 @@ void BLevel::ExpandPut_(ExpandData& data, uint64_t key, uint64_t value) {
     // buf full, add a new entry
     if (data.new_addr < data.max_addr) {
       int prefix_len = CommonPrefixBytes(data.entry_key, (data.new_addr == data.max_addr - 1) ? data.last_entry_key : key);
-      Entry* new_entry = new (data.new_addr) Entry(data.entry_key, prefix_len);
+      bentry_t* new_entry = new (data.new_addr) bentry_t(data.entry_key, prefix_len);
       data.FlushToEntry(new_entry, prefix_len, &clevel_mem_);
       data.expanded_entries->fetch_add(1, std::memory_order_release);
       data.new_addr++;
@@ -280,7 +180,7 @@ void BLevel::ExpandPut_(ExpandData& data, uint64_t key, uint64_t value) {
       // next entry_key
       data.entry_key = key;
     } else {
-      Entry* entry = data.new_addr - 1;
+      bentry_t* entry = data.new_addr - 1;
       uint64_t entry_idx = ranges_[data.target_range].physical_entry_start+ranges_[data.target_range].entries-1;
       std::lock_guard<std::shared_mutex> lock(lock_[entry_idx]);
       for (int i = 0; i < data.buf_count; ++i)
@@ -299,13 +199,13 @@ void BLevel::ExpandFinish_(ExpandData& data) {
   if (data.buf_count != 0) {
     if (data.new_addr < data.max_addr) {
       int prefix_len = CommonPrefixBytes(data.entry_key, data.last_entry_key);
-      Entry* new_entry = new (data.new_addr) Entry(data.entry_key, prefix_len);
+      bentry_t* new_entry = new (data.new_addr) bentry_t(data.entry_key, prefix_len);
       data.FlushToEntry(new_entry, prefix_len, &clevel_mem_);
       data.new_addr++;
       // inc expanded_entries before change max_key
       data.expanded_entries->fetch_add(1, std::memory_order_release);
     } else {
-      Entry* entry = data.new_addr - 1;
+      bentry_t* entry = data.new_addr - 1;
       uint64_t entry_idx = ranges_[data.target_range].physical_entry_start+ranges_[data.target_range].entries-1;
       std::lock_guard<std::shared_mutex> lock(lock_[entry_idx]);
       for (int i = 0; i < data.buf_count; ++i)
@@ -463,11 +363,11 @@ void BLevel::ExpandRange_(BLevel* old_blevel, int thread_id) {
                                      (expand_meta.end_interval+1)*old_blevel->interval_size_);
 
   int target_range = expand_meta.target_range;
-  Entry* old_entry;
+  bentry_t* old_entry;
   CLevel::MemControl* old_mem = &old_blevel->clevel_mem_;
 
 #ifdef STREAMING_LOAD
-  Entry in_mem_entry(0,0);
+  bentry_t in_mem_entry(0,0);
   old_entry = &in_mem_entry;
 #endif
 
@@ -490,13 +390,14 @@ void BLevel::ExpandRange_(BLevel* old_blevel, int thread_id) {
 
       if (old_entry->clevel.HasSetup()) {
         expand_meta.clevel_count++;
-        Entry::Iter biter(old_entry, old_mem);
+        bentry_t::Iter biter(old_entry, old_mem);
         uint64_t total_cnt = 0;
         do {
           total_cnt++;
           ExpandPut_(expand_meta, biter.key(), biter.value());
         } while(biter.next());
         expand_meta.clevel_data_count += total_cnt - old_entry->buf.entries;
+        expand_meta.bentry_max_count =  std::max(expand_meta.bentry_max_count, total_cnt);
       } else if (!old_entry->buf.Empty()) {
 #ifdef BUF_SORT
         for (uint64_t i = 0; i < old_entry->buf.entries; ++i)
@@ -523,8 +424,10 @@ void BLevel::ExpandRange_(BLevel* old_blevel, int thread_id) {
   size_per_interval_[target_range][intervals_[target_range]-1].fetch_add(
     (ranges_[target_range].entries-(interval_size_*(intervals_[target_range]-1)))*BLEVEL_EXPAND_BUF_KEY);
 
-  LOG(Debug::INFO, "data in clevel: %ld, clevel count: %ld, pairs per clevel: %lf",
-      expand_meta.clevel_data_count, expand_meta.clevel_count, (double)expand_meta.clevel_data_count/(double)expand_meta.clevel_count);
+  LOG(Debug::INFO, "data in clevel: %ld, clevel count: %ld, pairs per clevel: %lf, max pairs bentry: %ld",
+      expand_meta.clevel_data_count, expand_meta.clevel_count,
+      (double)expand_meta.clevel_data_count/(double)expand_meta.clevel_count,
+      expand_meta.bentry_max_count);
 }
 
 // all thread has finished expansion
@@ -562,11 +465,11 @@ void BLevel::Expansion(BLevel* old_blevel) {
   expand_meta.max_key = &max_key;
 
   uint64_t old_index = 0;
-  Entry* old_entry;
+  bentry_t* old_entry;
   CLevel::MemControl* old_mem = &old_blevel->clevel_mem_;
 
 #ifdef STREAMING_LOAD
-  Entry in_mem_entry(0,0);
+  bentry_t in_mem_entry(0,0);
   old_entry = &in_mem_entry;
 #endif
 
@@ -583,13 +486,14 @@ void BLevel::Expansion(BLevel* old_blevel) {
 
     if (old_entry->clevel.HasSetup()) {
       expand_meta.clevel_count++;
-      Entry::Iter biter(old_entry, old_mem);
+      bentry_t::Iter biter(old_entry, old_mem);
       uint64_t total_cnt = 0;
       do {
         total_cnt++;
         ExpandPut_(expand_meta, biter.key(), biter.value());
       } while(biter.next());
       expand_meta.clevel_data_count += total_cnt - old_entry->buf.entries;
+      expand_meta.bentry_max_count =  std::max(expand_meta.bentry_max_count, total_cnt);
     } else if (!old_entry->buf.Empty()) {
 #ifdef BUF_SORT
       for (uint64_t i = 0; i < old_entry->buf.entries; ++i)
@@ -970,7 +874,7 @@ int64_t BLevel::CLevelTime() const {
 }
 
 uint64_t BLevel::Usage() const {
-  return clevel_mem_.Usage() + physical_nr_entries_ * sizeof(Entry);
+  return clevel_mem_.Usage() + physical_nr_entries_ * sizeof(bentry_t);
 }
 
 }
