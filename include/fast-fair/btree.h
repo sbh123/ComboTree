@@ -64,6 +64,7 @@ class btree {
     void btree_delete(entry_key_t);
     void btree_delete_internal(entry_key_t, char *, uint32_t, entry_key_t *, bool *, page **);
     char *btree_search(entry_key_t);
+    page *btree_search_leaf(entry_key_t);
     void btree_search_range(entry_key_t, entry_key_t, unsigned long *); 
     void btree_search_range(entry_key_t, entry_key_t, std::vector<std::string> &values, int &size); 
     void btree_search_range(entry_key_t, entry_key_t, void **values, int &size); 
@@ -1108,6 +1109,15 @@ char *btree::btree_search(entry_key_t key){
   }
 
   return (char *)t;
+}
+
+page *btree::btree_search_leaf(entry_key_t key){
+  page* p = (page*)root;
+
+  while(p->hdr.leftmost_ptr != NULL) {
+    p = (page *)p->linear_search(key);
+  }
+  return p;
 }
 
 // insert the key in the leaf node

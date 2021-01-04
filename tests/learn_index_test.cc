@@ -58,7 +58,7 @@ int main(int argc, char *argv[]) {
         btree *btree = new FastFair::btree();
         // std::vector<uint64_t> pgm_keys;
         uint64_t *pgm_keys = (uint64_t *)NVM::data_alloc->alloc(size * sizeof(uint64_t));
-        for(int i = 0; i < size; i++) {
+        for(size_t i = 0; i < size; i++) {
             uint64_t key = rnd.Next();
             pgm_keys[i] = (key);
             btree->btree_insert(key, (char *)key);
@@ -102,46 +102,57 @@ int main(int argc, char *argv[]) {
         std::vector<double> learnDurations;
         std::vector<double> btreeDurations;
         for(size_t i = 0; i < size; i += 10) {
+            int idx  = rnd.Next() % size;
             auto startTime = std::chrono::system_clock::now();
-            auto range = pgm_index->search(pgm_keys[i]);
-            int pos = std::lower_bound(pgm_keys + range.lo,  pgm_keys + range.hi, pgm_keys[i]) - pgm_keys;
-            // auto range2 = learn_index.search(pgm_keys[i]);
+            auto range = pgm_index->search(pgm_keys[idx]);
+            int pos = std::lower_bound(pgm_keys + range.lo,  pgm_keys + range.hi, pgm_keys[idx]) - pgm_keys;
             auto endTime = std::chrono::system_clock::now();
             uint64_t ns = std::chrono::duration_cast<std::chrono::nanoseconds>(endTime - startTime).count();
             pgmDurations.push_back(1.0 * ns);
+            assert(pos == idx);
         }
         std::cout << "[PGM]: PGM search finished. " << std::endl;
 
         for(size_t i = 0; i < size; i += 10) {
+            int idx  = rnd.Next() % size;
             auto startTime = std::chrono::system_clock::now();
-            int predict_pos = rmi_index->predict(rmi_key_t(pgm_keys[i]));
-            auto range = near_search_key(pgm_keys, pgm_keys[i], predict_pos, size);
-            int pos = std::lower_bound(pgm_keys + range.lo,  pgm_keys + range.hi, pgm_keys[i]) - pgm_keys;
+            int predict_pos = rmi_index->predict(rmi_key_t(pgm_keys[idx]));
+            auto range = near_search_key(pgm_keys, pgm_keys[idx], predict_pos, size);
+            int pos = std::lower_bound(pgm_keys + range.lo,  pgm_keys + range.hi, pgm_keys[idx]) - pgm_keys;
             auto endTime = std::chrono::system_clock::now();
             uint64_t ns = std::chrono::duration_cast<std::chrono::nanoseconds>(endTime - startTime).count();
             rmiDurations.push_back(1.0 * ns);
+            if(pos != idx) {
+                std::cout << "Failed i = " << idx << std::endl;
+                std::cout << "Lower: " << range.lo << ", higher: " <<  range.hi << std::endl;
+            }
+            assert(pos == idx);
         }
 
         std::cout << "[RMI]: RMI search finished. " << std::endl;
 
         for(size_t i = 0; i < size; i += 10) {
+            int idx  = rnd.Next() % size;
             auto startTime = std::chrono::system_clock::now();
-            auto range = learn_index->search(pgm_keys[i]);
-            int pos = std::lower_bound(pgm_keys + range.lo,  pgm_keys + range.hi, pgm_keys[i]) - pgm_keys;
+            auto range = learn_index->search(pgm_keys[idx]);
+            int pos = std::lower_bound(pgm_keys + range.lo,  pgm_keys + range.hi, pgm_keys[idx]) - pgm_keys;
             auto endTime = std::chrono::system_clock::now();
             uint64_t ns = std::chrono::duration_cast<std::chrono::nanoseconds>(endTime - startTime).count();
             learnDurations.push_back(1.0 * ns);
+            assert(pos == idx);
         }
 
         std::cout << "[LI]: Learn-Index search finished. " << std::endl;
 
         for(size_t i = 0; i < size; i += 10) {
+            int idx  = rnd.Next() % size;
             auto startTime = std::chrono::system_clock::now();
-            char *pvalue = btree->btree_search(pgm_keys[i]);
+            // char *pvalue = btree->btree_search(pgm_keys[idx]);
+            btree->btree_search_leaf(pgm_keys[idx]);
             auto endTime = std::chrono::system_clock::now();
             uint64_t ns = std::chrono::duration_cast<std::chrono::nanoseconds>(endTime - startTime).count();
             btreeDurations.push_back(1.0 * ns);
-            assert(pvalue == (char *)pgm_keys[i]);
+            // assert(pvalue == (char *)pgm_keys[idx]);
         }
 
         std::cout << "[Fast-Fair]: Fast-Fair search finished. " << std::endl;

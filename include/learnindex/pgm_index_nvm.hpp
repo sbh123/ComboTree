@@ -153,7 +153,7 @@ protected:
                 segments[nr_segments ++] = Segment(*iter_prev(last) + 1, 0, prev_level_size);
                 ++n_segments;
             }
-            segments[nr_segments ++] = Segment(*iter_prev(last) + 1, 0, prev_level_size);
+            segments[nr_segments ++] = Segment(prev_level_size);
             return n_segments;
         };
 

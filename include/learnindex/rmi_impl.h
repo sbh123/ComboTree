@@ -641,7 +641,7 @@ template <class key_t,  size_t root_error_bound>
 inline size_t TwoStageRMI<key_t, root_error_bound>::predict(const key_t &key) {
   size_t pos_pred = rmi_1st_stage->predict(key);
   size_t next_stage_model_i = pick_next_stage_model(pos_pred);
-  return std::min(rmi_2nd_stage[next_stage_model_i].predict(key), keys_n);
+  return std::min(rmi_2nd_stage[next_stage_model_i].predict(key), keys_n - 1);
 }
 
 } // namespace RMI
