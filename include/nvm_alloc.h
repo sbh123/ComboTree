@@ -1,4 +1,5 @@
-#pragma once
+#ifndef _NVM_ALLOC_H
+#define _NVM_ALLOC_H
 
 #include <filesystem>
 #include <libpmem.h>
@@ -86,6 +87,7 @@ private:
 };
 
 extern Alloc *common_alloc;
+extern Alloc *btree_alloc;
 
 class AllocBase {
 public:
@@ -116,3 +118,5 @@ int  env_init();
 void env_exit();
 
 } // namespace NVM
+
+#endif

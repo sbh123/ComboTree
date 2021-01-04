@@ -11,6 +11,7 @@
 
 #include "learnindex/rmi_impl.h"
 #include "learnindex/learn_index.h"
+#include "fast-fair/btree.h"
 
 #include "random.h"
 
@@ -22,6 +23,8 @@ using PGM_NVM::ApproxPos;
 using RMI::Key_64;
 using RMI::TwoStageRMI;
 using LI::LearnIndex;
+using FastFair::btree;
+
 typedef RMI::Key_64 rmi_key_t;
 
 static ApproxPos near_search_key(const std::vector<uint64_t> &keys, const uint64_t &key, size_t pos) {
@@ -52,13 +55,15 @@ int main(int argc, char *argv[]) {
         PGMIndex<uint64_t, epsilon> *pgm_index = nullptr;
         TwoStageRMI<Key_64> *rmi_index = nullptr;
         LearnIndex *learn_index = nullptr;
+        btree *btree = new FastFair::btree();
         std::vector<uint64_t> pgm_keys;
         for(int i = 0; i < size; i++) {
             uint64_t key = rnd.Next();
             pgm_keys.push_back(key);
+            btree->btree_insert(key, (char *)key);
         }
-        std::sort(pgm_keys.begin(), pgm_keys.end());
 
+        std::sort(pgm_keys.begin(), pgm_keys.end());
         {
             auto startTime = std::chrono::system_clock::now();
             pgm_index = new PGMIndex<uint64_t, epsilon>(pgm_keys);
@@ -79,7 +84,8 @@ int main(int argc, char *argv[]) {
             std::cout << "[RMI]: Two stage model count " << rmi_index->rmi_model_n()
                 << std::endl;
         }
-         {
+
+        {
             auto startTime = std::chrono::system_clock::now();
             learn_index = new LearnIndex(pgm_keys.begin(), pgm_keys.end());
             auto endTime = std::chrono::system_clock::now();
@@ -92,7 +98,8 @@ int main(int argc, char *argv[]) {
         std::vector<double> pgmDurations;
         std::vector<double> rmiDurations;
         std::vector<double> learnDurations;
-        for(int i = 0; i < pgm_keys.size(); i += 10) {
+        std::vector<double> btreeDurations;
+        for(size_t i = 0; i < pgm_keys.size(); i += 10) {
             auto startTime = std::chrono::system_clock::now();
             auto range = pgm_index->search(pgm_keys[i]);
             int pos = std::lower_bound(pgm_keys.begin() + range.lo,  pgm_keys.begin() + range.hi, pgm_keys[i]) - pgm_keys.begin();
@@ -103,7 +110,7 @@ int main(int argc, char *argv[]) {
         }
         std::cout << "[PGM]: PGM search finished. " << std::endl;
 
-        for(int i = 0; i < pgm_keys.size(); i += 10) {
+        for(size_t i = 0; i < pgm_keys.size(); i += 10) {
             auto startTime = std::chrono::system_clock::now();
             int predict_pos = rmi_index->predict(rmi_key_t(pgm_keys[i]));
             auto range = near_search_key(pgm_keys, pgm_keys[i], predict_pos);
@@ -115,7 +122,7 @@ int main(int argc, char *argv[]) {
 
         std::cout << "[RMI]: RMI search finished. " << std::endl;
 
-        for(int i = 0; i < pgm_keys.size(); i += 10) {
+        for(size_t i = 0; i < pgm_keys.size(); i += 10) {
             auto startTime = std::chrono::system_clock::now();
             auto range = learn_index->search(pgm_keys[i]);
             int pos = std::lower_bound(pgm_keys.begin() + range.lo,  pgm_keys.begin() + range.hi, pgm_keys[i]) - pgm_keys.begin();
@@ -125,6 +132,17 @@ int main(int argc, char *argv[]) {
         }
 
         std::cout << "[LI]: Learn-Index search finished. " << std::endl;
+
+        for(size_t i = 0; i < pgm_keys.size(); i += 10) {
+            auto startTime = std::chrono::system_clock::now();
+            char *pvalue = btree->btree_search(pgm_keys[i]);
+            auto endTime = std::chrono::system_clock::now();
+            uint64_t ns = std::chrono::duration_cast<std::chrono::nanoseconds>(endTime - startTime).count();
+            btreeDurations.push_back(1.0 * ns);
+            assert(pvalue == (char *)pgm_keys[i]);
+        }
+
+        std::cout << "[Fast-Fair]: Fast-Fair search finished. " << std::endl;
 
         auto summaryStats = [](const std::vector<double> &durations, const char *name = "PGM") {
             double average = std::accumulate(durations.cbegin(), durations.cend() - 1, 0.0) / durations.size();
@@ -137,10 +155,12 @@ int main(int argc, char *argv[]) {
         summaryStats(pgmDurations, "PGM");
         summaryStats(rmiDurations, "RMI");
         summaryStats(learnDurations, "LI");
+        summaryStats(btreeDurations, "Fast-Fair");
         
         delete learn_index;
         delete rmi_index;
         delete pgm_index;
+        delete btree;
     }
     NVM::env_exit();
     return 0;

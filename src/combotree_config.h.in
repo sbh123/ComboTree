@@ -8,6 +8,9 @@
 #cmakedefine NO_LOCK
 #cmakedefine BRANGE
 
+#ifndef PMEM_DIR
+#define PMEM_DIR @PMEM_DIR@
+#endif
 #ifndef CLEVEL_PMEM_FILE_SIZE
 #define CLEVEL_PMEM_FILE_SIZE @CLEVEL_PMEM_FILE_SIZE@
 #endif
