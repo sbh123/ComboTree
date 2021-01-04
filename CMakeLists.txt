@@ -24,13 +24,15 @@ if(SERVER)
   set(CLEVEL_PMEM_FILE      \"/pmem0/combotree-clevel-\")
   set(BLEVEL_PMEM_FILE      \"/pmem0/combotree-blevel-\")
   set(ALEVEL_PMEM_FILE      \"/pmem0/combotree-alevel-\")
-  set(PGM_INDEX_PMEM_FILE      \"/pmem0/combotree-pgmindex-\")
+  set(PGM_INDEX_PMEM_FILE   \"/pmem0/combotree-pgmindex-\")
+  set(COMMON_PMEM_FILE      \"/pmem0/common-alloctor\")
 else()
   set(CLEVEL_PMEM_FILE_SIZE "(1024*1024*512UL)")
   set(CLEVEL_PMEM_FILE      \"/mnt/pmem0/combotree-clevel-\")
   set(BLEVEL_PMEM_FILE      \"/mnt/pmem0/combotree-blevel-\")
   set(ALEVEL_PMEM_FILE      \"/mnt/pmem0/combotree-alevel-\")
-  set(PGM_INDEX_PMEM_FILE      \"/mnt/pmem0/combotree-pgmindex-\")
+  set(PGM_INDEX_PMEM_FILE   \"/mnt/pmem0/combotree-pgmindex-\")
+  set(COMMON_PMEM_FILE      \"/mnt/pmem0/common-alloctor\")
 endif(SERVER)
 
 if(BRANGE)
@@ -83,6 +85,7 @@ include_directories(include)
 
 set(COMBO_TREE_SRC
       src/alevel.cc
+      src/enviroment.cc
       src/pgm_index.cc
       src/rmi_index.cc
       src/learn_index.cc
@@ -131,12 +134,12 @@ add_test(multi_combotree_test multi_combotree_test)
 
 ## pgm_index_test
 add_executable(pgm_index_test tests/pgm_index_test.cc)
-target_link_libraries(pgm_index_test)
+target_link_libraries(pgm_index_test combotree)
 add_test(pgm_index_test pgm_index_test)
 
 ## learn_index_test
 add_executable(learn_index_test tests/learn_index_test.cc)
-target_link_libraries(learn_index_test mkl_rt)
+target_link_libraries(learn_index_test combotree)
 add_test(learn_index_test learn_index_test)
 
 ## bucket_test

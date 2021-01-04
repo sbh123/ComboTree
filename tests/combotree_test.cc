@@ -4,6 +4,7 @@
 #include <map>
 #include "combotree/combotree.h"
 #include "combotree_config.h"
+#include "nvm_alloc.h"
 #include "random.h"
 
 #define TEST_SIZE   4000000
@@ -24,6 +25,7 @@ int main(void) {
   std::map<uint64_t, uint64_t> right_kv;
 
   Random rnd(0, UINT64_MAX - 1);
+  NVM::env_init();
   for (uint64_t i = 0; i < TEST_SIZE; ++i) {
     uint64_t key = rnd.Next();
     if (right_kv.count(key)) {
@@ -103,6 +105,6 @@ int main(void) {
       assert(sort_iter.next());
     }
   }
-
+  NVM::env_exit();
   return 0;
 }

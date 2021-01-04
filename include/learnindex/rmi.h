@@ -61,20 +61,13 @@ public:
     size_t rmi_model_n() { return rmi_2nd_stage_model_n;}
 
     linear_model_t get_1st_stage_model() {
-      return rmi_1st_stage;
+      return *rmi_1st_stage;
     }
     linear_model_t *get_2nd_stage_model() {
       return rmi_2nd_stage;
     }
 
-    void recover(const linear_model_t *rmi_models, const size_t rmi_model_n, const size_t nr_elements) {
-      rmi_2nd_stage_model_n = rmi_model_n - 1;
-      rmi_1st_stage = rmi_models[0];
-      if(rmi_2nd_stage) delete[] rmi_2nd_stage;
-      rmi_2nd_stage = new linear_model_t[rmi_2nd_stage_model_n]();
-      memcpy(rmi_2nd_stage, &rmi_models[1], rmi_2nd_stage_model_n * sizeof(linear_model_t));
-      keys_n = nr_elements;
-    }
+    void recover(const linear_model_t *rmi_models, const size_t rmi_model_n, const size_t nr_elements);
     // void calculate_err(const std::vector<key_t> &keys,
     //                  const std::vector<val_t> &vals, size_t group_n_trial,
     //                  double &err_at_percentile, double &max_err,
@@ -91,7 +84,7 @@ private:
 
     size_t pick_next_stage_model(size_t pos_pred);
 
-    linear_model_t rmi_1st_stage;
+    linear_model_t *rmi_1st_stage = nullptr;
     linear_model_t *rmi_2nd_stage = nullptr;
     size_t rmi_2nd_stage_model_n = 0;
     size_t keys_n = 0;

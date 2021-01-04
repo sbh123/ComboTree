@@ -10,13 +10,16 @@
 #include <algorithm>
 
 
+#include "learnindex/pgm_index_nvm.hpp"
 #include "learnindex/pgm_index.hpp"
 #include "learnindex/rmi_impl.h"
 
 namespace LI
 {
-using pgm::PGMIndex;
-using pgm::ApproxPos;
+// using pgm::PGMIndex;
+// using pgm::ApproxPos;
+using PGM_NVM::PGMIndex;
+using PGM_NVM::ApproxPos;
 using RMI::Key_64;
 using RMI::TwoStageRMI;
 using RMI::LinearModel;
@@ -44,15 +47,16 @@ public:
     LearnIndex(RandomIt key_start, RandomIt key_end) {
         pgm_index_ = new pgm_index_t(key_start, key_end, true);
         std::vector<rmi_key_t> rmi_keys;
-        for(size_t i = 0; i < pgm_index_->segments_count(); i ++) {
+        size_t nr_segments = pgm_index_->segments_count();
+        for(size_t i = 0; i < nr_segments; i ++) {
             uint64_t key = pgm_index_->segments[i].key;
             rmi_keys.push_back(rmi_key_t(key));
         }
         rmi_index_ = new rmi_index_t(rmi_keys);
     }
     ~LearnIndex() {
-        if(pgm_index_) delete pgm_index_;
         if(rmi_index_) delete rmi_index_;
+        if(pgm_index_) delete pgm_index_;
     }
 
     ApproxPos search(const uint64_t &key, bool debug = false) {

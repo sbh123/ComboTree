@@ -48,7 +48,7 @@ Learn_Index::Learn_Index(BLevel* blevel, int span)
         head->learn.segment_count = learn_index_->segments_count();
         head->learn.rmi_model_n = learn_index_->rmi_model_n() + 1;
 
-        for(size_t i = 0; i < learn_index_->segments_count(); i ++) {
+        for(size_t i = 0; i < head->learn.segment_count; i ++) {
             segments[i] = learn_index_->get_segment(i);
         }
         linear_models[0] = learn_index_->get_rmi_1st_stage_model();

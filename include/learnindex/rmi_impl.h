@@ -19,6 +19,7 @@ inline omp_int_t omp_get_max_threads() { return 1; }
 #include "common.h"
 #include "rmi.h"
 #include "helper.h"
+#include "nvm_alloc.h"
 
 #if !defined(RMI_IMPL_H)
 #define RMI_IMPL_H
@@ -314,8 +315,14 @@ size_t LinearModel<key_t>::get_error_bound(
 
 template <class key_t,  size_t root_error_bound>
 TwoStageRMI<key_t, root_error_bound>::~TwoStageRMI() {
-    if(rmi_2nd_stage)
-        delete[] rmi_2nd_stage;
+    if(rmi_2nd_stage) {
+       // delete[] rmi_2nd_stage;
+      NVM::common_alloc->Free(rmi_2nd_stage, sizeof(linear_model_t) * this->rmi_2nd_stage_model_n);
+    }
+
+    if(rmi_1st_stage) {
+      NVM::common_alloc->Free(rmi_1st_stage, sizeof(linear_model_t));
+    }
 }
 
 template <class key_t,  size_t root_error_bound>
@@ -333,6 +340,24 @@ void TwoStageRMI<key_t, root_error_bound>::init(RandomIt first, RandomIt last) {
 }
 
 template <class key_t,  size_t root_error_bound>
+void TwoStageRMI<key_t, root_error_bound>::recover(const linear_model_t *rmi_models, 
+      const size_t rmi_model_n, const size_t nr_elements) {
+      if(rmi_2nd_stage) {
+        NVM::common_alloc->Free(rmi_2nd_stage, sizeof(linear_model_t) * this->rmi_2nd_stage_model_n);
+      }
+      if(rmi_1st_stage) {
+        NVM::common_alloc->Free(rmi_1st_stage, sizeof(linear_model_t));
+      }
+      rmi_1st_stage = (linear_model_t *)NVM::common_alloc->alloc(sizeof(linear_model_t));
+      rmi_2nd_stage = (linear_model_t *)NVM::common_alloc->alloc(sizeof(linear_model_t) * rmi_2nd_stage_model_n);
+      rmi_2nd_stage_model_n = rmi_model_n - 1;
+
+      *rmi_1st_stage = rmi_models[0];
+      memcpy(rmi_2nd_stage, &rmi_models[1], rmi_2nd_stage_model_n * sizeof(linear_model_t));
+      keys_n = nr_elements;
+    }
+
+template <class key_t,  size_t root_error_bound>
 void TwoStageRMI<key_t, root_error_bound>::adjust_rmi(const std::vector<key_t> &train_keys) {
   size_t max_model_n = root_memory_constraint / sizeof(linear_model_t);
   size_t max_trial_n = 10;
@@ -347,6 +372,13 @@ void TwoStageRMI<key_t, root_error_bound>::adjust_rmi(const std::vector<key_t> &
                  (size_t)(keys_n / root_error_bound /
                           group_n_per_model_per_rmi_error_experience_factor)));
   }
+
+  DEBUG_THIS("--- start train stage one");
+  if(rmi_1st_stage) {
+    NVM::common_alloc->Free(rmi_1st_stage, sizeof(linear_model_t));
+  }
+  rmi_1st_stage = (linear_model_t *)NVM::common_alloc->alloc(sizeof(linear_model_t));
+  
 
   DEBUG_THIS("--- start train group n "  << keys_n
             <<  " Modle size:"<< model_n_trial);
@@ -421,6 +453,13 @@ void TwoStageRMI<key_t, root_error_bound>::adjust_rmi(RandomIt first, RandomIt l
                           group_n_per_model_per_rmi_error_experience_factor)));
   }
 
+  DEBUG_THIS("--- start train stage one");
+  if(rmi_1st_stage) {
+    NVM::common_alloc->Free(rmi_1st_stage, sizeof(linear_model_t));
+  }
+  rmi_1st_stage = (linear_model_t *)NVM::common_alloc->alloc(sizeof(linear_model_t));
+  rmi_1st_stage->prepare_model(first, last, 0);
+
   DEBUG_THIS("--- start train group n "  << keys_n
             <<  " Modle size:"<< model_n_trial);
   train_rmi(first, last, model_n_trial);
@@ -482,9 +521,12 @@ template <class key_t,  size_t root_error_bound>
 inline void TwoStageRMI<key_t, root_error_bound>::train_rmi(const std::vector<key_t> &train_keys, 
         size_t rmi_2nd_stage_model_n) {
 
+  // delete[] rmi_2nd_stage;
+  // rmi_2nd_stage = new linear_model_t[rmi_2nd_stage_model_n]();
+  // this->rmi_2nd_stage_model_n = rmi_2nd_stage_model_n;
+  NVM::common_alloc->Free(rmi_2nd_stage, sizeof(linear_model_t) * this->rmi_2nd_stage_model_n);
+  rmi_2nd_stage = (linear_model_t *)NVM::common_alloc->alloc(sizeof(linear_model_t) * rmi_2nd_stage_model_n);
   this->rmi_2nd_stage_model_n = rmi_2nd_stage_model_n;
-  delete[] rmi_2nd_stage;
-  rmi_2nd_stage = new linear_model_t[rmi_2nd_stage_model_n]();
 
   // train 1st stage
   std::vector<key_t> keys(keys_n);
@@ -494,14 +536,14 @@ inline void TwoStageRMI<key_t, root_error_bound>::train_rmi(const std::vector<ke
     positions[group_i] = group_i;
   }
 
-  rmi_1st_stage.prepare(keys, positions);
+  rmi_1st_stage->prepare(keys, positions);
 
   // train 2nd stage
   std::vector<std::vector<key_t>> keys_dispatched(rmi_2nd_stage_model_n);
   std::vector<std::vector<size_t>> positions_dispatched(rmi_2nd_stage_model_n);
 
   for (size_t key_i = 0; key_i < keys.size(); ++key_i) {
-    size_t group_i_pred = rmi_1st_stage.predict(keys[key_i]);
+    size_t group_i_pred = rmi_1st_stage->predict(keys[key_i]);
     size_t next_stage_model_i = pick_next_stage_model(group_i_pred);
     keys_dispatched[next_stage_model_i].push_back(keys[key_i]);
     positions_dispatched[next_stage_model_i].push_back(positions[key_i]);
@@ -518,38 +560,15 @@ template <class key_t,  size_t root_error_bound>
 template <typename RandomIt>
 inline void TwoStageRMI<key_t, root_error_bound>::train_rmi(RandomIt first, RandomIt last, 
         size_t rmi_2nd_stage_model_n) {
+  // delete[] rmi_2nd_stage;
+  // rmi_2nd_stage = new linear_model_t[rmi_2nd_stage_model_n]();
+  // this->rmi_2nd_stage_model_n = rmi_2nd_stage_model_n;
+  NVM::common_alloc->Free(rmi_2nd_stage, sizeof(linear_model_t) * this->rmi_2nd_stage_model_n);
+  rmi_2nd_stage = (linear_model_t *)NVM::common_alloc->alloc(sizeof(linear_model_t) * rmi_2nd_stage_model_n);
   this->rmi_2nd_stage_model_n = rmi_2nd_stage_model_n;
-  delete[] rmi_2nd_stage;
-  rmi_2nd_stage = new linear_model_t[rmi_2nd_stage_model_n]();
-
-  // // train 1st stage
-  // std::vector<key_t> keys(keys_n);
-  // std::vector<size_t> positions(keys_n);
-  // for (size_t group_i = 0; group_i < keys_n; group_i++) {
-  //   keys[group_i] = key_t(first[group_i]);
-  //   positions[group_i] = group_i;
-  // }
-  // rmi_1st_stage.prepare(keys, positions);
-
-  // // train 2nd stage
-  // std::vector<std::vector<key_t>> keys_dispatched(rmi_2nd_stage_model_n);
-  // std::vector<std::vector<size_t>> positions_dispatched(rmi_2nd_stage_model_n);
-
-  // for (size_t key_i = 0; key_i < keys_n; ++key_i) {
-  //   size_t group_i_pred = rmi_1st_stage.predict(key_t(first[key_i]));
-  //   size_t next_stage_model_i = pick_next_stage_model(group_i_pred);
-  //   keys_dispatched[next_stage_model_i].push_back(key_t(first[key_i]));
-  //   positions_dispatched[next_stage_model_i].push_back(key_i);
-  // }
-
-  // for (size_t model_i = 0; model_i < rmi_2nd_stage_model_n; ++model_i) {
-  //   std::vector<key_t> &keys = keys_dispatched[model_i];
-  //   std::vector<size_t> &positions = positions_dispatched[model_i];
-  //   rmi_2nd_stage[model_i].prepare(keys, positions);
-  // }
 
   // train 1st stage
-  rmi_1st_stage.prepare_model(first, last, 0);
+  // rmi_1st_stage->prepare_model(first, last, 0);
   // train 2nd stage
   struct prepare_model_param{
     RandomIt first;
@@ -563,7 +582,7 @@ inline void TwoStageRMI<key_t, root_error_bound>::train_rmi(RandomIt first, Rand
   // param.start_pos = 0;
 
   // for (size_t key_i = 0; key_i < keys_n; ++key_i) {
-  //   size_t group_i_pred = rmi_1st_stage.predict(key_t(first[key_i]));
+  //   size_t group_i_pred = rmi_1st_stage->predict(key_t(first[key_i]));
   //   size_t next_stage_model_i = pick_next_stage_model(group_i_pred);
   //   if(next_stage_model_i != prev_stage_model_i) {
   //     param.last = first + key_i;
@@ -583,7 +602,7 @@ inline void TwoStageRMI<key_t, root_error_bound>::train_rmi(RandomIt first, Rand
   prepare_model_params[prev_stage_model_i].start_pos = 0;
 
   for (size_t key_i = 0; key_i < keys_n; ++key_i) {
-    size_t group_i_pred = rmi_1st_stage.predict(key_t(first[key_i]));
+    size_t group_i_pred = rmi_1st_stage->predict(key_t(first[key_i]));
     size_t next_stage_model_i = pick_next_stage_model(group_i_pred);
     if(next_stage_model_i != prev_stage_model_i) {
       prepare_model_params[next_stage_model_i].first = prepare_model_params[prev_stage_model_i].last = first + key_i;
@@ -593,23 +612,6 @@ inline void TwoStageRMI<key_t, root_error_bound>::train_rmi(RandomIt first, Rand
   }
   prepare_model_params[prev_stage_model_i].last = last;
 
-  // {
-  //   // Paraller train
-  //   size_t c = 0ull;
-  //   size_t parallelism = std::min<size_t>(omp_get_max_threads(), 20);
-  //   size_t chunk_size = rmi_2nd_stage_model_n / parallelism;
-
-  //   #pragma omp parallel for reduction(+:c) num_threads(parallelism)
-  //   for (auto i = 0ull; i < parallelism; ++i) {
-  //       size_t first = i * chunk_size;
-  //       size_t last = i == parallelism - 1 ? rmi_2nd_stage_model_n : first + chunk_size;
-  //       for (size_t model_i = first; model_i < last ; ++model_i) {
-  //         rmi_2nd_stage[model_i].prepare_model(prepare_model_params[model_i].first, 
-  //           prepare_model_params[model_i].last, prepare_model_params[model_i].start_pos);
-  //       }
-  //       c += last - first;
-  //   }
-  // }
   for (size_t model_i = 0; model_i < rmi_2nd_stage_model_n; ++model_i) {
     rmi_2nd_stage[model_i].prepare_model(prepare_model_params[model_i].first, 
             prepare_model_params[model_i].last, prepare_model_params[model_i].start_pos);
@@ -636,7 +638,7 @@ template<typename RandomIt>
 
 template <class key_t,  size_t root_error_bound>
 inline size_t TwoStageRMI<key_t, root_error_bound>::predict(const key_t &key) {
-  size_t pos_pred = rmi_1st_stage.predict(key);
+  size_t pos_pred = rmi_1st_stage->predict(key);
   size_t next_stage_model_i = pick_next_stage_model(pos_pred);
   return std::min(rmi_2nd_stage[next_stage_model_i].predict(key), keys_n);
 }
