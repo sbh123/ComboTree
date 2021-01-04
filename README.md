@@ -14,7 +14,13 @@
 
 **Dependence**
 ***PGM-Index***
-    [https:] https://github.com/gvinciguerra/PGM-index.git
+[https:] https://github.com/gvinciguerra/PGM-index.git
     
 ***Xindex***
-    [https:] https://ipads.se.sjtu.edu.cn:1312/opensource/xindex.git
+[https:] https://ipads.se.sjtu.edu.cn:1312/opensource/xindex.git
+<!-- [MKL]:
+添加intel源：
+yum -y install yum-utils
+yum-config-manager --add-repo https://yum.repos.intel.com/mkl/setup/intel-mkl.repo
+下载并安装MKL：
+yum install -y intel-mkl -->

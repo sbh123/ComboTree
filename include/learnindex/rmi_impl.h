@@ -12,8 +12,8 @@ typedef int omp_int_t;
 inline omp_int_t omp_get_max_threads() { return 1; }
 #endif
 
-#include "mkl.h"
-#include "mkl_lapacke.h"
+// #include "mkl.h"
+// #include "mkl_lapacke.h"
 
 
 #include "common.h"
@@ -169,87 +169,88 @@ void LinearModel<key_t>::prepare_model(
       }
     }
   }
-  if (model_key_ptrs.size() != 1 && useful_feat_index.size() == 0) {
-    COUT_THIS("all feats are the same");
-  }
-  size_t useful_feat_n = useful_feat_index.size();
-  bool use_bias = true;
+  assert(0);  // 暂时不考虑变长的key
+  // if (model_key_ptrs.size() != 1 && useful_feat_index.size() == 0) {
+  //   COUT_THIS("all feats are the same");
+  // }
+  // size_t useful_feat_n = useful_feat_index.size();
+  // bool use_bias = true;
 
-  // we may need multiple runs to avoid "not full rank" error
-  int fitting_res = -1;
-  while (fitting_res != 0) {
-    // use LAPACK to solve least square problem, i.e., to minimize ||b-Ax||_2
-    // where b is the actual positions, A is inputmodel_keys
-    int m = model_key_ptrs.size() / step;                  // number of samples
-    int n = use_bias ? useful_feat_n + 1 : useful_feat_n;  // number of features
-    double *a = (double *)malloc(m * n * sizeof(double));
-    double *b = (double *)malloc(std::max(m, n) * sizeof(double));
-    if (a == nullptr || b == nullptr) {
-      COUT_N_EXIT("cannot allocate memory for matrix a or b");
-    }
+  // // we may need multiple runs to avoid "not full rank" error
+  // int fitting_res = -1;
+  // while (fitting_res != 0) {
+  //   // use LAPACK to solve least square problem, i.e., to minimize ||b-Ax||_2
+  //   // where b is the actual positions, A is inputmodel_keys
+  //   int m = model_key_ptrs.size() / step;                  // number of samples
+  //   int n = use_bias ? useful_feat_n + 1 : useful_feat_n;  // number of features
+  //   double *a = (double *)malloc(m * n * sizeof(double));
+  //   double *b = (double *)malloc(std::max(m, n) * sizeof(double));
+  //   if (a == nullptr || b == nullptr) {
+  //     COUT_N_EXIT("cannot allocate memory for matrix a or b");
+  //   }
 
-    for (int sample_i = 0; sample_i < m; ++sample_i) {
-      // we only fit with useful features
-      for (size_t useful_feat_i = 0; useful_feat_i < useful_feat_n;
-           useful_feat_i++) {
-        a[sample_i * n + useful_feat_i] =
-            model_key_ptrs[sample_i * step][useful_feat_index[useful_feat_i]];
-      }
-      if (use_bias) {
-        a[sample_i * n + useful_feat_n] = 1;  // the extra 1
-      }
-      b[sample_i] = positions[sample_i * step];
-      assert(sample_i * step < model_key_ptrs.size());
-    }
+  //   for (int sample_i = 0; sample_i < m; ++sample_i) {
+  //     // we only fit with useful features
+  //     for (size_t useful_feat_i = 0; useful_feat_i < useful_feat_n;
+  //          useful_feat_i++) {
+  //       a[sample_i * n + useful_feat_i] =
+  //           model_key_ptrs[sample_i * step][useful_feat_index[useful_feat_i]];
+  //     }
+  //     if (use_bias) {
+  //       a[sample_i * n + useful_feat_n] = 1;  // the extra 1
+  //     }
+  //     b[sample_i] = positions[sample_i * step];
+  //     assert(sample_i * step < model_key_ptrs.size());
+  //   }
 
-    // fill the rest of b when m < n, otherwise nan value will cause failure
-    for (int b_i = m; b_i < n; b_i++) {
-      b[b_i] = 0;
-    }
+  //   // fill the rest of b when m < n, otherwise nan value will cause failure
+  //   for (int b_i = m; b_i < n; b_i++) {
+  //     b[b_i] = 0;
+  //   }
 
-    fitting_res = LAPACKE_dgels(LAPACK_ROW_MAJOR, 'N', m, n, 1 /* nrhs */, a,
-                                n /* lda */, b, 1 /* ldb, i.e. nrhs */);
+  //   fitting_res = LAPACKE_dgels(LAPACK_ROW_MAJOR, 'N', m, n, 1 /* nrhs */, a,
+  //                               n /* lda */, b, 1 /* ldb, i.e. nrhs */);
 
-    if (fitting_res > 0) {
-      // now we need to remove one column in matrix a
-      // note that fitting_res indexes starting with 1
-      if ((size_t)fitting_res > useful_feat_index.size()) {
-        use_bias = false;
-      } else {
-        size_t feat_i = fitting_res - 1;
-        useful_feat_index.erase(useful_feat_index.begin() + feat_i);
-        useful_feat_n = useful_feat_index.size();
-      }
+  //   if (fitting_res > 0) {
+  //     // now we need to remove one column in matrix a
+  //     // note that fitting_res indexes starting with 1
+  //     if ((size_t)fitting_res > useful_feat_index.size()) {
+  //       use_bias = false;
+  //     } else {
+  //       size_t feat_i = fitting_res - 1;
+  //       useful_feat_index.erase(useful_feat_index.begin() + feat_i);
+  //       useful_feat_n = useful_feat_index.size();
+  //     }
 
-      if (useful_feat_index.size() == 0 && use_bias == false) {
-        COUT_N_EXIT(
-            "impossible! cannot fail when there is only 1 bias column in "
-            "matrix a");
-      }
-    } else if (fitting_res < 0) {
-      printf("%i-th parameter had an illegal value\n", -fitting_res);
-      exit(-2);
-    }
+  //     if (useful_feat_index.size() == 0 && use_bias == false) {
+  //       COUT_N_EXIT(
+  //           "impossible! cannot fail when there is only 1 bias column in "
+  //           "matrix a");
+  //     }
+  //   } else if (fitting_res < 0) {
+  //     printf("%i-th parameter had an illegal value\n", -fitting_res);
+  //     exit(-2);
+  //   }
 
-    // set weights to all zero
-    for (size_t weight_i = 0; weight_i < weights.size(); weight_i++) {
-      weights[weight_i] = 0;
-    }
-    // set weights of useful features
-    for (size_t useful_feat_i = 0; useful_feat_i < useful_feat_index.size();
-         useful_feat_i++) {
-      weights[useful_feat_index[useful_feat_i]] = b[useful_feat_i];
-    }
-    // set bias
-    if (use_bias) {
-      size_t key_len = key_t::model_key_size();
-      weights[key_len] = b[n - 1];
-    }
+  //   // set weights to all zero
+  //   for (size_t weight_i = 0; weight_i < weights.size(); weight_i++) {
+  //     weights[weight_i] = 0;
+  //   }
+  //   // set weights of useful features
+  //   for (size_t useful_feat_i = 0; useful_feat_i < useful_feat_index.size();
+  //        useful_feat_i++) {
+  //     weights[useful_feat_index[useful_feat_i]] = b[useful_feat_i];
+  //   }
+  //   // set bias
+  //   if (use_bias) {
+  //     size_t key_len = key_t::model_key_size();
+  //     weights[key_len] = b[n - 1];
+  //   }
 
-    free(a);
-    free(b);
-  }
-  assert(fitting_res == 0);
+  //   free(a);
+  //   free(b);
+  // }
+  // assert(fitting_res == 0);
 }
 
 template <class key_t>

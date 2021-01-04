@@ -9,10 +9,10 @@
 
 #define USE_STD_ITER
 
+#include "nvm_alloc.h"
 #include "learnindex/rmi_impl.h"
 #include "learnindex/learn_index.h"
 #include "fast-fair/btree.h"
-
 #include "random.h"
 
 using combotree::Random;
@@ -27,13 +27,13 @@ using FastFair::btree;
 
 typedef RMI::Key_64 rmi_key_t;
 
-static ApproxPos near_search_key(const std::vector<uint64_t> &keys, const uint64_t &key, size_t pos) {
+static ApproxPos near_search_key(const uint64_t *keys, const uint64_t &key, size_t pos, size_t size) {
     long lo, hi;
     if(keys[pos] < key) {
         lo = pos;
         hi = pos + 16;
-        while(hi < keys.size() && keys[hi] < key) { lo = hi; hi += 16; }
-        if(hi > keys.size()) hi = keys.size();
+        while(hi < size && keys[hi] < key) { lo = hi; hi += 16; }
+        if(hi > size) hi = size;
     } else {
         hi = pos;
         lo = pos - 16;
@@ -44,7 +44,7 @@ static ApproxPos near_search_key(const std::vector<uint64_t> &keys, const uint64
 }
 
 int main(int argc, char *argv[]) {
-    int size = 100000;
+    size_t size = 100000;
     if(argc > 1) {
         size = atoi(argv[1]);
     }
@@ -56,17 +56,19 @@ int main(int argc, char *argv[]) {
         TwoStageRMI<Key_64> *rmi_index = nullptr;
         LearnIndex *learn_index = nullptr;
         btree *btree = new FastFair::btree();
-        std::vector<uint64_t> pgm_keys;
+        // std::vector<uint64_t> pgm_keys;
+        uint64_t *pgm_keys = (uint64_t *)NVM::data_alloc->alloc(size * sizeof(uint64_t));
         for(int i = 0; i < size; i++) {
             uint64_t key = rnd.Next();
-            pgm_keys.push_back(key);
+            pgm_keys[i] = (key);
             btree->btree_insert(key, (char *)key);
         }
 
-        std::sort(pgm_keys.begin(), pgm_keys.end());
+        std::sort(pgm_keys, pgm_keys + size);
+
         {
             auto startTime = std::chrono::system_clock::now();
-            pgm_index = new PGMIndex<uint64_t, epsilon>(pgm_keys);
+            pgm_index = new PGMIndex<uint64_t, epsilon>(pgm_keys, pgm_keys + size);
             auto endTime = std::chrono::system_clock::now();
             std::cout << "[PGM]: PGM Index train cost: " 
                 << std::chrono::duration_cast<std::chrono::microseconds>(endTime - startTime).count() / 1e6
@@ -76,7 +78,7 @@ int main(int argc, char *argv[]) {
         }
         {
             auto startTime = std::chrono::system_clock::now();
-            rmi_index = new TwoStageRMI<Key_64>(pgm_keys.begin(), pgm_keys.end());
+            rmi_index = new TwoStageRMI<Key_64>(pgm_keys, pgm_keys + size);
             auto endTime = std::chrono::system_clock::now();
             std::cout << "[RMI]: RMI Index train cost: " 
                 << std::chrono::duration_cast<std::chrono::microseconds>(endTime - startTime).count() / 1e6
@@ -87,7 +89,7 @@ int main(int argc, char *argv[]) {
 
         {
             auto startTime = std::chrono::system_clock::now();
-            learn_index = new LearnIndex(pgm_keys.begin(), pgm_keys.end());
+            learn_index = new LearnIndex(pgm_keys, pgm_keys + size);
             auto endTime = std::chrono::system_clock::now();
             std::cout << "[Learn-Index]: Learn-Index train cost: " 
                 << std::chrono::duration_cast<std::chrono::microseconds>(endTime - startTime).count() / 1e6
@@ -99,10 +101,10 @@ int main(int argc, char *argv[]) {
         std::vector<double> rmiDurations;
         std::vector<double> learnDurations;
         std::vector<double> btreeDurations;
-        for(size_t i = 0; i < pgm_keys.size(); i += 10) {
+        for(size_t i = 0; i < size; i += 10) {
             auto startTime = std::chrono::system_clock::now();
             auto range = pgm_index->search(pgm_keys[i]);
-            int pos = std::lower_bound(pgm_keys.begin() + range.lo,  pgm_keys.begin() + range.hi, pgm_keys[i]) - pgm_keys.begin();
+            int pos = std::lower_bound(pgm_keys + range.lo,  pgm_keys + range.hi, pgm_keys[i]) - pgm_keys;
             // auto range2 = learn_index.search(pgm_keys[i]);
             auto endTime = std::chrono::system_clock::now();
             uint64_t ns = std::chrono::duration_cast<std::chrono::nanoseconds>(endTime - startTime).count();
@@ -110,11 +112,11 @@ int main(int argc, char *argv[]) {
         }
         std::cout << "[PGM]: PGM search finished. " << std::endl;
 
-        for(size_t i = 0; i < pgm_keys.size(); i += 10) {
+        for(size_t i = 0; i < size; i += 10) {
             auto startTime = std::chrono::system_clock::now();
             int predict_pos = rmi_index->predict(rmi_key_t(pgm_keys[i]));
-            auto range = near_search_key(pgm_keys, pgm_keys[i], predict_pos);
-            int pos = std::lower_bound(pgm_keys.begin() + range.lo,  pgm_keys.begin() + range.hi, pgm_keys[i]) - pgm_keys.begin();
+            auto range = near_search_key(pgm_keys, pgm_keys[i], predict_pos, size);
+            int pos = std::lower_bound(pgm_keys + range.lo,  pgm_keys + range.hi, pgm_keys[i]) - pgm_keys;
             auto endTime = std::chrono::system_clock::now();
             uint64_t ns = std::chrono::duration_cast<std::chrono::nanoseconds>(endTime - startTime).count();
             rmiDurations.push_back(1.0 * ns);
@@ -122,10 +124,10 @@ int main(int argc, char *argv[]) {
 
         std::cout << "[RMI]: RMI search finished. " << std::endl;
 
-        for(size_t i = 0; i < pgm_keys.size(); i += 10) {
+        for(size_t i = 0; i < size; i += 10) {
             auto startTime = std::chrono::system_clock::now();
             auto range = learn_index->search(pgm_keys[i]);
-            int pos = std::lower_bound(pgm_keys.begin() + range.lo,  pgm_keys.begin() + range.hi, pgm_keys[i]) - pgm_keys.begin();
+            int pos = std::lower_bound(pgm_keys + range.lo,  pgm_keys + range.hi, pgm_keys[i]) - pgm_keys;
             auto endTime = std::chrono::system_clock::now();
             uint64_t ns = std::chrono::duration_cast<std::chrono::nanoseconds>(endTime - startTime).count();
             learnDurations.push_back(1.0 * ns);
@@ -133,7 +135,7 @@ int main(int argc, char *argv[]) {
 
         std::cout << "[LI]: Learn-Index search finished. " << std::endl;
 
-        for(size_t i = 0; i < pgm_keys.size(); i += 10) {
+        for(size_t i = 0; i < size; i += 10) {
             auto startTime = std::chrono::system_clock::now();
             char *pvalue = btree->btree_search(pgm_keys[i]);
             auto endTime = std::chrono::system_clock::now();
@@ -161,6 +163,7 @@ int main(int argc, char *argv[]) {
         delete rmi_index;
         delete pgm_index;
         delete btree;
+        NVM::data_alloc->Free(pgm_keys, size * sizeof(uint64_t));
     }
     NVM::env_exit();
     return 0;
