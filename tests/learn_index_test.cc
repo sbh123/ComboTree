@@ -64,7 +64,8 @@ int main(int argc, char *argv[]) {
             btree->btree_insert(key, (char *)key);
         }
 
-        std::sort(pgm_keys, pgm_keys + size);
+        // std::sort(pgm_keys, pgm_keys + size);
+        btree->btree_search_range(0, UINT64_MAX, pgm_keys);
 
         {
             auto startTime = std::chrono::system_clock::now();
