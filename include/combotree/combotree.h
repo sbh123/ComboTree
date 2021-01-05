@@ -30,7 +30,7 @@ class ComboTree {
   bool Update(uint64_t key, uint64_t value);
   bool Get(uint64_t key, uint64_t& value) const;
   bool Delete(uint64_t key);
-  size_t Scan(uint64_t min_key, uint64_t max_key, size_t max_size,
+  size_t Scan(uint64_t start_key, size_t max_size,
       std::vector<std::pair<uint64_t, uint64_t>>& results);
   size_t Scan(uint64_t min_key, uint64_t max_key, size_t max_size,
       Pair* results);

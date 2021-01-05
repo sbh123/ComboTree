@@ -28,17 +28,44 @@ using FastFair::btree;
 typedef RMI::Key_64 rmi_key_t;
 
 static ApproxPos near_search_key(const uint64_t *keys, const uint64_t &key, size_t pos, size_t size) {
-    long lo, hi;
-    if(keys[pos] < key) {
+    // long lo, hi;
+    // if(keys[pos] < key) {
+    //     lo = pos;
+    //     hi = pos + 16;
+    //     while(hi < size && keys[hi] < key) { lo = hi; hi += 16; }
+    //     if(hi > size) hi = size;
+    // } else {
+    //     hi = pos;
+    //     lo = pos - 16;
+    //     while(lo > 0 && keys[lo] > key) { hi = lo; lo -= 16; }
+    //     if(lo < 0) lo = 0;
+    // }
+    // return {(lo + hi) / 2, lo, hi};
+    int lo, hi;
+    if (keys[pos] <= key) {
+        size_t step = 1;
         lo = pos;
-        hi = pos + 16;
-        while(hi < size && keys[hi] < key) { lo = hi; hi += 16; }
-        if(hi > size) hi = size;
+        hi = lo + step;
+        while (hi < (int)size && keys[hi] <= key) {
+            step = step * 2;
+            lo = hi;
+            hi = lo + step;
+        }  // after this while loop, hi might be >= size
+        if (hi > (int)size - 1) {
+            hi = size - 1;
+        }
     } else {
+        size_t step = 1;
         hi = pos;
-        lo = pos - 16;
-        while(lo > 0 && keys[lo] > key) { hi = lo; lo -= 16; }
-        if(lo < 0) lo = 0;
+        lo = hi - step;
+        while (lo >= 0 && keys[lo] > key) {
+            step = step * 2;
+            hi = lo;
+            lo = hi - step;
+        }  // after this while loop, lo might be < 0
+        if (lo < 0) {
+            lo = -1;
+        }
     }
     return {(lo + hi) / 2, lo, hi};
 }

@@ -24,3 +24,6 @@ yum -y install yum-utils
 yum-config-manager --add-repo https://yum.repos.intel.com/mkl/setup/intel-mkl.repo
 下载并安装MKL：
 yum install -y intel-mkl -->
+
+**YCSB**
+./ycsbc -db combotree -threads 1 -P ../include/ycsb/workloads/workloada.spec

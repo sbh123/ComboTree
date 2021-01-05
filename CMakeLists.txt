@@ -151,3 +151,8 @@ add_test(bucket_test bucket_test)
 ## microbench
 add_executable(microbench tests/microbench.cc)
 add_test(microbench microbench)
+
+## ycsb
+add_executable(ycsb tests/ycsb.cc)
+target_link_libraries(ycsb combotree)
+add_test(ycsb ycsb)

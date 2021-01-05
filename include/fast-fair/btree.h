@@ -42,7 +42,7 @@ inline void clflush(char *data, int len)
 namespace FastFair
 {
 
-const size_t NVM_ValueSize = 256;
+// const size_t NVM_ValueSize = 256;
 static void alloc_memalign(void **ret, size_t alignment, size_t size) {
     // posix_memalign(ret, alignment, size);
     *ret =  NVM::btree_alloc->alloc(size);
@@ -66,7 +66,7 @@ class btree {
     char *btree_search(entry_key_t);
     page *btree_search_leaf(entry_key_t);
     void btree_search_range(entry_key_t, entry_key_t, unsigned long *); 
-    void btree_search_range(entry_key_t, entry_key_t, std::vector<std::string> &values, int &size); 
+    void btree_search_range(entry_key_t, entry_key_t, std::vector<pair<entry_key_t, uint64_t>> &result, int &size); 
     void btree_search_range(entry_key_t, entry_key_t, void **values, int &size); 
     void printAll();
     void PrintInfo();
@@ -155,7 +155,8 @@ class page{
       return hdr.level;
     }
 
-    void linear_search_range(entry_key_t min, entry_key_t max, std::vector<std::string> &values, int &size);
+    void linear_search_range(entry_key_t min, entry_key_t max, 
+          std::vector<pair<entry_key_t, uint64_t>> &result, int &size);
     void linear_search_range(entry_key_t min, entry_key_t max, void **values, int &size);
 
 
@@ -843,7 +844,8 @@ static inline page* NewBpNode() {
     return new page();
 }
 
-void page::linear_search_range(entry_key_t min, entry_key_t max, std::vector<std::string> &values, int &size) {
+void page::linear_search_range(entry_key_t min, entry_key_t max, 
+      std::vector<pair<uint64_t, uint64_t>> &result, int &size) {
     int i, off = 0;
     uint8_t previous_switch_counter;
     page *current = this;
@@ -864,7 +866,7 @@ void page::linear_search_range(entry_key_t min, entry_key_t max, std::vector<std
                             if(tmp_key == current->records[0].key) {
                                 if(tmp_ptr) {
                                     // buf[off++] = (unsigned long)tmp_ptr;
-                                    values.push_back(string(tmp_ptr, NVM_ValueSize));
+                                    result.push_back({tmp_key, (uint64_t)tmp_ptr});
                                     off++;
                                     if(off >= size) {
                                         return ;
@@ -886,7 +888,7 @@ void page::linear_search_range(entry_key_t min, entry_key_t max, std::vector<std
                                 if(tmp_key == current->records[i].key) {
                                     if(tmp_ptr) {
                                         // buf[off++] = (unsigned long)tmp_ptr;
-                                        values.push_back(string(tmp_ptr, NVM_ValueSize));
+                                        result.push_back({tmp_key, (uint64_t)tmp_ptr});
                                         off++;
                                         if(off >= size) {
                                             return ;
@@ -910,7 +912,7 @@ void page::linear_search_range(entry_key_t min, entry_key_t max, std::vector<std
                                 if(tmp_key == current->records[i].key) {
                                     if(tmp_ptr) {
                                         // buf[off++] = (unsigned long)tmp_ptr;
-                                        values.push_back(string(tmp_ptr, NVM_ValueSize));
+                                        result.push_back({tmp_key, (uint64_t)tmp_ptr});
                                         off++;
                                         if(off >= size) {
                                             return ;
@@ -932,7 +934,7 @@ void page::linear_search_range(entry_key_t min, entry_key_t max, std::vector<std
                             if(tmp_key == current->records[0].key) {
                                 if(tmp_ptr) {
                                     // buf[off++] = (unsigned long)tmp_ptr;
-                                    values.push_back(string(tmp_ptr, NVM_ValueSize));
+                                    result.push_back({tmp_key, (uint64_t)tmp_ptr});
                                     off++;
                                     if(off >= size) {
                                         return ;
@@ -1234,7 +1236,8 @@ void btree::btree_search_range
   }
 }
 
-void btree::btree_search_range(entry_key_t min, entry_key_t max, std::vector<std::string> &values, int &size) {
+void btree::btree_search_range(entry_key_t min, entry_key_t max, 
+    std::vector<pair<entry_key_t, uint64_t>> &result, int &size) {
     page *p = (page *)root;
 
     while(p) {
@@ -1244,7 +1247,7 @@ void btree::btree_search_range(entry_key_t min, entry_key_t max, std::vector<std
         }
         else {
         // Found a leaf
-            p->linear_search_range(min, max, values, size);
+            p->linear_search_range(min, max, result, size);
 
         break;
         }
