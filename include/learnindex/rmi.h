@@ -26,7 +26,7 @@ public:
                         const std::vector<size_t> &positions);
                         
     template <typename RandomIt>
-    void prepare_model(RandomIt &first, RandomIt &last, size_t start);
+    void prepare_model(RandomIt &first, size_t start, size_t size);
 
     size_t predict(const key_t &key) const;
     size_t get_error_bound(const std::vector<key_t> &keys,

@@ -63,11 +63,10 @@ void LinearModel<key_t>::prepare(
 
 template <class key_t>
 template <typename RandomIt>
-void LinearModel<key_t>::prepare_model(
-    RandomIt &first, RandomIt &last, size_t start) {
-
+void LinearModel<key_t>::prepare_model(RandomIt &first, size_t start, size_t size) 
+{
   size_t key_len = key_t::model_key_size();
-  size_t nr_keys = iter_distance(first, last);
+  size_t nr_keys = size;
   if (nr_keys == 0) return;
   if (nr_keys == 1) {
     LinearModel<key_t>::weights[key_len] = start;
@@ -329,7 +328,7 @@ TwoStageRMI<key_t, root_error_bound>::~TwoStageRMI() {
 template <class key_t,  size_t root_error_bound>
 void TwoStageRMI<key_t, root_error_bound>::init(const std::vector<key_t> &train_keys) {
     keys_n = train_keys.size();
-    adjust_rmi(train_keys);
+    adjust_rmi(train_keys.begin(), train_keys.end());
 }
 
 
@@ -454,12 +453,12 @@ void TwoStageRMI<key_t, root_error_bound>::adjust_rmi(RandomIt first, RandomIt l
                           group_n_per_model_per_rmi_error_experience_factor)));
   }
 
-  DEBUG_THIS("--- start train stage one");
+  DEBUG_THIS("--- start train stage one keys: " << keys_n);
   if(rmi_1st_stage) {
     NVM::common_alloc->Free(rmi_1st_stage, sizeof(linear_model_t));
   }
   rmi_1st_stage = (linear_model_t *)NVM::common_alloc->alloc(sizeof(linear_model_t));
-  rmi_1st_stage->prepare_model(first, last, 0);
+  rmi_1st_stage->prepare_model(first, 0, keys_n);
 
   DEBUG_THIS("--- start train group n "  << keys_n
             <<  " Modle size:"<< model_n_trial);
@@ -473,13 +472,13 @@ void TwoStageRMI<key_t, root_error_bound>::adjust_rmi(RandomIt first, RandomIt l
   for (; trial_i < max_trial_n; trial_i++) {
     std::vector<double> errors;
     max_error = 0;
+    mean_error = 0;
     for (size_t group_i = 0; group_i < keys_n; group_i++) {
-      errors.push_back(
-          std::abs((double)group_i - predict(key_t(first[group_i]))) + 1);
-      max_error = std::max(max_error, (double)group_i - predict(key_t(first[group_i])));
+      double error = std::abs((double)group_i - predict(key_t(first[group_i]))) + 1;
+      mean_error += error;
+      max_error = std::max(max_error, error);
     }
-    mean_error =
-        std::accumulate(errors.begin(), errors.end(), 0.0) / errors.size();
+    mean_error = mean_error / keys_n;
     
     if (mean_error > root_error_bound) {
       if (rmi_2nd_stage_model_n == max_model_n) {
@@ -573,8 +572,8 @@ inline void TwoStageRMI<key_t, root_error_bound>::train_rmi(RandomIt first, Rand
   // train 2nd stage
   struct prepare_model_param{
     RandomIt first;
-    RandomIt last;
     size_t start_pos;
+    size_t size;
   };
   // prepare_model_param param;
   // size_t prev_stage_model_i = 0;
@@ -606,16 +605,18 @@ inline void TwoStageRMI<key_t, root_error_bound>::train_rmi(RandomIt first, Rand
     size_t group_i_pred = rmi_1st_stage->predict(key_t(first[key_i]));
     size_t next_stage_model_i = pick_next_stage_model(group_i_pred);
     if(next_stage_model_i != prev_stage_model_i) {
-      prepare_model_params[next_stage_model_i].first = prepare_model_params[prev_stage_model_i].last = first + key_i;
+      prepare_model_params[prev_stage_model_i].size = key_i - prepare_model_params[prev_stage_model_i].start_pos;
+      prepare_model_params[next_stage_model_i].first = first + key_i;
       prepare_model_params[next_stage_model_i].start_pos = key_i;
       prev_stage_model_i = next_stage_model_i;
     }
   }
-  prepare_model_params[prev_stage_model_i].last = last;
+  // prepare_model_params[prev_stage_model_i].last = last;
+  prepare_model_params[prev_stage_model_i].size = keys_n - prepare_model_params[prev_stage_model_i].start_pos;
 
   for (size_t model_i = 0; model_i < rmi_2nd_stage_model_n; ++model_i) {
     rmi_2nd_stage[model_i].prepare_model(prepare_model_params[model_i].first, 
-            prepare_model_params[model_i].last, prepare_model_params[model_i].start_pos);
+            prepare_model_params[model_i].start_pos, prepare_model_params[model_i].size);
   }
 }
 
