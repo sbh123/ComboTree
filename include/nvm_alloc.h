@@ -27,6 +27,30 @@ static inline void *PmemMapFile(const std::string &file_name, const size_t file_
     }
     return pmem_addr_;
 }
+
+#define USE_MEM
+#ifdef USE_MEM
+class Alloc {
+
+public:
+    Alloc(const std::string &file_name, const size_t file_size) {}
+
+    virtual ~Alloc() {}
+
+    void *alloc(size_t size)
+    {
+        return malloc(size);
+    }
+
+    void Free(void *p, size_t size) {
+        free(p);
+    }
+
+    void Free(void *p) {
+        free(p);
+    }
+};
+#else
 class Alloc {
 
 public:
@@ -87,7 +111,7 @@ private:
     static int file_id_;
     std::mutex lock_;
 };
-
+#endif
 extern Alloc *common_alloc;
 extern Alloc *btree_alloc;
 extern Alloc *data_alloc;
