@@ -159,9 +159,9 @@ int main(int argc, const char *argv[])
           sum += n.get();
       }
       double duration = timer.End();
-      cerr << "# Loading records:\t" << sum << " throughput (KTPS)" <<endl;
-      cerr << props["dbname"] << "\tLoad thread:" << '\t' << 1 << '\t';
-      cerr << total_ops / duration / 1000 << endl << endl;
+      cout << "# Loading records:\t" << sum << " throughput (KTPS)" <<endl;
+      cout << props["dbname"] << "\tLoad thread:" << '\t' << 1 << '\t';
+      cout << total_ops / duration / 1000 << endl << endl;
     }
 
     for(size_t i = 0; i < ArrayLen(workloads); i ++) {
@@ -187,9 +187,9 @@ int main(int argc, const char *argv[])
           sum += n.get();
       }
       double duration = timer.End();
-      cerr << "# Transaction throughput (KTPS)" << endl;
-      cerr << props["dbname"] << '\t' << workloads[i] << '\t' << num_threads << '\t';
-      cerr << total_ops / duration / 1000 << endl << endl;
+      cout << "# Transaction throughput (KTPS)" << endl;
+      cout << props["dbname"] << '\t' << workloads[i] << '\t' << num_threads << '\t';
+      cout << total_ops / duration / 1000 << endl << endl;
     }
     delete db;
     NVM::env_exit();
