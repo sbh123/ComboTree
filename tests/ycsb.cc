@@ -146,7 +146,8 @@ int main(int argc, const char *argv[])
       wl.Init(props);
       // Loads data
       total_ops = stoi(props[ycsbc::CoreWorkload::RECORD_COUNT_PROPERTY]);
-
+      utils::Timer<double> timer;
+      timer.Start();
       for (int i = 0; i < 1; ++i) {
           actual_ops.emplace_back(async(launch::async,
               YCSB_Run, db, &wl, total_ops / num_threads, true));
@@ -157,7 +158,10 @@ int main(int argc, const char *argv[])
           assert(n.valid());
           sum += n.get();
       }
-      cerr << "# Loading records:\t" << sum << endl;
+      double duration = timer.End();
+      cerr << "# Loading records:\t" << sum << " throughput (KTPS)" <<endl;
+      cerr << props["dbname"] << "\tLoad thread:" << '\t' << 1 << '\t';
+      cerr << total_ops / duration / 1000 << endl << endl;
     }
 
     for(size_t i = 0; i < ArrayLen(workloads); i ++) {
