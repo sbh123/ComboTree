@@ -18,7 +18,7 @@ const char *workloads[] = {
   "workloadb.spec",
   "workloadc.spec",
   "workloadd.spec",
-  // "workloade.spec",
+  "workloade.spec",
   "workloadf.spec",
 };
 

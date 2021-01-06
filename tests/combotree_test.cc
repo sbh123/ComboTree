@@ -90,20 +90,39 @@ int main(void) {
 
   // NoSort Scan
   {
-    ComboTree::NoSortIter no_sort_iter(tree, 100);
-    for (int i = 0; i < 100; ++i) {
-      std::cout << no_sort_iter.key() << " " << no_sort_iter.value() << std::endl;
-      assert(no_sort_iter.next());
+    std::vector<uint64_t> scan_keys;
+    {
+      ComboTree::NoSortIter no_sort_iter(tree, 100);
+      for (int i = 0; i < 100; ++i) {
+        // std::cout << no_sort_iter.key() << " " << no_sort_iter.value() << std::endl;
+        scan_keys.push_back(no_sort_iter.key());
+        assert(no_sort_iter.next());
+      }
     }
+
+    std::cout << "Scan finished. start Update." << std::endl;
+    for (int i = 0; i < 100; ++i) {
+      tree->Update(scan_keys[i], scan_keys[i] + 1);
+    }
+    std::cout << "Update finished." << std::endl;
   }
 
   {
     // Sort Scan
-    ComboTree::Iter sort_iter(tree, 100);
-    for (int i = 0; i < 100; ++i) {
-      std::cout << sort_iter.key() << " " << sort_iter.value() << std::endl;
-      assert(sort_iter.next());
+    std::vector<uint64_t> scan_keys;
+    {
+      ComboTree::Iter sort_iter(tree, 100);
+      for (int i = 0; i < 100; ++i) {
+        // std::cout << sort_iter.key() << " " << sort_iter.value() << std::endl;
+        scan_keys.push_back(sort_iter.key());
+        assert(sort_iter.next());
+      }
     }
+    std::cout << "Scan finished. start Update." << std::endl;
+    for (int i = 0; i < 100; ++i) {
+      tree->Update(scan_keys[i], scan_keys[i] + 1);
+    }
+    std::cout << "Update finished." << std::endl;
   }
   NVM::env_exit();
   return 0;

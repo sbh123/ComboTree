@@ -521,7 +521,8 @@ class ComboTree::NoSortIterImpl {
   }
 
   ~NoSortIterImpl() {
-    if (biter_)
+    LOG(Debug::INFO, "Call %p.", biter_);
+    if (biter_) 
       delete biter_;
   }
 
@@ -551,6 +552,8 @@ class ComboTree::NoSortIterImpl {
 ComboTree::Iter::Iter(const ComboTree* tree) : pimpl_(new IterImpl(tree)) {}
 ComboTree::Iter::Iter(const ComboTree* tree, uint64_t start_key)
   : pimpl_(new IterImpl(tree, start_key)) {}
+ComboTree::Iter::~Iter() { if(pimpl_) delete pimpl_;}
+
 uint64_t ComboTree::Iter::key() const   { return pimpl_->key(); }
 uint64_t ComboTree::Iter::value() const { return pimpl_->value(); }
 bool ComboTree::Iter::next()            { return pimpl_->next(); }
@@ -561,6 +564,7 @@ bool ComboTree::Iter::end() const       { return pimpl_->end(); }
 ComboTree::NoSortIter::NoSortIter(const ComboTree* tree) : pimpl_(new NoSortIterImpl(tree)) {}
 ComboTree::NoSortIter::NoSortIter(const ComboTree* tree, uint64_t start_key)
   : pimpl_(new NoSortIterImpl(tree, start_key)) {}
+ComboTree::NoSortIter::~NoSortIter() { if(pimpl_) delete pimpl_;}
 uint64_t ComboTree::NoSortIter::key() const   { return pimpl_->key(); }
 uint64_t ComboTree::NoSortIter::value() const { return pimpl_->value(); }
 bool ComboTree::NoSortIter::next()            { return pimpl_->next(); }
@@ -592,18 +596,14 @@ bool ComboTree::ValidPoolDir_() {
 
 size_t ComboTree::Scan(uint64_t start_key, size_t max_size,
       std::vector<std::pair<uint64_t, uint64_t>>& results) {
-    std::cout << "scan " << start_key << ": " << max_size << " record."<< std::endl;
     ComboTree::Iter iter(this, start_key);
     size_t scan_count = 0;
-    std::cout << "scan " << start_key << ": " << max_size << " record."<< std::endl;
     for (size_t j = 0; j < max_size; ++j) {
       results.push_back({iter.key(), iter.value()});
-      // std::cout << "scan " << start_key << ": " << j << " record."<< std::endl;
       scan_count ++;
       if (!iter.next())
         break;
     }
-    std::cout << "scan " << start_key << ": " << scan_count << " record finshed.."<< std::endl;
     return scan_count;
 }
 } // namespace combotree

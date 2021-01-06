@@ -26,4 +26,4 @@ yum-config-manager --add-repo https://yum.repos.intel.com/mkl/setup/intel-mkl.re
 yum install -y intel-mkl -->
 
 **YCSB**
-./ycsb -db combotree -threads 1 -P ../include/ycsb/workloads/workloada.spec
+./ycsb -db combotree -threads 1 -P ../include/ycsb/workloads/
