@@ -210,6 +210,8 @@ inline int KvClient<db_t>::TransactionReadModifyWrite() {
 
 template <class db_t>
 inline int KvClient<db_t>::TransactionScan() {
+  std::cout << "Don scan..." << std::endl;
+  flush(std::cout);
   const uint64_t &key = workload_.NextTransactionIntKey();
   int len = workload_.NextScanLength();
   std::vector<std::pair<uint64_t, uint64_t>> results;

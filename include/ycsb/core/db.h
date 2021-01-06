@@ -93,6 +93,31 @@ class DB {
   virtual ~DB() { }
 };
 
+class KvDB {
+ public:
+  typedef std::pair<uint64_t, uint64_t> KVPair;
+  static const int kOK = 0;
+  static const int kErrorNoData = 1;
+  static const int kErrorConflict = 2;
+  ///
+  /// Initializes any state for accessing this DB.
+  /// Called once per DB client (thread); there is a single DB instance globally.
+  ///
+  virtual void Init() { }
+  ///
+  /// Clears any state for accessing this DB.
+  /// Called once per DB client (thread); there is a single DB instance globally.
+  ///
+  virtual void Close() { }
+  virtual int Put(uint64_t key, uint64_t value) = 0;
+  virtual int Get(uint64_t key, uint64_t &value) = 0;
+  virtual int Update(uint64_t key, uint64_t value) = 0;
+  virtual int Scan(uint64_t start_key, int len, std::vector<std::pair<uint64_t, uint64_t>>& results) = 0;
+  // virtual int Delete(const std::string &table, const std::string &key) = 0;
+  
+  virtual ~KvDB() { }
+};
+
 } // ycsbc
 
 #endif // YCSB_C_DB_H_

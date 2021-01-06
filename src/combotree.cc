@@ -592,16 +592,18 @@ bool ComboTree::ValidPoolDir_() {
 
 size_t ComboTree::Scan(uint64_t start_key, size_t max_size,
       std::vector<std::pair<uint64_t, uint64_t>>& results) {
-  ComboTree::Iter iter(this, start_key);
+    std::cout << "scan " << start_key << ": " << max_size << " record."<< std::endl;
+    ComboTree::Iter iter(this, start_key);
     size_t scan_count = 0;
+    std::cout << "scan " << start_key << ": " << max_size << " record."<< std::endl;
     for (size_t j = 0; j < max_size; ++j) {
-      assert(iter.key() == start_key + j);
-      assert(iter.value() == start_key + j);
       results.push_back({iter.key(), iter.value()});
+      // std::cout << "scan " << start_key << ": " << j << " record."<< std::endl;
       scan_count ++;
       if (!iter.next())
         break;
     }
+    std::cout << "scan " << start_key << ": " << scan_count << " record finshed.."<< std::endl;
     return scan_count;
 }
 } // namespace combotree

@@ -23,6 +23,7 @@ template <typename Value>
 class DiscreteGenerator : public Generator<Value> {
  public:
   DiscreteGenerator() : sum_(0) { }
+  void Clear() {values_.clear(); sum_ = 0;};
   void AddValue(Value value, double weight);
 
   Value Next();
