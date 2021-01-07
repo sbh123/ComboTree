@@ -11,6 +11,7 @@
 #define USE_STD_ITER
 
 #include "learnindex/pgm_index_nvm.hpp"
+#include "learnindex/pgm_index_dynamic.hpp"
 
 #include "../src/combotree_config.h"
 #include "nvm_alloc.h"
@@ -21,6 +22,7 @@ using combotree::Random;
 using PGM_NVM::PGMIndex;
 using NVM::Alloc;
 
+void pgm_dynamic_test();
 int main() {
     Random rnd(0, UINT64_MAX - 1);
     NVM::env_init();
@@ -37,7 +39,7 @@ int main() {
         // free(index_data);
     }
     {
-        int size = 10000000;
+        int size = 10000;
         uint64_t *index_data = (uint64_t *)malloc(size * sizeof(uint64_t));
         for(int i = 0; i < size; i++) {
             index_data[i] = rnd.Next();
@@ -67,6 +69,40 @@ int main() {
         summaryStats(pgmDurations, "PGM");
         free(index_data);
     }
+    pgm_dynamic_test();
     NVM::env_exit();
     return 0;
-}                        
+}                       
+
+void pgm_dynamic_test()
+{
+    typedef uint64_t Key_t;
+    typedef char * Value_t;
+
+    using PGMType = PGM_OLD_NVM::PGMIndex<uint64_t>;
+    typedef pgm::DynamicPGMIndex<Key_t, Value_t, PGMType> db_t;
+    Random rnd(0, UINT64_MAX - 1);
+    db_t *db = new db_t();
+    std::cout<< "DB: " << db << std::endl;
+    int test_num =1000000;
+    std::vector<uint64_t> keys;
+    for(int i = 0; i < test_num; i ++) {
+        uint64_t key = rnd.Next();
+        db->insert(key, (char *)key);
+        keys.push_back(key);
+    }
+    for(int i = 0; i < test_num; i ++) {
+        auto it = db->find(keys[i]);
+        assert(it->first == (uint64_t)(it->second));
+    }
+    std::distance(db->begin(), db->end());
+    for(auto it = db->begin(); it != db->end(); ++ it) {
+        // std::cout << "Key: " << it->first << std::endl;
+    }
+    for(int i = 0; i < 10; i ++) {
+        db->erase(keys[i]);
+    }
+    delete db;
+    std::vector<int> intvec;
+    intvec.insert(intvec.begin(), 0);
+}

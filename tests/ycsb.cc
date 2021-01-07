@@ -4,10 +4,11 @@
 #include <cstring>
 #include <future>
 #include "ycsb/ycsb-c.h"
+#include "nvm_alloc.h"
 #include "combotree/combotree.h"
 #include "combotree_config.h"
 #include "fast-fair/btree.h"
-#include "nvm_alloc.h"
+#include "learnindex/pgm_index_dynamic.hpp"
 
 using combotree::ComboTree;
 using FastFair::btree;
@@ -94,6 +95,51 @@ private:
     ComboTree *tree_;
 };
 
+class PGMDynamicDb : public ycsbc::KvDB {
+
+    // using PGMType = PGM_NVM::PGMIndex<uint64_t>;
+    typedef pgm::DynamicPGMIndex<uint64_t, char *, PGM_OLD_NVM::PGMIndex<uint64_t>> DynamicPGM;
+public:
+    PGMDynamicDb(): pgm_(nullptr) {}
+    PGMDynamicDb(DynamicPGM *pgm): pgm_(pgm) {}
+    virtual ~PGMDynamicDb() {
+      delete pgm_;
+    }
+
+    void Init()
+    {
+      pgm_ = new DynamicPGM();
+    }
+    int Put(uint64_t key, uint64_t value) 
+    {
+      pgm_->insert(key, (char *)value);
+      return 1;
+    }
+    int Get(uint64_t key, uint64_t &value)
+    {
+        auto it = pgm_->find(key);
+        value = (uint64_t)it->second;
+        return 1;
+    }
+    int Update(uint64_t key, uint64_t value) {
+        pgm_->insert(key, (char *)value);
+        return 1;
+    }
+    int Scan(uint64_t start_key, int len, std::vector<std::pair<uint64_t, uint64_t>>& results) 
+    {
+      int scan_count = 0;
+      auto it = pgm_->find(start_key);
+      while(it != pgm_->end() && scan_count < len) {
+        results.push_back({it->first, (uint64_t)it->second});
+        ++it;
+        scan_count ++;
+      }  
+      return 1;
+    }
+private:
+    DynamicPGM *pgm_;
+};
+
 void UsageMessage(const char *command);
 bool StrStartWith(const char *str, const char *pre);
 string ParseCommandLine(int argc, const char *argv[], utils::Properties &props);
@@ -135,6 +181,8 @@ int main(int argc, const char *argv[])
     std::cout << "YCSB test:" << dbName << std::endl;
     if(dbName == "fastfair") {
       db = new FastFairDb();
+    } else if(dbName == "pgm") {
+      db = new PGMDynamicDb();
     } else {
       db = new ComboTreeDb();
     }

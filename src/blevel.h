@@ -95,7 +95,9 @@ public:
         new (&iter_) bentry_t::Iter(&blevel_->entries_[entry_idx_], &blevel_->clevel_mem_);
       }
       if (end()) {
-        blevel_->lock_[entry_idx_].unlock_shared();
+#ifndef NO_LOCK
+          blevel_->lock_[last_idx].unlock_shared();
+#endif
         locked_ = false;
       }
     }
@@ -131,14 +133,19 @@ public:
         new (&iter_) bentry_t::Iter(&blevel_->entries_[entry_idx_], &blevel_->clevel_mem_, start_key);
       }
       if (this->end()) {
-        blevel_->lock_[entry_idx_].unlock_shared();
+#ifndef NO_LOCK
+          blevel_->lock_[last_idx].unlock_shared();
+#endif
         locked_ = false;
       }
     }
 
     ~Iter() {
-      if (locked_)
-        blevel_->lock_[entry_idx_].unlock_shared();
+#ifndef NO_LOCK
+      if (locked_) {
+          blevel_->lock_[entry_idx_].unlock_shared();
+#endif
+      }
     }
 
     ALWAYS_INLINE uint64_t key() const {
@@ -163,7 +170,9 @@ public:
           new (&iter_) bentry_t::Iter(&blevel_->entries_[entry_idx_], &blevel_->clevel_mem_);
         }
         if (end()) {
-          blevel_->lock_[entry_idx_].unlock_shared();
+#ifndef NO_LOCK
+          blevel_->lock_[last_idx].unlock_shared();
+#endif
           locked_ = false;
           return false;
         } else {
@@ -228,7 +237,9 @@ public:
         new (&iter_) bentry_t::NoSortIter(&blevel_->entries_[entry_idx_], &blevel_->clevel_mem_);
       }
       if (end()) {
-        blevel_->lock_[entry_idx_].unlock_shared();
+#ifndef NO_LOCK
+          blevel_->lock_[last_idx].unlock_shared();
+#endif
         locked_ = false;
       }
     }
@@ -264,14 +275,18 @@ public:
         new (&iter_) bentry_t::NoSortIter(&blevel_->entries_[entry_idx_], &blevel_->clevel_mem_, start_key);
       }
       if (this->end()) {
-        blevel_->lock_[entry_idx_].unlock_shared();
+#ifndef NO_LOCK
+          blevel_->lock_[last_idx].unlock_shared();
+#endif
         locked_ = false;
       }
     }
 
     ~NoSortIter() {
-      if (locked_)
-        blevel_->lock_[entry_idx_].unlock_shared();
+#ifndef NO_LOCK
+      if (locked_) 
+          blevel_->lock_[entry_idx_].unlock_shared();
+#endif
     }
 
     ALWAYS_INLINE uint64_t key() const {
@@ -296,7 +311,9 @@ public:
           new (&iter_) bentry_t::NoSortIter(&blevel_->entries_[entry_idx_], &blevel_->clevel_mem_);
         }
         if (end()) {
-          blevel_->lock_[entry_idx_].unlock_shared();
+#ifndef NO_LOCK
+          blevel_->lock_[last_idx].unlock_shared();
+#endif
           locked_ = false;
           return false;
         } else {
@@ -525,8 +542,14 @@ public:
     return true;
   }
 
-  class IndexIter {
-    public:
+class IndexIter {
+    using difference_type = ssize_t;
+    using value_type = const uint64_t;
+    using pointer = const uint64_t *;
+    using reference = const uint64_t &;
+    using iterator_category = std::random_access_iterator_tag;
+
+  public:
       IndexIter() {}
 
       IndexIter(const BLevel * blevel)
@@ -582,6 +605,7 @@ public:
       bool operator>(const IndexIter& iter) const { return  idx_ < iter.idx_; }
       bool operator<=(const IndexIter& iter) const { return *this < iter || *this == iter; }
       bool operator>=(const IndexIter& iter) const { return *this > iter || *this == iter; }
+      size_t operator-(const IndexIter& iter) const { return idx_ - iter.idx_; }
 
       static size_t distance(const IndexIter& first, const IndexIter& last) {
         if(last.idx_ < first.idx_) {

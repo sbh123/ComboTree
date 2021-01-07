@@ -82,10 +82,13 @@ struct alignas(CACHELINE_SIZE) FGParam {
 
 int main(int argc, char **argv) {
   parse_args(argc, argv);
+  NVM::env_init();
   db_t *tab_xi;
   prepare_db(tab_xi);
   run_benchmark(tab_xi, runtime);
   if (tab_xi != nullptr) delete tab_xi;
+  NVM::env_exit();
+  return 0;
 }
 
 inline void prepare_db(db_t *&table) {

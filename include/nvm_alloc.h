@@ -141,6 +141,84 @@ public:
     
 };
 
+template<typename T, typename A>
+class DataAllocator : public std::allocator<T> {
+    typedef std::allocator_traits<A> a_t;
+
+public:
+    template<typename U>
+    struct rebind {
+        using other = DataAllocator<U, typename a_t::template rebind_alloc<U> >;
+    };
+
+    using A::A;
+
+    template<typename U>
+    void construct(U *ptr) noexcept(std::is_nothrow_default_constructible_v<U>) {
+        ::new(static_cast<void *>(ptr)) U;
+        // std::cout << "Construct 1: "  << ptr << std::endl;
+    }
+
+    template<typename U, typename...Args>
+    void construct(U *ptr, Args &&... args) {
+        a_t::construct(static_cast<A &>(*this), ptr, std::forward<Args>(args)...);
+    }
+
+    static T* allocate(size_t _n)
+    {
+        T *ret = 0 == _n ? nullptr : (T*)data_alloc->alloc(_n * sizeof(T));
+        // std::cout << "Call allocte: "  << _n << ", at: " << ret <<  std::endl;
+        return ret;
+    }
+
+    static void deallocate(T *_p, size_t _n)
+    {
+        // std::cout << "Call deallocate: "  << _n << std::endl;
+        if (nullptr != _p) {
+            data_alloc->Free(_p, _n * sizeof(T));
+        }
+    }
+};
+
+template<typename T, typename A>
+class ComonAllocator : public std::allocator<T> {
+    typedef std::allocator_traits<A> a_t;
+
+public:
+    template<typename U>
+    struct rebind {
+        using other = ComonAllocator<U, typename a_t::template rebind_alloc<U> >;
+    };
+
+    using A::A;
+
+    template<typename U>
+    void construct(U *ptr) noexcept(std::is_nothrow_default_constructible_v<U>) {
+        ::new(static_cast<void *>(ptr)) U;
+        // std::cout << "Construct 1: "  << ptr << std::endl;
+    }
+
+    template<typename U, typename...Args>
+    void construct(U *ptr, Args &&... args) {
+        a_t::construct(static_cast<A &>(*this), ptr, std::forward<Args>(args)...);
+    }
+
+    static T* allocate(size_t _n)
+    {
+        T *ret = 0 == _n ? nullptr : (T*)common_alloc->alloc(_n * sizeof(T));
+        // std::cout << "Call allocte: "  << _n << ", at: " << ret <<  std::endl;
+        return ret;
+    }
+
+    static void deallocate(T *_p, size_t _n)
+    {
+        // std::cout << "Call deallocate: "  << _n << std::endl;
+        if (nullptr != _p) {
+            common_alloc->Free(_p, _n * sizeof(T));
+        }
+    }
+};
+
 int  env_init();
 void env_exit();
 

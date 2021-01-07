@@ -215,9 +215,10 @@ struct SortBuffer {
   void FromKVBuffer(KVBuffer<buf_size,value_size>& blevel_buf) {
     entries = blevel_buf.entries;
     memcpy(buf, &blevel_buf.buf, sizeof(blevel_buf.buf));
+    uint64_t new_sorted_index = 0;
+#ifndef BUF_SORT
     int bsorted_index[112/(8+1)];
     blevel_buf.GetSortedIndex(bsorted_index);
-    uint64_t new_sorted_index = 0;
     for (int i = entries; i < 12; ++i) {
       new_sorted_index = (new_sorted_index << 4) | i;
     }
@@ -225,6 +226,11 @@ struct SortBuffer {
       assert(bsorted_index[i] < entries);
       new_sorted_index = (new_sorted_index << 4) | bsorted_index[i];
     }
+#else 
+    for (int i = entries-1; i >= 0; --i) {
+      new_sorted_index = (new_sorted_index << 4) | i;
+    }
+#endif
     memcpy(sorted_index, &new_sorted_index, sizeof(sorted_index));
   }
 
