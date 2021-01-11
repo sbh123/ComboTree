@@ -399,7 +399,7 @@ void TwoStageRMI<key_t, root_error_bound>::adjust_rmi(const std::vector<key_t> &
     }
     mean_error =
         std::accumulate(errors.begin(), errors.end(), 0.0) / errors.size();
-    
+    std::cout << "Train finished: " << mean_error << ", " << max_error << std::endl;
     if (mean_error > root_error_bound) {
       if (rmi_2nd_stage_model_n == max_model_n) {
         break;
@@ -439,7 +439,8 @@ void TwoStageRMI<key_t, root_error_bound>::adjust_rmi(const std::vector<key_t> &
 template <class key_t,  size_t root_error_bound>
 template <typename RandomIt>
 void TwoStageRMI<key_t, root_error_bound>::adjust_rmi(RandomIt first, RandomIt last) {
-  size_t max_model_n = root_memory_constraint / sizeof(linear_model_t);
+  size_t max_model_n = std::min(root_memory_constraint / sizeof(linear_model_t), 
+                                (size_t)(keys_n / root_error_bound));
   size_t max_trial_n = 10;
 
   size_t model_n_trial = rmi_2nd_stage_model_n;
@@ -479,7 +480,7 @@ void TwoStageRMI<key_t, root_error_bound>::adjust_rmi(RandomIt first, RandomIt l
       max_error = std::max(max_error, error);
     }
     mean_error = mean_error / keys_n;
-    
+    std::cout << "Train finished: " << mean_error << ", " << max_error << std::endl;
     if (mean_error > root_error_bound) {
       if (rmi_2nd_stage_model_n == max_model_n) {
         break;

@@ -45,7 +45,7 @@ namespace FastFair
 // const size_t NVM_ValueSize = 256;
 static void alloc_memalign(void **ret, size_t alignment, size_t size) {
     // posix_memalign(ret, alignment, size);
-    *ret =  NVM::btree_alloc->alloc(size);
+    *ret =  NVM::structure_alloc->alloc(size);
 }
 
 class page;

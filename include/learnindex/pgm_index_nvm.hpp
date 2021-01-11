@@ -327,6 +327,37 @@ public:
      * @return a struct with the approximate position and bounds of the range
      */
     // Assert height = 0
+    int __search_near_pos(const K &key, size_t pos, size_t size, bool greater) const {
+        auto k = std::max(first_key, key);
+        int lo, hi;
+        if (greater) {
+            size_t step = 1;
+            lo = pos;
+            hi = lo + step;
+            while (hi < (int)size && segments[hi].key <= key) {
+                step = step * 2;
+                lo = hi;
+                hi = lo + step;
+            }  // after this while loop, hi might be >= size
+            if (hi > (int)size - 1) {
+                hi = size - 1;
+            }
+        } else {
+            size_t step = 1;
+            hi = pos;
+            lo = hi - step;
+            while (lo >= 0 && segments[lo].key > key) {
+                step = step * 2;
+                hi = lo;
+                lo = hi - step;
+            }  // after this while loop, lo might be < 0
+            if (lo < 0) {
+                lo = 0;
+            }
+        }
+        return std::lower_bound(segments + lo, segments + hi, key) - segments;
+    }
+
     ApproxPos search_near_pos(const K &key, size_t pos, bool debug = false) const {
         auto k = std::max(first_key, key);
         // auto it = segment_for_key(k);
@@ -334,9 +365,13 @@ public:
         if(it->key <= key) {
             if(debug)
             std::cout << "Less key: " << key << " : " << it->key << std::endl;
-            while(pos <= nr_segments && it->key <= key) {
-                ++it;
-                ++pos;
+            if(segments[pos + 4].key <= key) {
+                it = segments + __search_near_pos(key, pos + 4, nr_segments, true);
+            } else {
+                while(pos <= nr_segments && it->key <= key) {
+                    ++it;
+                    ++pos;
+                }
             }
             // auto lo = it, hi = (it + 4);
             // it = std::upper_bound(lo, hi, key);
@@ -344,9 +379,14 @@ public:
         } else {
             if(debug)
             std::cout << "Great key: " << key << " : " << it->key << std::endl;
-            while(pos > 0 && it->key > key) {
-                --it;
-                --pos;
+            if(pos > 4 && segments[pos - 4].key > key) {
+                it = segments + __search_near_pos(key, pos - 4, nr_segments, false);
+                it = it == segments ? it : std::prev(it);
+            } else {
+                while(pos > 0 && it->key > key) {
+                    --it;
+                    --pos;
+                }
             }
         }
         auto realpos = std::min<size_t>((*it)(k), std::next(it)->intercept);

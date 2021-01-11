@@ -14,6 +14,7 @@
 #include "learnindex/learn_index.h"
 #include "fast-fair/btree.h"
 #include "random.h"
+#include "distribute.h"
 
 using combotree::Random;
 // using pgm::PGMIndex;
@@ -64,7 +65,7 @@ static ApproxPos near_search_key(const uint64_t *keys, const uint64_t &key, size
             lo = hi - step;
         }  // after this while loop, lo might be < 0
         if (lo < 0) {
-            lo = -1;
+            lo = 0;
         }
     }
     return {(lo + hi) / 2, lo, hi};
@@ -76,7 +77,8 @@ int main(int argc, char *argv[]) {
         size = atoi(argv[1]);
     }
     NVM::env_init();
-    Random rnd(0, UINT64_MAX - 1);
+    // Random rnd(0, UINT64_MAX - 1);
+    Distribute::CaussGenerator rnd(0.0, 2);
     {
         const int epsilon = 8; // space-time trade-off parameter
         PGMIndex<uint64_t, epsilon> *pgm_index = nullptr;
@@ -91,8 +93,8 @@ int main(int argc, char *argv[]) {
             btree->btree_insert(key, (char *)key);
         }
 
-        // std::sort(pgm_keys, pgm_keys + size);
-        btree->btree_search_range(0, UINT64_MAX, pgm_keys);
+        std::sort(pgm_keys, pgm_keys + size);
+        // btree->btree_search_range(0, UINT64_MAX, pgm_keys);
 
         {
             auto startTime = std::chrono::system_clock::now();
@@ -137,7 +139,7 @@ int main(int argc, char *argv[]) {
             auto endTime = std::chrono::system_clock::now();
             uint64_t ns = std::chrono::duration_cast<std::chrono::nanoseconds>(endTime - startTime).count();
             pgmDurations.push_back(1.0 * ns);
-            assert(pos == idx);
+            assert(pgm_keys[pos] == pgm_keys[idx]);
         }
         std::cout << "[PGM]: PGM search finished. " << std::endl;
 
@@ -150,11 +152,11 @@ int main(int argc, char *argv[]) {
             auto endTime = std::chrono::system_clock::now();
             uint64_t ns = std::chrono::duration_cast<std::chrono::nanoseconds>(endTime - startTime).count();
             rmiDurations.push_back(1.0 * ns);
-            if(pos != idx) {
+            if(pgm_keys[pos] != pgm_keys[idx]) {
                 std::cout << "Failed i = " << idx << std::endl;
                 std::cout << "Lower: " << range.lo << ", higher: " <<  range.hi << std::endl;
             }
-            assert(pos == idx);
+            assert(pgm_keys[pos] == pgm_keys[idx]);
         }
 
         std::cout << "[RMI]: RMI search finished. " << std::endl;
@@ -167,7 +169,12 @@ int main(int argc, char *argv[]) {
             auto endTime = std::chrono::system_clock::now();
             uint64_t ns = std::chrono::duration_cast<std::chrono::nanoseconds>(endTime - startTime).count();
             learnDurations.push_back(1.0 * ns);
-            assert(pos == idx);
+            if(pgm_keys[pos] != pgm_keys[idx]) {
+                std::cout << "Failed i = " << idx << ", pos " << pos << std::endl;
+                std::cout << "Lower: " << range.lo << ", higher: " <<  range.hi << std::endl;
+                auto range = learn_index->search(pgm_keys[idx], true);
+            }
+            assert(pgm_keys[pos] == pgm_keys[idx]);
         }
 
         std::cout << "[LI]: Learn-Index search finished. " << std::endl;
