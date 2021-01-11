@@ -256,6 +256,9 @@ struct AtomicVal {
     lock();
     uint64_t status = this->status;
     UNUSED(status);
+    if(!is_ptr(status)) {
+      printf("%p, Status: %lx.\n", this, status);
+    }
     assert(is_ptr(status));
     assert(!removed(status));
     if (!val.ptr->read(val.val)) {

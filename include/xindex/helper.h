@@ -28,6 +28,8 @@
 #if !defined(HELPER_H)
 #define HELPER_H
 
+#define  NDEBUGGING
+
 #define COUT_THIS(this) std::cout << this << std::endl;
 #define COUT_VAR(this) std::cout << #this << ": " << this << std::endl;
 #define COUT_POS() COUT_THIS("at " << __FILE__ << ":" << __LINE__)

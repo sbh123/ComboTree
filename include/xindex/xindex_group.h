@@ -40,9 +40,7 @@ class alignas(CACHELINE_SIZE) Group : public NVM::NvmStructBase {
   typedef atomic_val_t wrapped_val_t;
   typedef AltBtreeBuffer<key_t, val_t> buffer_t;
   typedef uint64_t version_t;
-  // typedef std::pair<key_t, wrapped_val_t> record_t;
   typedef record record_t;
-
 
   template <class key_tt, class val_tt, bool sequential>
   friend class XIndex;
@@ -54,13 +52,11 @@ class alignas(CACHELINE_SIZE) Group : public NVM::NvmStructBase {
     linear_model_t model;
   };
 
-  struct record: public NVM::NvmStructBase {
-    typedef key_t _T1;    /// @c first_type is the first bound type
-    typedef wrapped_val_t _T2;   /// @c second_type is the second bound type
-
-    _T1 first;                 /// @c first is a copy of the first object
-    _T2 second;    
+  struct record: public std::pair<key_t, wrapped_val_t>, public NvmStructBase
+  {
+    /* data */
   };
+  
 
   struct ArrayDataSource {
     ArrayDataSource(record_t *data, uint32_t array_size, uint32_t pos);
