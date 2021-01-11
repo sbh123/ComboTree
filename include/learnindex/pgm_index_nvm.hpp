@@ -365,7 +365,7 @@ public:
         if(it->key <= key) {
             if(debug)
             std::cout << "Less key: " << key << " : " << it->key << std::endl;
-            if(segments[pos + 4].key <= key) {
+            if((pos + 4) < nr_segments && segments[pos + 4].key <= key) {
                 it = segments + __search_near_pos(key, pos + 4, nr_segments, true);
             } else {
                 while(pos <= nr_segments && it->key <= key) {

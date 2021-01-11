@@ -29,7 +29,7 @@ int main() {
     NVM::env_init();
     {
         xindex_t *xindex = nullptr;
-        int size = 10000;
+        int size = 100000;
         prepare_xindex(xindex, 10000, 1, 1);
         
         std::vector<double> xindexDurations;
@@ -57,7 +57,6 @@ int main() {
         struct NvmInt64_t: public NVM::NvmStructBase {
             uint64_t key;
             NvmInt64_t() {
-                std::cout << "Call construct." << std::endl;
             }
         };
         std::cout << "NVM Int64 size: " << sizeof(NvmInt64_t) << std::endl;

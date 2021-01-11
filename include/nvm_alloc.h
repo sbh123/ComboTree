@@ -121,35 +121,35 @@ public:
     void* operator new(size_t size)
     {
         // class Son
-        std::cout << "Common alloc: " << size << " bytes." << std::endl;
+        // std::cout << "Common alloc: " << size << " bytes." << std::endl;
         return common_alloc->alloc(size);
     }
 
     void* operator new[](size_t size)
     {
         // class Son
-        std::cout << "Common alloc array: " << size << " bytes." << std::endl;
+        // std::cout << "Common alloc array: " << size << " bytes." << std::endl;
         return common_alloc->alloc(size);
     }
 
     void operator delete(void *p, size_t size)
     {
         // class Son
-        std::cout << "Common free: " << size << " bytes." << std::endl;
+        // std::cout << "Common free: " << size << " bytes." << std::endl;
         common_alloc->Free(p, size);
     }
 
     void operator delete(void *p)
     {
         // class Son
-        std::cout << "Common free addrs: " << p <<  "." << std::endl;
+        // std::cout << "Common free addrs: " << p <<  "." << std::endl;
         common_alloc->Free(p);
     }
 
     void operator delete[](void *p)
     {
         // class Son
-        std::cout << "Common free array addrs: " << p <<  "." << std::endl;
+        // std::cout << "Common free array addrs: " << p <<  "." << std::endl;
         common_alloc->Free(p);
     }
     
@@ -159,31 +159,31 @@ class NvmStructBase {
 public:
     void* operator new(size_t size)
     {
-        std::cout << "Struct Alloc: " << size << " bytes." << std::endl;
+        // std::cout << "Struct Alloc: " << size << " bytes." << std::endl;
         return structure_alloc->alloc(size);
     }
 
     void* operator new[](size_t size)
     {
-        std::cout << "Struct alloc array: " << size << " bytes." << std::endl;
-        return structure_alloc->alloc(size);
+        // std::cout << "Struct alloc array: " << size << " bytes." << std::endl;
+        return structure_alloc->alloc(size + 16);
     }
 
     void operator delete(void *p, size_t size)
     {
-        std::cout << "Struct free: " << size << " bytes." << std::endl;
+        // std::cout << "Struct free: " << size << " bytes." << std::endl;
         structure_alloc->Free(p, size);
     }
 
     void operator delete(void *p)
     {
-        std::cout << "Struct free addrs: " << p <<  "." << std::endl;
+        // std::cout << "Struct free addrs: " << p <<  "." << std::endl;
         structure_alloc->Free(p);
     }
 
     void operator delete[](void *p)
     {
-        std::cout << "Struct array free addrs: " << p <<  "." << std::endl;
+        // std::cout << "Struct array free addrs: " << p <<  "." << std::endl;
         structure_alloc->Free(p);
     }
     

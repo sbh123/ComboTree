@@ -406,8 +406,8 @@ void CoreWorkload::Reload(const utils::Properties &p) {
                                              MAX_SCAN_LENGTH_DEFAULT));
   std::string scan_len_dist = p.GetProperty(SCAN_LENGTH_DISTRIBUTION_PROPERTY,
                                             SCAN_LENGTH_DISTRIBUTION_DEFAULT);
-  int insert_start = std::stoi(p.GetProperty(INSERT_START_PROPERTY,
-                                             INSERT_START_DEFAULT));
+  // int insert_start = std::stoi(p.GetProperty(INSERT_START_PROPERTY,
+  //                                            INSERT_START_DEFAULT));
   
   read_all_fields_ = utils::StrToBool(p.GetProperty(READ_ALL_FIELDS_PROPERTY,
                                                     READ_ALL_FIELDS_DEFAULT));

@@ -439,8 +439,8 @@ void TwoStageRMI<key_t, root_error_bound>::adjust_rmi(const std::vector<key_t> &
 template <class key_t,  size_t root_error_bound>
 template <typename RandomIt>
 void TwoStageRMI<key_t, root_error_bound>::adjust_rmi(RandomIt first, RandomIt last) {
-  size_t max_model_n = std::min(root_memory_constraint / sizeof(linear_model_t), 
-                                (size_t)(keys_n / root_error_bound));
+  size_t max_model_n = std::max((size_t) 1, std::min(root_memory_constraint / sizeof(linear_model_t), 
+                                (size_t)(keys_n / root_error_bound)));
   size_t max_trial_n = 10;
 
   size_t model_n_trial = rmi_2nd_stage_model_n;

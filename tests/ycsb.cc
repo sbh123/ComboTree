@@ -5,14 +5,17 @@
 #include <future>
 #include "ycsb/ycsb-c.h"
 #include "nvm_alloc.h"
-#include "combotree/combotree.h"
 #include "combotree_config.h"
+#include "combotree/combotree.h"
 #include "fast-fair/btree.h"
 #include "learnindex/pgm_index_dynamic.hpp"
+#include "learnindex/rmi.h"
+#include "xindex/xindex_impl.h"
 
 using combotree::ComboTree;
 using FastFair::btree;
 using namespace std;
+using xindex::XIndex;
 
 const char *workloads[] = {
   "workloada.spec",
@@ -97,47 +100,106 @@ private:
 
 class PGMDynamicDb : public ycsbc::KvDB {
 
-    // using PGMType = PGM_NVM::PGMIndex<uint64_t>;
-    typedef pgm::DynamicPGMIndex<uint64_t, char *, PGM_OLD_NVM::PGMIndex<uint64_t>> DynamicPGM;
+  // using PGMType = PGM_NVM::PGMIndex<uint64_t>;
+  typedef pgm::DynamicPGMIndex<uint64_t, char *, PGM_OLD_NVM::PGMIndex<uint64_t>> DynamicPGM;
 public:
-    PGMDynamicDb(): pgm_(nullptr) {}
-    PGMDynamicDb(DynamicPGM *pgm): pgm_(pgm) {}
-    virtual ~PGMDynamicDb() {
-      delete pgm_;
-    }
+  PGMDynamicDb(): pgm_(nullptr) {}
+  PGMDynamicDb(DynamicPGM *pgm): pgm_(pgm) {}
+  virtual ~PGMDynamicDb() {
+    delete pgm_;
+  }
 
-    void Init()
-    {
-      pgm_ = new DynamicPGM();
-    }
-    int Put(uint64_t key, uint64_t value) 
-    {
+  void Init()
+  {
+    pgm_ = new DynamicPGM();
+  }
+  int Put(uint64_t key, uint64_t value) 
+  {
+    pgm_->insert(key, (char *)value);
+    return 1;
+  }
+  int Get(uint64_t key, uint64_t &value)
+  {
+      auto it = pgm_->find(key);
+      value = (uint64_t)it->second;
+      return 1;
+  }
+  int Update(uint64_t key, uint64_t value) {
       pgm_->insert(key, (char *)value);
       return 1;
-    }
-    int Get(uint64_t key, uint64_t &value)
-    {
-        auto it = pgm_->find(key);
-        value = (uint64_t)it->second;
-        return 1;
-    }
-    int Update(uint64_t key, uint64_t value) {
-        pgm_->insert(key, (char *)value);
-        return 1;
-    }
-    int Scan(uint64_t start_key, int len, std::vector<std::pair<uint64_t, uint64_t>>& results) 
-    {
-      int scan_count = 0;
-      auto it = pgm_->find(start_key);
-      while(it != pgm_->end() && scan_count < len) {
-        results.push_back({it->first, (uint64_t)it->second});
-        ++it;
-        scan_count ++;
-      }  
-      return 1;
-    }
+  }
+  int Scan(uint64_t start_key, int len, std::vector<std::pair<uint64_t, uint64_t>>& results) 
+  {
+    int scan_count = 0;
+    auto it = pgm_->find(start_key);
+    while(it != pgm_->end() && scan_count < len) {
+      results.push_back({it->first, (uint64_t)it->second});
+      ++it;
+      scan_count ++;
+    }  
+    return 1;
+  }
 private:
-    DynamicPGM *pgm_;
+  DynamicPGM *pgm_;
+};
+
+class XIndexDb : public ycsbc::KvDB  {
+  static const int init_num = 10000;
+  static const int bg_num = 1;
+  static const int work_num = 1;
+  typedef RMI::Key_64 index_key_t;
+  typedef xindex::XIndex<index_key_t, uint64_t> xindex_t;
+public:
+  XIndexDb(): xindex_(nullptr) {}
+  XIndexDb(xindex_t *xindex): xindex_(xindex) {}
+  virtual ~XIndexDb() {
+    delete xindex_;
+  }
+
+  void Init()
+  {
+    prepare_xindex(init_num, bg_num, work_num);
+  }
+  int Put(uint64_t key, uint64_t value) 
+  {
+    // pgm_->insert(key, (char *)value);
+    xindex_->put(index_key_t(key), value >> 4, 0);
+    return 1;
+  }
+  int Get(uint64_t key, uint64_t &value)
+  {
+      xindex_->get(index_key_t(key), value, 0);
+      return 1;
+  }
+  int Update(uint64_t key, uint64_t value) {
+      xindex_->put(index_key_t(key), value >> 4, 0);
+      return 1;
+  }
+  int Scan(uint64_t start_key, int len, std::vector<std::pair<uint64_t, uint64_t>>& results) 
+  {
+    std::vector<std::pair<index_key_t, uint64_t>> tmpresults;
+    xindex_->scan(index_key_t(start_key), len, tmpresults, 0);
+    return 1;
+  } 
+private:
+  inline void 
+  prepare_xindex(size_t init_size, int fg_n, int bg_n) {
+    // prepare data
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<int64_t> rand_int64(
+        0, std::numeric_limits<int64_t>::max());
+    std::vector<index_key_t> initial_keys;
+    initial_keys.reserve(init_size);
+    for (size_t i = 0; i < init_size; ++i) {
+      initial_keys.push_back(index_key_t(rand_int64(gen)));
+    }
+    // initilize XIndex (sort keys first)
+    std::sort(initial_keys.begin(), initial_keys.end());
+    std::vector<uint64_t> vals(initial_keys.size(), 1);
+    xindex_ = new xindex_t(initial_keys, vals, fg_n, bg_n);
+  }
+  xindex_t *xindex_;
 };
 
 void UsageMessage(const char *command);
@@ -183,6 +245,8 @@ int main(int argc, const char *argv[])
       db = new FastFairDb();
     } else if(dbName == "pgm") {
       db = new PGMDynamicDb();
+    } else if(dbName == "xindex") {
+      db = new XIndexDb();
     } else {
       db = new ComboTreeDb();
     }
