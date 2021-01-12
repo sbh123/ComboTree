@@ -1738,8 +1738,8 @@ class AlexDataNode : public AlexNode<T, P> {
       min_key_ = key;
       num_left_out_of_bounds_inserts_++;
     }
-    
-    NVM::Mem_persist(root_node_, sizeof(model_node_type));
+
+    NVM::Mem_persist(this, sizeof(AlexDataNode));
     return {0, insertion_position};
   }
 
