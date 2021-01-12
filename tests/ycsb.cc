@@ -11,6 +11,7 @@
 #include "learnindex/pgm_index_dynamic.hpp"
 #include "learnindex/rmi.h"
 #include "xindex/xindex_impl.h"
+#include "alex/alex.h"
 
 using combotree::ComboTree;
 using FastFair::btree;
@@ -202,6 +203,54 @@ private:
   xindex_t *xindex_;
 };
 
+class AlexDB : public ycsbc::KvDB  {
+ 
+  typedef uint64_t KEY_TYPE;
+  typedef uint64_t PAYLOAD_TYPE;
+  typedef alex::Alex<KEY_TYPE, PAYLOAD_TYPE, alex::AlexCompare, NVM::allocator<std::pair<KEY_TYPE, PAYLOAD_TYPE>>> alex_t;
+public:
+  AlexDB(): alex_(nullptr) {}
+  AlexDB(alex_t *alex): alex_(alex_) {}
+  virtual ~AlexDB() {
+    delete alex_;
+  }
+
+  void Init()
+  {
+    alex_ = new alex_t();
+  }
+  int Put(uint64_t key, uint64_t value) 
+  {
+    alex_->insert(key, value);
+    return 1;
+  }
+  int Get(uint64_t key, uint64_t &value)
+  {
+      value = *(alex_->get_payload(key));
+      return 1;
+  }
+  int Update(uint64_t key, uint64_t value) {
+      uint64_t *addrs = (alex_->get_payload(key));
+      *addrs = value;
+      pmem_persist(addrs, sizeof(uint64_t));
+      return 1;
+  }
+  int Scan(uint64_t start_key, int len, std::vector<std::pair<uint64_t, uint64_t>>& results) 
+  {
+    auto it = alex_->lower_bound(start_key);
+    int num_entries = 0;
+    while (num_entries < len && it != alex_->end()) {
+      results.push_back({it.key(), it.payload()});
+      num_entries ++;
+      it++;
+    }
+    return 1;
+  } 
+private:
+  alex_t *alex_;
+};
+
+
 void UsageMessage(const char *command);
 bool StrStartWith(const char *str, const char *pre);
 string ParseCommandLine(int argc, const char *argv[], utils::Properties &props);
@@ -247,6 +296,8 @@ int main(int argc, const char *argv[])
       db = new PGMDynamicDb();
     } else if(dbName == "xindex") {
       db = new XIndexDb();
+    } else if(dbName == "alex") {
+      db = new AlexDB();
     } else {
       db = new ComboTreeDb();
     }

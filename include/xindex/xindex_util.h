@@ -155,8 +155,14 @@ struct AtomicVal {
   bool locked(uint64_t status) { return status & lock_mask; }
   uint64_t get_version(uint64_t status) { return status & version_mask; }
 
-  void set_is_ptr() { status |= pointer_mask; }
-  void unset_is_ptr() { status &= ~pointer_mask; }
+  void set_is_ptr() { 
+    // printf("%p, set ptr.\n", this);
+    status |= pointer_mask; 
+  }
+  void unset_is_ptr() { 
+    // printf("%p, unset ptr.\n", this);
+    status &= ~pointer_mask; 
+  }
   void set_removed() { status |= removed_mask; }
   void lock() {
     while (true) {

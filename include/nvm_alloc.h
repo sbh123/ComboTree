@@ -267,6 +267,57 @@ public:
     }
 };
 
+template<typename T>
+class allocator {
+public:
+    template<typename U>
+    struct rebind {
+        using other = allocator<U>;
+    };
+
+    allocator() {}
+    
+    allocator(const allocator& ) _GLIBCXX_NOTHROW {}
+
+    template<typename _Tp1>
+	  allocator(const allocator<_Tp1>& ) _GLIBCXX_NOTHROW { }
+
+    ~allocator() _GLIBCXX_NOTHROW { }
+
+    friend bool
+    operator==(const allocator&, const allocator&) _GLIBCXX_NOTHROW
+    { return true; }
+
+    friend bool
+    operator!=(const allocator&, const allocator&) _GLIBCXX_NOTHROW
+    { return false; }
+
+    T* allocate(size_t _n)
+    {
+        T *ret = 0 == _n ? nullptr : (T*)data_alloc->alloc(_n * sizeof(T));
+        // std::cout << "Call allocte: "  << _n << ", at: " << ret <<  std::endl;
+        return ret;
+    }
+
+    void deallocate(T *_p, size_t _n)
+    {
+        // std::cout << "Call deallocate: "  << _n << std::endl;
+        if (nullptr != _p) {
+            data_alloc->Free(_p, _n * sizeof(T));
+        }
+    }
+
+    template<typename _Up, typename... _Args>
+    void construct(_Up* __p, _Args&&... __args)
+      noexcept(noexcept(::new((void *)__p)
+            _Up(std::forward<_Args>(__args)...)))
+    { ::new((void *)__p) _Up(std::forward<_Args>(__args)...); }
+
+    template<typename _Up>
+    void destroy(_Up* __p) noexcept(noexcept( __p->~_Up()))
+    { __p->~_Up(); }
+};
+
 int  env_init();
 void env_exit();
 

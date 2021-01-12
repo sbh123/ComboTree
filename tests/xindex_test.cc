@@ -54,7 +54,10 @@ int main() {
 
     }
     {
-        struct NvmInt64_t: public NVM::NvmStructBase {
+        struct Int64 {
+            int64_t key;
+        };
+        struct NvmInt64_t: public Int64, public NVM::NvmStructBase {
             uint64_t key;
             NvmInt64_t() {
             }
@@ -62,7 +65,18 @@ int main() {
         std::cout << "NVM Int64 size: " << sizeof(NvmInt64_t) << std::endl;
 
         NvmInt64_t *key = new NvmInt64_t;
+        key->key = 12345678987654321;
+        key->Int64::key = 12345678987654321;
         NvmInt64_t *keys = new NvmInt64_t[10]();
+        std::cout <<"Key addrs: " << key << std::endl;
+        std::cout <<"Key: " << key->key << ", Int64: " << key->Int64::key << std::endl;
+        for(int i = 0; i < 11; i ++) {
+            key = keys + i;
+            std::cout <<"[" << i << "]Key: " << key->key << ", Int64: " << key->Int64::key << std::endl;
+        }
+        std::cout <<"Keys addrs: " << keys << std::endl;
+
+        // char buf = new char[8];
         delete key;
         delete keys;
     }

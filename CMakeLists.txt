@@ -149,6 +149,11 @@ add_executable(learn_index_test tests/learn_index_test.cc)
 target_link_libraries(learn_index_test combotree)
 add_test(learn_index_test learn_index_test)
 
+## alex_test
+add_executable(alex_test tests/alex_test.cc)
+target_link_libraries(alex_test combotree)
+add_test(alex_test alex_test)
+
 ## bucket_test
 add_executable(bucket_test tests/bucket_test.cc)
 add_test(bucket_test bucket_test)
