@@ -347,6 +347,7 @@ class Alex {
         }
         cur += repeats;
       }
+      NVM::Mem_persist(node_copy, sizeof(model_node_type));
       return node_copy;
     }
   }
@@ -677,6 +678,8 @@ class Alex {
           stats.num_shifts;
     }
 
+    NVM::Mem_persist(root_node_, sizeof(model_node_type));
+
     create_superroot();
     update_superroot_key_domain();
     link_all_data_nodes();
@@ -693,6 +696,7 @@ class Alex {
     superroot_->children_ =
         new (pointer_allocator().allocate(1)) AlexNode<T, P>*[1];
     update_superroot_pointer();
+    
   }
 
   // Updates the key domain based on the min/max keys and retrains the model.
@@ -739,6 +743,7 @@ class Alex {
                            params_.approximate_model_computation);
       data_node->cost_ = node->cost_;
       delete_node(node);
+      NVM::Mem_persist(data_node, sizeof(model_node_type));
       node = data_node;
       return;
     }
@@ -829,10 +834,13 @@ class Alex {
         for (int i = cur + 1; i < cur + repeats; i++) {
           model_node->children_[i] = model_node->children_[cur];
         }
+        NVM::Mem_persist(child_node, sizeof(model_node_type));
         cur += repeats;
       }
-
+      NVM::Mem_persist(model_node->children_, sizeof(AlexNode<T, P>*) * fanout);
+        
       delete_node(node);
+      NVM::Mem_persist(model_node, sizeof(model_node_type));
       node = model_node;
     } else {
       // Convert to data node
@@ -844,6 +852,7 @@ class Alex {
                            params_.approximate_model_computation);
       data_node->cost_ = node->cost_;
       delete_node(node);
+      NVM::Mem_persist(data_node, sizeof(model_node_type));
       node = data_node;
     }
   }
@@ -884,6 +893,7 @@ class Alex {
     if (compute_cost) {
       node->cost_ = node->compute_expected_cost(existing_node->frac_inserts());
     }
+    NVM::Mem_persist(node, sizeof(model_node_type));
     return node;
   }
 
@@ -1417,6 +1427,7 @@ class Alex {
       for (int i = 0; i < root->num_children_; i++) {
         new_children[copy_start + i] = root->children_[i];
       }
+      NVM::Mem_persist(new_children, sizeof(AlexNode<T, P>*) * new_num_children);
       pointer_allocator().deallocate(root->children_, root->num_children_);
       root->children_ = new_children;
       root->num_children_ = new_num_children;
@@ -1443,6 +1454,8 @@ class Alex {
       new_nodes_end = new_nodes_start + expansion_factor - 1;
       root_node_ = new_root;
       update_superroot_pointer();
+      NVM::Mem_persist(new_root->children_, sizeof(AlexNode<T, P>*) * expansion_factor);
+      NVM::Mem_persist(new_root, sizeof(model_node_type));
       root = new_root;
     }
     // Determine if new nodes represent a range outside the key type's domain.
@@ -1600,7 +1613,8 @@ class Alex {
       root_node_ = new_node;
       update_superroot_pointer();
     }
-
+    NVM::Mem_persist(new_node->children_, sizeof(AlexNode<T, P>*) * fanout);
+    NVM::Mem_persist(new_node, sizeof(model_node_type));
     return new_node;
   }
 
@@ -1927,6 +1941,8 @@ class Alex {
           cur += cur_child_repeats;
         }
         assert(cur == cur_node->num_children_ / 2);
+        NVM::Mem_persist(left_split->children_, sizeof(AlexNode<T, P>*) * (cur_node->num_children_ / 2));
+        NVM::Mem_persist(left_split, sizeof(model_node_type));
 
         if (pull_up_right_child) {
           next_right_split = cur_node->children_[cur_node->num_children_ / 2];
@@ -1945,6 +1961,9 @@ class Alex {
             right_split->children_[j] = cur_node->children_[i];
             j++;
           }
+          NVM::Mem_persist(right_split->children_, sizeof(AlexNode<T, P>*) * (cur_node->num_children_ - cur_node->num_children_ / 2));
+          NVM::Mem_persist(right_split, sizeof(model_node_type));
+
           next_right_split = right_split;
         }
 
@@ -1984,6 +2003,8 @@ class Alex {
             left_split->children_[j] = cur_node->children_[i];
             j++;
           }
+          NVM::Mem_persist(left_split->children_, sizeof(AlexNode<T, P>*) * (cur_node->num_children_ / 2));
+          NVM::Mem_persist(left_split, sizeof(model_node_type));
           next_left_split = left_split;
         }
 
@@ -2007,6 +2028,8 @@ class Alex {
           cur += cur_child_repeats;
         }
         assert(cur == cur_node->num_children_);
+        NVM::Mem_persist(right_split->children_, sizeof(AlexNode<T, P>*) * (cur_node->num_children_ - cur_node->num_children_ / 2));
+        NVM::Mem_persist(right_split, sizeof(model_node_type));
 
         int new_bucketID =
             (path_node.bucketID - cur_node->num_children_ / 2) * 2;

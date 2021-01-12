@@ -101,6 +101,7 @@ class AlexModelNode : public AlexNode<T, P> {
         AlexNode<T, P>*[other.num_children_];
     std::copy(other.children_, other.children_ + other.num_children_,
               children_);
+    NVM::Mem_persist(children_, sizeof(AlexNode<T, P>*) * other.num_children_);
   }
 
   // Given a key, traverses to the child node responsible for that key
@@ -133,6 +134,7 @@ class AlexModelNode : public AlexNode<T, P> {
       cur += cur_child_repeats;
     }
     pointer_allocator().deallocate(children_, num_children_);
+    NVM::Mem_persist(new_children, sizeof(AlexNode<T, P>*) * num_new_children);
     children_ = new_children;
     num_children_ = num_new_children;
     this->model_.expand(expansion_factor);
@@ -436,19 +438,26 @@ class AlexDataNode : public AlexNode<T, P> {
         T[other.data_capacity_];
     std::copy(other.key_slots_, other.key_slots_ + other.data_capacity_,
               key_slots_);
+    NVM::Mem_persist(key_slots_, sizeof(T) * other.data_capacity_);
+
     payload_slots_ = new (payload_allocator().allocate(other.data_capacity_))
         P[other.data_capacity_];
     std::copy(other.payload_slots_, other.payload_slots_ + other.data_capacity_,
               payload_slots_);
+    NVM::Mem_persist(payload_slots_, sizeof(P) * other.data_capacity_);
+
 #else
     data_slots_ = new (value_allocator().allocate(other.data_capacity_))
         V[other.data_capacity_];
     std::copy(other.data_slots_, other.data_slots_ + other.data_capacity_,
               data_slots_);
+    NVM::Mem_persist(data_slots_, sizeof(V) * other.data_capacity_);
+    
 #endif
     bitmap_ = new (bitmap_allocator().allocate(other.bitmap_size_))
         uint64_t[other.bitmap_size_];
     std::copy(other.bitmap_, other.bitmap_ + other.bitmap_size_, bitmap_);
+    NVM::Mem_persist(bitmap_, sizeof(uint64_t) * other.bitmap_size_);
   }
 
   /*** Allocators ***/
@@ -485,6 +494,7 @@ class AlexDataNode : public AlexNode<T, P> {
     int bitmap_pos = pos >> 6;
     int bit_pos = pos - (bitmap_pos << 6);
     bitmap_[bitmap_pos] |= (1ULL << bit_pos);
+    NVM::Mem_persist(&bitmap_[bitmap_pos], sizeof(uint64_t));
   }
 
   // Mark the entry for position in the bitmap
@@ -1847,14 +1857,19 @@ class AlexDataNode : public AlexNode<T, P> {
 #endif
     bitmap_allocator().deallocate(bitmap_, bitmap_size_);
 
+    
     data_capacity_ = new_data_capacity;
     bitmap_size_ = new_bitmap_size;
 #if ALEX_DATA_NODE_SEP_ARRAYS
+    NVM::Mem_persist(new_key_slots, sizeof(T) * new_data_capacity);
+    NVM::Mem_persist(new_payload_slots, sizeof(T) * new_data_capacity);
     key_slots_ = new_key_slots;
     payload_slots_ = new_payload_slots;
 #else
+    NVM::Mem_persist(new_data_slots, sizeof(V) * new_data_capacity);
     data_slots_ = new_data_slots;
 #endif
+    NVM::Mem_persist(new_bitmap, sizeof(uint64_t) * new_bitmap_size);
     bitmap_ = new_bitmap;
 
     expansion_threshold_ =
@@ -1880,10 +1895,14 @@ class AlexDataNode : public AlexNode<T, P> {
 #if ALEX_DATA_NODE_SEP_ARRAYS
     key_slots_[pos] = key;
     payload_slots_[pos] = payload;
+    NVM::Mem_persist(&key_slots_[pos], sizeof(T));
+    NVM::Mem_persist(&payload_slots_[pos], sizeof(P));
 #else
-    data_slots_[index] = std::make_pair(key, payload);
+    data_slots_[pos] = std::make_pair(key, payload);
+    NVM::Mem_persist(&data_slots_[pos], sizeof(V));
 #endif
     set_bit(pos);
+
 
     // Overwrite preceding gaps until we reach the previous element
     pos--;
@@ -1908,6 +1927,13 @@ class AlexDataNode : public AlexNode<T, P> {
         data_slots_[i] = data_slots_[i - 1];
 #endif
       }
+#if ALEX_DATA_NODE_SEP_ARRAYS
+      NVM::Mem_persist(&key_slots_[pos + 1], sizeof(T) * (gap_pos - pos));
+      NVM::Mem_persist(&payload_slots_[pos + 1], sizeof(P) * (gap_pos - pos));
+#else
+      NVM::Mem_persist(&data_slots_[pos + 1], sizeof(V) * (gap_pos - pos));
+#endif
+
       insert_element_at(key, payload, pos);
       num_shifts_ += gap_pos - pos;
       return pos;
@@ -1920,6 +1946,13 @@ class AlexDataNode : public AlexNode<T, P> {
         data_slots_[i] = data_slots_[i + 1];
 #endif
       }
+#if ALEX_DATA_NODE_SEP_ARRAYS
+      NVM::Mem_persist(&key_slots_[gap_pos], sizeof(T) * (pos - gap_pos - 1));
+      NVM::Mem_persist(&payload_slots_[gap_pos], sizeof(P) * (pos - gap_pos - 1));
+#else
+      NVM::Mem_persist(&data_slots_[gap_pos], sizeof(V) * (pos - gap_pos - 1));
+#endif
+
       insert_element_at(key, payload, pos - 1);
       num_shifts_ += pos - gap_pos - 1;
       return pos - 1;
