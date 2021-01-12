@@ -84,7 +84,7 @@ void pgm_dynamic_test()
     Random rnd(0, UINT64_MAX - 1);
     db_t *db = new db_t();
     std::cout<< "DB: " << db << std::endl;
-    int test_num =1000000;
+    int test_num =100;
     std::vector<uint64_t> keys;
     for(int i = 0; i < test_num; i ++) {
         uint64_t key = rnd.Next();

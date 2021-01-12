@@ -142,20 +142,24 @@ class DynamicPGMIndex {
         levels[0].resize(0);
         // levels[target - min_level] = std::move(tmp_b);
         levels[target - min_level].assign(tmp_b.begin(), tmp_b.end());
+        NVM::Mem_persist(levels[target - min_level].data(), sizeof(Item) * actual_size);
 
         // Rebuild index, if needed
-        if (target >= MinIndexedLevel)
+        if (target >= MinIndexedLevel) {
             pgm(target) = PGMType(level(target).begin(), level(target).end());
+        }
     }
 
     void insert(const Item &new_item) {
         auto insertion_point = std::lower_bound(levels[0].begin(), levels[0].end(), new_item);
         if (insertion_point != levels[0].end() && *insertion_point == new_item) {
             *insertion_point = new_item;
+            NVM::Mem_persist(insertion_point.base(), sizeof(Item));
             return;
         }
         if (levels[0].size() < buffer_max_size) {
             levels[0].insert(insertion_point, new_item);
+            NVM::Mem_persist(insertion_point.base(), sizeof(Item));
             used_levels = used_levels == min_level ? min_level + 1 : used_levels;
             return;
         }
