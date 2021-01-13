@@ -18,7 +18,7 @@ namespace LI
 {
 // using pgm::PGMIndex;
 // using pgm::ApproxPos;
-using PGM_NVM::PGMIndex;
+using PGM_NVM::PGMIndex;   // store in NVM
 using PGM_NVM::ApproxPos;
 using RMI::Key_64;
 using RMI::TwoStageRMI;
