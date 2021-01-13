@@ -18,8 +18,8 @@ struct __attribute__((aligned(64))) BEntry {
     CLevel clevel;
     KVBuffer<112,8> buf;  // contains 2 bytes meta
 
-    BEntry(uint64_t key, int prefix_len);
-    BEntry(uint64_t key, uint64_t value, int prefix_len);
+    BEntry(uint64_t key, int prefix_len, CLevel::MemControl* mem);
+    BEntry(uint64_t key, uint64_t value, int prefix_len, CLevel::MemControl* mem);
 
     ALWAYS_INLINE uint64_t key(int idx) const {
       return buf.key(idx, entry_key);
@@ -216,6 +216,5 @@ struct __attribute__((aligned(64))) BEntry {
       CLevel::NoSortIter citer_;
     };
   }; // BEntry
-
-extern std::atomic<int64_t> clevel_time;
+  extern std::atomic<int64_t> clevel_time;
 } // End of namespace combotree

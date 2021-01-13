@@ -24,36 +24,36 @@ Learn_Index::Learn_Index(BLevel* blevel, int span)
     learn_index_ = new LearnIndex(blevel_->begin(), blevel_->end());
     {
         //store segments and levelsize and levelcount
-        std::cout << "Segment count: " << learn_index_->segments_count() << std::endl
-            << "Segment size: "  << sizeof(segment_t) << std::endl
-            << "Linear model count: " << learn_index_->segments_count() << std::endl
-            << "Linear size: "  << sizeof(linear_model_t) << std::endl
-            << "Head size: "  << sizeof(LearnIndexHead) << std::endl;
+        // std::cout << "Segment count: " << learn_index_->segments_count() << std::endl
+        //     << "Segment size: "  << sizeof(segment_t) << std::endl
+        //     << "Linear model count: " << learn_index_->segments_count() << std::endl
+        //     << "Linear size: "  << sizeof(linear_model_t) << std::endl
+        //     << "Head size: "  << sizeof(LearnIndexHead) << std::endl;
 
-        size_t filesize = 64 /* LearnIndexHead */ 
-                + learn_index_->segments_count() * sizeof(segment_t) /* Segments size */
-                + (learn_index_->rmi_model_n() + 1) * sizeof(linear_model_t); /* RMI size */
+        // size_t filesize = 64 /* LearnIndexHead */ 
+        //         + learn_index_->segments_count() * sizeof(segment_t) /* Segments size */
+        //         + (learn_index_->rmi_model_n() + 1) * sizeof(linear_model_t); /* RMI size */
 
-        pmem_file_ = std::string(PGM_INDEX_PMEM_FILE) + std::to_string(file_id_++);
-        pmem_addr_ = PmemMapFile(pmem_file_, filesize, &mapped_len_);
-        LearnIndexHead *head = (LearnIndexHead *)pmem_addr_;
-        segment_t *segments = (segment_t *)((char *)pmem_addr_ + 64);
-        linear_model_t *linear_models = (linear_model_t *)((char *)pmem_addr_ + 64 + learn_index_->segments_count() * sizeof(segment_t));
+        // pmem_file_ = std::string(PGM_INDEX_PMEM_FILE) + std::to_string(file_id_++);
+        // pmem_addr_ = PmemMapFile(pmem_file_, filesize, &mapped_len_);
+        // LearnIndexHead *head = (LearnIndexHead *)pmem_addr_;
+        // segment_t *segments = (segment_t *)((char *)pmem_addr_ + 64);
+        // linear_model_t *linear_models = (linear_model_t *)((char *)pmem_addr_ + 64 + learn_index_->segments_count() * sizeof(segment_t));
         
-        head->type = LearnType::LearnIndexType;
-        head->nr_elements = nr_blevel_entry_;
-        head->first_key = min_key_;
-        head->last_key = max_key_;
+        // head->type = LearnType::LearnIndexType;
+        // head->nr_elements = nr_blevel_entry_;
+        // head->first_key = min_key_;
+        // head->last_key = max_key_;
 
-        head->learn.segment_count = learn_index_->segments_count();
-        head->learn.rmi_model_n = learn_index_->rmi_model_n() + 1;
+        // head->learn.segment_count = learn_index_->segments_count();
+        // head->learn.rmi_model_n = learn_index_->rmi_model_n() + 1;
 
-        for(size_t i = 0; i < head->learn.segment_count; i ++) {
-            segments[i] = learn_index_->get_segment(i);
-        }
-        linear_models[0] = learn_index_->get_rmi_1st_stage_model();
-        memcpy(&linear_models[1], learn_index_->get_rmi_2nd_stage_model(), learn_index_->rmi_model_n() * sizeof(linear_model_t));
-        pmem_persist(pmem_addr_, filesize);
+        // for(size_t i = 0; i < head->learn.segment_count; i ++) {
+        //     segments[i] = learn_index_->get_segment(i);
+        // }
+        // linear_models[0] = learn_index_->get_rmi_1st_stage_model();
+        // memcpy(&linear_models[1], learn_index_->get_rmi_2nd_stage_model(), learn_index_->rmi_model_n() * sizeof(linear_model_t));
+        // pmem_persist(pmem_addr_, filesize);
     } 
     // {
     //     LearnIndexHead *head = (LearnIndexHead *)pmem_addr_;

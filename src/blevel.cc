@@ -172,7 +172,7 @@ void BLevel::ExpandPut_(ExpandData& data, uint64_t key, uint64_t value) {
     // buf full, add a new entry
     if (data.new_addr < data.max_addr) {
       int prefix_len = CommonPrefixBytes(data.entry_key, (data.new_addr == data.max_addr - 1) ? data.last_entry_key : key);
-      bentry_t* new_entry = new (data.new_addr) bentry_t(data.entry_key, prefix_len);
+      bentry_t* new_entry = new (data.new_addr) bentry_t(data.entry_key, prefix_len, &clevel_mem_);
       data.FlushToEntry(new_entry, prefix_len, &clevel_mem_);
       data.expanded_entries->fetch_add(1, std::memory_order_release);
       data.new_addr++;
@@ -199,7 +199,7 @@ void BLevel::ExpandFinish_(ExpandData& data) {
   if (data.buf_count != 0) {
     if (data.new_addr < data.max_addr) {
       int prefix_len = CommonPrefixBytes(data.entry_key, data.last_entry_key);
-      bentry_t* new_entry = new (data.new_addr) bentry_t(data.entry_key, prefix_len);
+      bentry_t* new_entry = new (data.new_addr) bentry_t(data.entry_key, prefix_len, &clevel_mem_);
       data.FlushToEntry(new_entry, prefix_len, &clevel_mem_);
       data.new_addr++;
       // inc expanded_entries before change max_key

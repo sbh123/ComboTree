@@ -5,6 +5,7 @@
 #include <sstream>
 #include "combotree/combotree.h"
 #include "combotree_config.h"
+#include "nvm_alloc.h"
 #include "random.h"
 #include "timer.h"
 
@@ -13,7 +14,7 @@
 #define GET_SIZE        1000000
 #define SCAN_TEST_SIZE  1000000
 
-bool use_data_file = true;
+bool use_data_file = false;
 int SCAN_SIZE = 100;
 
 using combotree::ComboTree;
@@ -59,7 +60,7 @@ int main(int argc, char** argv) {
   std::cout << "LAST_EXPAND:           " << LAST_EXPAND << std::endl;
 
   std::vector<uint64_t> key;
-
+  NVM::env_init();
   if (use_data_file) {
     std::ifstream data("./data.dat");
 
@@ -146,6 +147,6 @@ int main(int argc, char** argv) {
   // for (auto& k : key) {
   //   assert(tree->Get(k, value) == false);
   // }
-
+  NVM::env_exit();
   return 0;
 }

@@ -4,7 +4,7 @@ namespace combotree
 
 extern std::atomic<int64_t> clevel_time;
 /************************** BEntry ***************************/
-BEntry::BEntry(uint64_t key, uint64_t value, int prefix_len)
+BEntry::BEntry(uint64_t key, uint64_t value, int prefix_len, CLevel::MemControl* mem)
   : entry_key(key)
 {
   buf.prefix_bytes = prefix_len;
@@ -14,7 +14,7 @@ BEntry::BEntry(uint64_t key, uint64_t value, int prefix_len)
   buf.Put(0, key, value);
 }
 
-BEntry::BEntry(uint64_t key, int prefix_len)
+BEntry::BEntry(uint64_t key, int prefix_len, CLevel::MemControl* mem)
   : entry_key(key)
 {
   buf.prefix_bytes = prefix_len;
