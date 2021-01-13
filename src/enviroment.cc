@@ -1,5 +1,10 @@
 #include "nvm_alloc.h"
 #include "combotree_config.h"
+#include "common_time.h"
+
+namespace Common {
+    std::map<std::string, Common::Statistic> timers;
+}
 
 namespace NVM
 {
@@ -21,6 +26,10 @@ int env_init()
     common_alloc = new  NVM::Alloc(COMMON_PMEM_FILE, common_alloc_size);
     structure_alloc  = new  NVM::Alloc(PMEM_DIR"Fast-Fair", btree_alloc_size);
     data_alloc  = new  NVM::Alloc(PMEM_DIR"Fast-Fair", data_alloc_size);
+    Common::timers["ABLevel_times"] = Common::Statistic();
+    Common::timers["ALevel_times"] = Common::Statistic();
+    Common::timers["BLevel_times"] = Common::Statistic();
+    Common::timers["Clevel_times"] = Common::Statistic();
     return 0;
 }
 

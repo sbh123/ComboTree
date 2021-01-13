@@ -549,7 +549,7 @@ uint64_t BLevel::Find_(uint64_t key, uint64_t begin, uint64_t end
   // binary search
   int left = begin;
   int right = end;
-  while (left <= right) {
+  // while (left <= right) {
     int middle = (left + right) / 2;
     uint64_t mid_key = entries_[middle].entry_key;
     if (mid_key == key) {
@@ -562,16 +562,20 @@ uint64_t BLevel::Find_(uint64_t key, uint64_t begin, uint64_t end
       return middle;
     } else if (mid_key < key) {
       left = middle + 1;
+      for(; left <= right && entries_[left].entry_key <= key; left ++);
+      right = left - 1;
     } else {
       right = middle - 1;
+      for(; left <= right && entries_[right].entry_key > key; right --);
     }
-  }
+  // }
 #ifdef BRANGE
   if (interval) {
     int idx = (right - ranges_[target_range].physical_entry_start) / interval_size_;
     *interval = &size_per_interval_[target_range][idx];
   }
 #endif
+  // Common::timers["BLevel_times"].end();
   return right;
 }
 

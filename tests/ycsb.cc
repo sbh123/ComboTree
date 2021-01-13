@@ -5,6 +5,7 @@
 #include <future>
 #include "ycsb/ycsb-c.h"
 #include "nvm_alloc.h"
+#include "common_time.h"
 #include "combotree_config.h"
 #include "combotree/combotree.h"
 #include "fast-fair/btree.h"
@@ -94,6 +95,15 @@ public:
     {
         tree_->Scan(start_key, len, results);
         return 1;
+    }
+
+    void PrintStatic() {
+      // std::cerr << "Alevel average cost: " << Common::timers["ALevel_times"].avg_latency();
+      // std::cerr << ",Blevel average cost: " << Common::timers["BLevel_times"].avg_latency();
+      // std::cerr << ",Clevel average cost: " << Common::timers["Clevel_times"].avg_latency() << std::endl;
+      // Common::timers["Alevel_times"].clear();
+      // Common::timers["Blevel_times"].clear();
+      // Common::timers["Clevel_times"].clear();
     }
 private:
     ComboTree *tree_;
@@ -246,6 +256,10 @@ public:
     }
     return 1;
   } 
+  void PrintStatic() {
+    std::cerr << "Alevel average cost: " << Common::timers["ABLevel_times"].avg_latency() << std::endl;
+    // std::cerr << "Clevel average cost: " << Common::timers["Clevel_times"].avg_latency() << std::endl;
+  }
 private:
   alex_t *alex_;
 };
@@ -266,8 +280,9 @@ int YCSB_Run(ycsbc::KvDB *db, ycsbc::CoreWorkload *wl, const int num_ops,
     } else {
       oks += client.DoTransaction();
     }
-    if(i%1000 == 0) {
-      std::cerr << "Trans: " << i << "\r";
+    if(i%10000 == 0) {
+      // std::cerr << "Trans: " << i << "\r";
+      db->PrintStatic();
     }
   }
   std::cerr << "Trans: " << num_ops <<std::endl;

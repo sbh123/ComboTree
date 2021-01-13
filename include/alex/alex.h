@@ -38,7 +38,7 @@
 #include "alex_base.h"
 #include "alex_fanout_tree.h"
 #include "alex_nodes.h"
-
+#include "common_time.h"
 // Whether we account for floating-point precision issues when traversing down
 // ALEX.
 // These issues rarely occur in practice but can cause incorrect behavior.
@@ -1138,8 +1138,9 @@ class Alex {
         expand_root(key, true);  // expand to the left
       }
     }
-
+    // Common::timers["ABLevel_times"].start();
     data_node_type* leaf = get_leaf(key);
+    // Common::timers["ABLevel_times"].end();
 
     // Nonzero fail flag means that the insert did not happen
     std::pair<int, int> ret = leaf->insert(key, payload);

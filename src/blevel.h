@@ -12,7 +12,7 @@
 #include "pmem.h"
 
 #include "bentry.h"
-
+#include "common_time.h"
 namespace combotree {
 
 class Test;
@@ -496,6 +496,7 @@ public:
 #ifndef NO_LOCK
     std::lock_guard<std::shared_mutex> lock(lock_[physical_idx]);
 #endif
+    // Common::timers["Clevel_times"].start();
     if (!entries_[physical_idx].IsValid())
       return false;
     entries_[physical_idx].Put(&clevel_mem_, key, value);
@@ -503,6 +504,7 @@ public:
 #ifdef BRANGE
     interval_size->fetch_add(1, std::memory_order_relaxed);
 #endif
+    // Common::timers["Clevel_times"].end();
     return true;
   }
 

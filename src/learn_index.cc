@@ -78,22 +78,20 @@ Learn_Index::~Learn_Index() {
 }
 
 void Learn_Index::GetBLevelRange_(uint64_t key, uint64_t& begin, uint64_t& end, bool debug) const {
-  if (key < min_key_) {
+  // Common::timers["ALevel_times"].start();
+  if (unlikely(key < min_key_)) {
     begin = 0;
     end = 0;
-    return;
-  }
-  if (key >= max_key_) {
+  } else if (unlikely(key >= max_key_)) {
     begin = nr_blevel_entry_;
     end = nr_blevel_entry_;
-    return;
+  } else {
+    auto range = learn_index_->search(key, debug);
+    begin = range.lo;
+    end = range.hi;
   }
-  auto range = learn_index_->search(key, debug);
-//   LOG(Debug::INFO, "Get begin %ld, end %ld.", range.lo, range.hi);
-
-  // end = std::lower_bound(key_index + range.lo,  key_index + range.hi, key) - key_index;
-  begin = range.lo;
-  end = range.hi;
+  // Common::timers["ALevel_times"].end();
+  // Common::timers["BLevel_times"].start();
 }
 
 } // namespace combotree
