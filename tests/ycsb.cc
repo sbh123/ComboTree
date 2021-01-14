@@ -257,7 +257,7 @@ public:
     return 1;
   } 
   void PrintStatic() {
-    std::cerr << "Alevel average cost: " << Common::timers["ABLevel_times"].avg_latency() << std::endl;
+    // std::cerr << "Alevel average cost: " << Common::timers["ABLevel_times"].avg_latency() << std::endl;
     // std::cerr << "Clevel average cost: " << Common::timers["Clevel_times"].avg_latency() << std::endl;
   }
 private:
