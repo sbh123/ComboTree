@@ -220,7 +220,7 @@ class AlexDB : public ycsbc::KvDB  {
   typedef alex::Alex<KEY_TYPE, PAYLOAD_TYPE, alex::AlexCompare, NVM::allocator<std::pair<KEY_TYPE, PAYLOAD_TYPE>>> alex_t;
 public:
   AlexDB(): alex_(nullptr) {}
-  AlexDB(alex_t *alex): alex_(alex_) {}
+  AlexDB(alex_t *alex): alex_(alex) {}
   virtual ~AlexDB() {
     delete alex_;
   }

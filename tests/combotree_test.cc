@@ -3,11 +3,13 @@
 #include <iomanip>
 #include <map>
 #include "combotree/combotree.h"
-#include "combotree_config.h"
+#include "../src/combotree_config.h"
 #include "nvm_alloc.h"
 #include "random.h"
 
 #define TEST_SIZE   4000000
+// #define TEST_SIZE   3000
+
 
 using combotree::ComboTree;
 using combotree::Random;
@@ -38,11 +40,20 @@ int main(void) {
   }
 
   uint64_t value;
-
+  // {
+  //   ComboTree::Iter it(tree, 0);
+  //   for(int i = 0;i < 100; ++ i, it.next()) {
+  //     std::cout << "iter " << i << ", key " << it.key() << ", value " << it.value() << std::endl;
+  //   }
+  // }
   // Get
   for (auto &kv : right_kv) {
     assert(tree->Get(kv.first, value) == true);
-    assert(value == kv.second);
+    if(value != kv.second) {
+      std::cout << "key: " << kv.first << ", find " << value << ", expect " << kv.second << std::endl;
+      tree->Get(kv.first, value);
+      assert(value == kv.second);
+    }
   }
 
   for (uint64_t i = 0; i < TEST_SIZE * 2; ++i) {
@@ -70,7 +81,16 @@ int main(void) {
     // while (riter.key() < start_key)
     //   riter.next();
     // assert(right_iter->first == riter.key());
-    assert(right_iter->first == iter.key());
+    if (right_iter->first != iter.key()) {
+      // b combotree_test.cc:79 if i==122
+      // b blevel.h:121
+      // b bentry.h:77
+      // b tmp_bentry.h:99
+      // b clevel.h:180
+      std::cout << i << "key: " << start_key << ", find " << iter.key() << ", expect " << right_iter->first << std::endl;
+      ComboTree::Iter iter(tree, start_key);
+      assert(right_iter->first == iter.key());
+    }
     for (int j = 0; j < 100 && right_iter != right_kv.cend(); ++j) {
       assert(!iter.end());
       // assert(!riter.end());

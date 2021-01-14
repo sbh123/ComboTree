@@ -5,7 +5,7 @@
 
 #include "random.h"
 #include "../src/clevel.h"
-#include "../src/tmp_bentry.h"
+#include "../src/bentry.h"
 
 using combotree::CLevel;
 using combotree::Random;

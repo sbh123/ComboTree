@@ -5,7 +5,8 @@ namespace combotree {
 class Random {
  public:
   Random(uint64_t start, uint64_t end)
-    : rng(std::random_device()()),
+    // : rng(std::random_device()()),
+    : rng(0),
       dist(start, end)
   {}
 

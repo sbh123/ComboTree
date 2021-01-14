@@ -7,6 +7,7 @@
 #cmakedefine STREAMING_LOAD
 #cmakedefine NO_LOCK
 #cmakedefine BRANGE
+#cmakedefine NO_ENTRY_BUF
 
 #ifndef PMEM_DIR
 #define PMEM_DIR @PMEM_DIR@

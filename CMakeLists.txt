@@ -16,6 +16,7 @@ option(STREAMING_LOAD   "Use Non-temporal Load"   OFF)
 option(STREAMING_STORE  "Use Non-temporal Store"  OFF)
 option(NO_LOCK          "Don't use lock"          OFF)
 option(BRANGE           "Multi-thread expanding"  ON)
+option(NO_ENTRY_BUF     "BEntry without KVBuffer" OFF)
 
 # ComboTree Configuration
 # use `make clean && make CXX_DEFINES="-DNAME=VALUE"` to override during compile
@@ -41,7 +42,12 @@ if(BRANGE)
   set(EXPAND_THREADS      4)
 endif(BRANGE)
 
-set(BLEVEL_EXPAND_BUF_KEY 6)
+if(NO_ENTRY_BUF)
+  set(BLEVEL_EXPAND_BUF_KEY 4)
+else()
+  set(BLEVEL_EXPAND_BUF_KEY 6)
+endif(NO_ENTRY_BUF)
+
 set(EXPANSION_FACTOR      4)
 set(DEFAULT_SPAN          2)
 set(PMEMKV_THRESHOLD      3000)

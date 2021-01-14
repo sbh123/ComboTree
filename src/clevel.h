@@ -9,6 +9,7 @@
 #include "combotree_config.h"
 #include "debug.h"
 #include "pmem.h"
+#include "helper.h"
 
 #define READ_SIX_BYTE(addr) ((*(uint64_t*)addr) & 0x0000FFFFFFFFFFFFUL)
 
@@ -176,6 +177,13 @@ class __attribute__((packed)) CLevel {
     Iter(const CLevel* clevel, const MemControl* mem, uint64_t prefix_key, uint64_t start_key)
       : mem_(mem), prefix_key(prefix_key)
     {
+      if(unlikely(start_key <= prefix_key)) {
+        cur_ = clevel->root(mem->BaseAddr())->FindLeaf(mem, prefix_key);
+        while (cur_ != nullptr && cur_->leaf_buf.Empty())
+          cur_ = (const Node*)cur_->GetNext(mem_->BaseAddr());
+        idx_ = 0;
+        return;
+      }
       cur_ = clevel->root(mem->BaseAddr())->FindLeaf(mem, start_key);
       while (cur_ != nullptr && cur_->leaf_buf.Empty())
         cur_ = (const Node*)cur_->GetNext(mem_->BaseAddr());

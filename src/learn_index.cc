@@ -21,6 +21,11 @@ Learn_Index::Learn_Index(BLevel* blevel, int span)
     max_key_ = blevel_->EntryKey(nr_blevel_entry_);
     nr_entry_ = nr_blevel_entry_ + 1;
     std::cout << "IndexIter distance: " << blevel_->begin().distance(blevel_->begin(), blevel_->end()) << std::endl;
+    // for(auto it = blevel_->begin(); it != blevel_->end(); ++ it) {
+    //   std::cout << "key: " << *it << std::endl; 
+    // }
+    std::cout << "Min key:" << min_key_ << ", max key: " << max_key_ << std::endl;
+    
     learn_index_ = new LearnIndex(blevel_->begin(), blevel_->end());
     {
         //store segments and levelsize and levelcount

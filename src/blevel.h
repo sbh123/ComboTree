@@ -16,14 +16,17 @@
 namespace combotree {
 
 class Test;
-
+// #define NO_ENTRY_BUF
 class BLevel {
+#ifdef NO_ENTRY_BUF
+  typedef combotree::NobufBEntry bentry_t;
+#else
   typedef combotree::BEntry bentry_t;
+#endif // NO_ENTRY_BUF
+
 public:
     class IndexIter;
 private:
-  
-  static_assert(sizeof(bentry_t) == 128, "sizeof(bentry_t) != 128");
 
 public:
   BLevel(size_t entries);
@@ -521,9 +524,12 @@ public:
 #ifndef NO_LOCK
     std::shared_lock<std::shared_mutex> lock(lock_[physical_idx]);
 #endif
+    // Common::timers["Clevel_times"].start();
     if (!entries_[physical_idx].IsValid())
       return false;
-    return entries_[physical_idx].Get((CLevel::MemControl*)&clevel_mem_, key, value);
+    bool ret =  entries_[physical_idx].Get((CLevel::MemControl*)&clevel_mem_, key, value);
+    // Common::timers["Clevel_times"].end();
+    return ret;
   }
 
   ALWAYS_INLINE bool Delete_(uint64_t key, uint64_t* value, uint64_t physical_idx

@@ -71,6 +71,11 @@ void stream_store_entry(void* dest, void* source) {
 } // anonymous namespace
 
 void BLevel::ExpandData::FlushToEntry(bentry_t* entry, int prefix_len, CLevel::MemControl* mem) {
+#ifdef NO_ENTRY_BUF
+  for(int i = 0; i < buf_count; i ++) {
+    entry->Put(mem, key_buf[i], value_buf[BLEVEL_EXPAND_BUF_KEY-i-1]);
+  }
+#else
   while (buf_count > entry->buf.max_entries) {
     // flush last entry.max_entries data to clevel
     // copy value
@@ -105,7 +110,7 @@ void BLevel::ExpandData::FlushToEntry(bentry_t* entry, int prefix_len, CLevel::M
   flush((uint8_t*)entry+64);
   fence();
 #endif // STREAMING_STORE
-
+#endif // NO_ENTRY_BUF
   buf_count = 0;
 }
 
@@ -227,8 +232,9 @@ void BLevel::Expansion(std::vector<std::pair<uint64_t,uint64_t>>& data) {
   expand_meta.expanded_entries = &entry_count;
   expand_meta.max_key = &max_key;
 
-  for (size_t i = 0; i < data.size(); ++i)
+  for (size_t i = 0; i < data.size(); ++i) {
     ExpandPut_(expand_meta, data[i].first, data[i].second);
+  }
   ExpandFinish_(expand_meta);
 
 #ifdef BRANGE
@@ -398,7 +404,9 @@ void BLevel::ExpandRange_(BLevel* old_blevel, int thread_id) {
         } while(biter.next());
         expand_meta.clevel_data_count += total_cnt - old_entry->buf.entries;
         expand_meta.bentry_max_count =  std::max(expand_meta.bentry_max_count, total_cnt);
-      } else if (!old_entry->buf.Empty()) {
+      }
+#ifndef NO_ENTRY_BUF
+      else if (!old_entry->buf.Empty()) {
 #ifdef BUF_SORT
         for (uint64_t i = 0; i < old_entry->buf.entries; ++i)
           ExpandPut_(expand_meta, old_entry->key(i), old_entry->value(i));
@@ -409,6 +417,7 @@ void BLevel::ExpandRange_(BLevel* old_blevel, int thread_id) {
           ExpandPut_(expand_meta, old_entry->key(sorted_index[i]), old_entry->value(sorted_index[i]));
 #endif // BUF_SORT
       }
+#endif // NO_ENTRY_BUF
       old_blevel->entries_[old_index].SetInvalid();
     }
   }
