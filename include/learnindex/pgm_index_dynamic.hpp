@@ -56,7 +56,7 @@ class DynamicPGMIndex {
     static_assert(2 * PGMType::epsilon_value < 1ul << MinIndexedLevel);
 
     using Item = std::conditional_t<std::is_pointer_v<V>, ItemA, ItemB>;
-    using Level = std::vector<Item, NVM::DataAllocator<Item, std::allocator<Item>>>;
+    using Level = std::vector<Item, NVM::allocator<Item>>;
     using MemLevel = std::vector<Item>;
 
     uint8_t used_levels;       ///< Equal to 1 + last level whose size is greater than 0, or = min_level if no data.

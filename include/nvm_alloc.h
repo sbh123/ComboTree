@@ -131,7 +131,7 @@ private:
 };
 #endif
 extern Alloc *common_alloc;
-extern Alloc *structure_alloc;
+extern Alloc *data_alloc;
 extern Alloc *data_alloc;
 
 class AllocBase {
@@ -178,72 +178,33 @@ public:
     void* operator new(size_t size)
     {
         // std::cout << "Struct Alloc: " << size << " bytes." << std::endl;
-        return structure_alloc->alloc(size);
+        return data_alloc->alloc(size);
     }
 
     void* operator new[](size_t size)
     {
         // std::cout << "Struct alloc array: " << size << " bytes." << std::endl;
-        return structure_alloc->alloc(size + 16);
+        return data_alloc->alloc(size + 16);
     }
 
     void operator delete(void *p, size_t size)
     {
         // std::cout << "Struct free: " << size << " bytes." << std::endl;
-        structure_alloc->Free(p, size);
+        data_alloc->Free(p, size);
     }
 
     void operator delete(void *p)
     {
         // std::cout << "Struct free addrs: " << p <<  "." << std::endl;
-        structure_alloc->Free(p);
+        data_alloc->Free(p);
     }
 
     void operator delete[](void *p)
     {
         // std::cout << "Struct array free addrs: " << p <<  "." << std::endl;
-        structure_alloc->Free(p);
+        data_alloc->Free(p);
     }
     
-};
-
-template<typename T, typename A>
-class DataAllocator : public std::allocator<T> {
-    typedef std::allocator_traits<A> a_t;
-
-public:
-    template<typename U>
-    struct rebind {
-        using other = DataAllocator<U, typename a_t::template rebind_alloc<U> >;
-    };
-
-    using A::A;
-
-    template<typename U>
-    void construct(U *ptr) noexcept(std::is_nothrow_default_constructible_v<U>) {
-        ::new(static_cast<void *>(ptr)) U;
-        // std::cout << "Construct 1: "  << ptr << std::endl;
-    }
-
-    template<typename U, typename...Args>
-    void construct(U *ptr, Args &&... args) {
-        a_t::construct(static_cast<A &>(*this), ptr, std::forward<Args>(args)...);
-    }
-
-    static T* allocate(size_t _n)
-    {
-        T *ret = 0 == _n ? nullptr : (T*)data_alloc->alloc(_n * sizeof(T));
-        // std::cout << "Call allocte: "  << _n << ", at: " << ret <<  std::endl;
-        return ret;
-    }
-
-    static void deallocate(T *_p, size_t _n)
-    {
-        // std::cout << "Call deallocate: "  << _n << std::endl;
-        if (nullptr != _p) {
-            data_alloc->Free(_p, _n * sizeof(T));
-        }
-    }
 };
 
 template<typename T, typename A>
@@ -288,6 +249,14 @@ public:
 template<typename T>
 class allocator {
 public:
+    typedef size_t     size_type;
+    typedef ptrdiff_t  difference_type;
+    typedef T*         pointer;
+    typedef const T*   const_pointer;
+    typedef T&         reference;
+    typedef const T&   const_reference;
+    typedef T          value_type;
+
     template<typename U>
     struct rebind {
         using other = allocator<U>;

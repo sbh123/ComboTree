@@ -271,6 +271,7 @@ public:
   int Get(uint64_t key, uint64_t &value)
   {
       value = *(alex_->get_payload(key));
+      // assert(value == key);
       return 1;
   }
   int Update(uint64_t key, uint64_t value) {

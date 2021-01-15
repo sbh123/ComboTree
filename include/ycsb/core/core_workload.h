@@ -32,7 +32,16 @@ enum Operation {
   READ,
   UPDATE,
   SCAN,
-  READMODIFYWRITE
+  READMODIFYWRITE,
+  NR_OPERATIONS,
+};
+
+const char *OperationName[] = {
+  "INSERT",
+  "READ",
+  "UPDATE",
+  "SCAN",
+  "READMODIFYWRITE"
 };
 
 class CoreWorkload {

@@ -18,12 +18,21 @@ namespace ycsbc {
 
 class Client {
  public:
-  Client(DB &db, CoreWorkload &wl) : db_(db), workload_(wl) { }
+  Client(DB &db, CoreWorkload &wl) : db_(db), workload_(wl) {
+    for(int i = 0; i < NR_OPERATIONS; i++) {
+      OP_counts[i] = 0;
+    }
+  }
   
   virtual bool DoInsert();
   virtual bool DoTransaction();
   
-  virtual ~Client() { }
+  virtual ~Client() {
+    for(int i = 0; i < NR_OPERATIONS; i++) {
+      std::cerr << OperationName[i] << ": " << OP_counts[i] << ". ";
+    }
+    std::cerr << std::endl;
+  }
   
  protected:
   
@@ -32,7 +41,7 @@ class Client {
   virtual int TransactionScan();
   virtual int TransactionUpdate();
   virtual int TransactionInsert();
-  
+  size_t OP_counts[NR_OPERATIONS];
   DB &db_;
   CoreWorkload &workload_;
 };
@@ -46,7 +55,8 @@ inline bool Client::DoInsert() {
 
 inline bool Client::DoTransaction() {
   int status = -1;
-  switch (workload_.NextOperation()) {
+  int op;
+  switch ((op = workload_.NextOperation())) {
     case READ:
       status = TransactionRead();
       break;
@@ -65,6 +75,7 @@ inline bool Client::DoTransaction() {
     default:
       throw utils::Exception("Operation request is not recognized!");
   }
+  OP_counts[op] ++;
   assert(status >= 0);
   return (status == DB::kOK);
 }
@@ -142,12 +153,21 @@ template <class db_t>
 class KvClient {
 
 public:
-  KvClient(db_t *db, CoreWorkload &wl) : db_(db), workload_(wl) { }
+  KvClient(db_t *db, CoreWorkload &wl) : db_(db), workload_(wl) {
+    for(int i = 0; i < NR_OPERATIONS; i++) {
+      OP_counts[i] = 0;
+    }
+  }
   
   virtual bool DoInsert();
   virtual bool DoTransaction();
   
-  virtual ~KvClient() { }
+  virtual ~KvClient() {
+    for(int i = 0; i < NR_OPERATIONS; i++) {
+      std::cerr << OperationName[i] << ": " << OP_counts[i] << ". ";
+    }
+    std::cerr << std::endl;
+  }
   
  protected:
   
@@ -158,10 +178,12 @@ public:
   virtual int TransactionInsert();
   db_t *db_;
   CoreWorkload &workload_;
+  size_t OP_counts[NR_OPERATIONS];
 };
 
 template <class db_t>
 inline bool KvClient<db_t>::DoInsert() {
+  OP_counts[INSERT] ++;
   uint64_t key = workload_.NextSequenceIntKey();
   return db_->Put(key, key);
 }
@@ -169,7 +191,8 @@ inline bool KvClient<db_t>::DoInsert() {
 template <class db_t>
 inline bool KvClient<db_t>::DoTransaction() {
   int status = -1;
-  switch (workload_.NextOperation()) {
+  int op;
+  switch ((op = workload_.NextOperation())) {
     case READ:
       status = TransactionRead();
       break;
@@ -188,6 +211,7 @@ inline bool KvClient<db_t>::DoTransaction() {
     default:
       throw utils::Exception("Operation request is not recognized!");
   }
+  OP_counts[op] ++;
   assert(status >= 0);
   return (status == DB::kOK);
 }
