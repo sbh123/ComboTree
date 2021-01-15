@@ -27,3 +27,4 @@ yum install -y intel-mkl -->
 
 **YCSB**
 ./ycsb -db combotree -threads 1 -P ../include/ycsb/workloads/
+./ycsb -db combotree -threads 1 -P ../include/ycsb/insert_ratio/

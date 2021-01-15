@@ -20,12 +20,18 @@ using namespace std;
 using xindex::XIndex;
 
 const char *workloads[] = {
-  "workloada.spec",
-  "workloadb.spec",
-  "workloadc.spec",
-  "workloadd.spec",
-  "workloade.spec",
-  "workloadf.spec",
+  // "workloada.spec",
+  // "workloadb.spec",
+  // "workloadc.spec",
+  // "workloadd.spec",
+  // "workloade.spec",
+  // "workloadf.spec",
+  "workloada_insert_0.spec",
+  "workloada_insert_10.spec",
+  "workloada_insert_20.spec",
+  "workloada_insert_50.spec",
+  "workloada_insert_80.spec",
+  "workloada_insert_100.spec",
 };
 
 #define ArrayLen(arry) (sizeof(arry) / sizeof(arry[0]))
@@ -273,7 +279,11 @@ int LoadWorkLoad(utils::Properties &props, string &workload);
 int YCSB_Run(ycsbc::KvDB *db, ycsbc::CoreWorkload *wl, const int num_ops,
     bool is_loading) {
   ycsbc::KvClient<ycsbc::KvDB> client(db, *wl);
+  utils::ChronoTimer timer;
   int oks = 0;
+  if(is_loading) {
+    timer.Start();
+  }
   for (int i = 0; i < num_ops; ++i) {
     if (is_loading) {
       oks += client.DoInsert();
@@ -282,8 +292,18 @@ int YCSB_Run(ycsbc::KvDB *db, ycsbc::CoreWorkload *wl, const int num_ops,
     }
     if(i%10000 == 0) {
       // std::cerr << "Trans: " << i << "\r";
-      db->PrintStatic();
+      if(is_loading) {
+        auto duration = timer.End<std::chrono::nanoseconds>();
+        std::cout << "op " << i << " :average load latency: " << duration / 10000 << " ns." <<std::endl;
+      }
+      // std::cout << "average load latency: " << duration << std::endl;
+      timer.Start();
+      // db->PrintStatic();
     }
+  }
+  if(is_loading) {
+    auto duration = timer.End();
+    std::cout << "op " << num_ops <<  " :average load latency: " << duration << std::endl;
   }
   std::cerr << "Trans: " << num_ops <<std::endl;
   return oks;

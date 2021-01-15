@@ -34,6 +34,25 @@ class Timer {
   Clock::time_point time_;
 };
 
+class ChronoTimer {
+public:
+  void Start() {
+    time_ = Clock::now();
+  }
+
+  template <typename T = std::chrono::nanoseconds>
+  uint64_t End() {
+    Clock::time_point t = Clock::now();
+    return std::chrono::duration_cast<T>(t - time_).count();
+  }
+
+ private:
+  typedef std::chrono::high_resolution_clock Clock;
+  // typedef T Duration;
+
+  Clock::time_point time_;
+};
+
 } // utils
 
 #endif // YCSB_C_TIMER_H_
