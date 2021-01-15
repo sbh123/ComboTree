@@ -29,7 +29,6 @@
 #if !defined(XINDEX_UTIL_H)
 #define XINDEX_UTIL_H
 
-#include "nvm_alloc.h"
 namespace xindex {
 
 static const size_t desired_training_key_n = 10000000;
@@ -155,14 +154,8 @@ struct AtomicVal {
   bool locked(uint64_t status) { return status & lock_mask; }
   uint64_t get_version(uint64_t status) { return status & version_mask; }
 
-  void set_is_ptr() { 
-    // printf("%p, set ptr.\n", this);
-    status |= pointer_mask; 
-  }
-  void unset_is_ptr() { 
-    // printf("%p, unset ptr.\n", this);
-    status &= ~pointer_mask; 
-  }
+  void set_is_ptr() { status |= pointer_mask; }
+  void unset_is_ptr() { status &= ~pointer_mask; }
   void set_removed() { status |= removed_mask; }
   void lock() {
     while (true) {
@@ -262,9 +255,6 @@ struct AtomicVal {
     lock();
     uint64_t status = this->status;
     UNUSED(status);
-    if(!is_ptr(status)) {
-      printf("%p, Status: %lx.\n", this, status);
-    }
     assert(is_ptr(status));
     assert(!removed(status));
     if (!val.ptr->read(val.val)) {

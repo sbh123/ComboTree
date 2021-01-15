@@ -30,10 +30,8 @@
 namespace xindex {
 
 template <class key_t, class val_t, bool seq, size_t max_model_n = 4>
-class alignas(CACHELINE_SIZE) Group // : public NVM::NvmStructBase 
-{
+class alignas(CACHELINE_SIZE) Group {
   struct ModelInfo;
-  struct record;
 
   typedef LinearModel<key_t> linear_model_t;
   typedef ModelInfo model_info_t;
@@ -41,7 +39,7 @@ class alignas(CACHELINE_SIZE) Group // : public NVM::NvmStructBase
   typedef atomic_val_t wrapped_val_t;
   typedef AltBtreeBuffer<key_t, val_t> buffer_t;
   typedef uint64_t version_t;
-  typedef record record_t;
+  typedef std::pair<key_t, wrapped_val_t> record_t;
 
   template <class key_tt, class val_tt, bool sequential>
   friend class XIndex;
@@ -52,14 +50,6 @@ class alignas(CACHELINE_SIZE) Group // : public NVM::NvmStructBase
     key_t pivot;
     linear_model_t model;
   };
-
-  struct record : 
-  // public NVM::NvmStructBase,
-  public std::pair<key_t, wrapped_val_t>
-  {
-    /* data */
-  };
-  
 
   struct ArrayDataSource {
     ArrayDataSource(record_t *data, uint32_t array_size, uint32_t pos);

@@ -20,6 +20,7 @@
  *     https://ppopp20.sigplan.org/details/PPoPP-2020-papers/13/XIndex-A-Scalable-Learned-Index-for-Multicore-Data-Storage
  */
 #include <unordered_map>
+#include <unistd.h>
 
 #include "xindex_root.h"
 
