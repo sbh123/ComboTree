@@ -13,8 +13,8 @@ Alloc *structure_alloc = nullptr;
 Alloc *data_alloc = nullptr;
 
 #ifdef SERVER
-const size_t common_alloc_size = 1024 * 1024 * 1024UL;
-const size_t struct_alloc_size  = 20 * 1024 * 1024 * 1024UL;
+const size_t common_alloc_size = 10 *1024 * 1024 * 1024UL;
+const size_t struct_alloc_size  = 40 * 1024 * 1024 * 1024UL;
 const size_t data_alloc_size = 40 * 1024 * 1024 * 1024UL;
 #else
 const size_t common_alloc_size = 1024 * 1024 * 1024UL;

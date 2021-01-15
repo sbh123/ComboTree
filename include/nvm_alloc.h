@@ -96,6 +96,7 @@ public:
         void* p = current_addr;
         used_ += size;
         current_addr = (char *)(current_addr) + size;
+        assert(used_ <= mapped_len_);
         // std::cout << "Alloc at pos: " << p << std::endl;
         return p;
         // return malloc(size);
