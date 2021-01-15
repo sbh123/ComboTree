@@ -39,4 +39,11 @@ void env_exit()
     if(structure_alloc) delete structure_alloc;
     if(common_alloc) delete common_alloc;
 }
+
+void show_stat()
+{
+    if(data_alloc)  data_alloc->Info();
+    if(structure_alloc)  structure_alloc->Info();
+    if(common_alloc)  common_alloc->Info();
+}
 } // namespace NVM

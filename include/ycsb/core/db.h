@@ -109,6 +109,7 @@ class KvDB {
   /// Called once per DB client (thread); there is a single DB instance globally.
   ///
   virtual void Close() { }
+  virtual void Info() { }
   virtual int Put(uint64_t key, uint64_t value) = 0;
   virtual int Get(uint64_t key, uint64_t &value) = 0;
   virtual int Update(uint64_t key, uint64_t value) = 0;

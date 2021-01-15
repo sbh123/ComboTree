@@ -45,6 +45,15 @@ public:
     {
       tree_ = new btree();
     }
+
+    void Info()
+    {
+      NVM::show_stat();
+    }
+
+    void Close() { 
+
+    }
     int Put(uint64_t key, uint64_t value) 
     {
         tree_->btree_insert(key, (char *)value);
@@ -82,6 +91,11 @@ public:
 #else
       tree_ = new ComboTree("/mnt/pmem0/", (1024*1024*512UL), true);
 #endif
+    }
+
+    void Info()
+    {
+      NVM::show_stat();
     }
     int Put(uint64_t key, uint64_t value) 
     {
@@ -130,6 +144,10 @@ public:
   {
     pgm_ = new DynamicPGM();
   }
+  void Info()
+  {
+    NVM::show_stat();
+  }
   int Put(uint64_t key, uint64_t value) 
   {
     pgm_->insert(key, (char *)value);
@@ -176,6 +194,10 @@ public:
   void Init()
   {
     prepare_xindex(init_num, bg_num, work_num);
+  }
+  void Info()
+  {
+    NVM::show_stat();
   }
   int Put(uint64_t key, uint64_t value) 
   {
@@ -235,6 +257,12 @@ public:
   {
     alex_ = new alex_t();
   }
+
+  void Info()
+  {
+    NVM::show_stat();
+  }
+
   int Put(uint64_t key, uint64_t value) 
   {
     alex_->insert(key, value);
@@ -294,7 +322,7 @@ int YCSB_Run(ycsbc::KvDB *db, ycsbc::CoreWorkload *wl, const int num_ops,
       // std::cerr << "Trans: " << i << "\r";
       if(is_loading) {
         auto duration = timer.End<std::chrono::nanoseconds>();
-        std::cout << "op " << i << " :average load latency: " << duration / 10000 << " ns." <<std::endl;
+        std::cout << "op " << i << " :average load latency: " << 1.0 * duration / 10000 << " ns." <<std::endl;
       }
       // std::cout << "average load latency: " << duration << std::endl;
       timer.Start();
@@ -303,7 +331,7 @@ int YCSB_Run(ycsbc::KvDB *db, ycsbc::CoreWorkload *wl, const int num_ops,
   }
   if(is_loading) {
     auto duration = timer.End();
-    std::cout << "op " << num_ops <<  " :average load latency: " << duration << std::endl;
+    std::cout << "op " << num_ops <<  " :average load latency: " << 1.0 * duration / 10000<< std::endl;
   }
   std::cerr << "Trans: " << num_ops <<std::endl;
   return oks;
@@ -361,7 +389,7 @@ int main(int argc, const char *argv[])
       cout << props["dbname"] << "\tLoad thread:" << '\t' << 1 << '\t';
       cout << total_ops / duration / 1000 << endl << endl;
     }
-
+    db->Info();
     for(size_t i = 0; i < ArrayLen(workloads); i ++) {
       // cout << "Loads[" << i << "]: " << workloads[i] << endl;
       string workload = workdloads_dir + "/" + workloads[i];
