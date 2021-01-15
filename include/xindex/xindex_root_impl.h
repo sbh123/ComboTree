@@ -565,7 +565,7 @@ template <class key_t, class val_t, bool seq>
 inline void Root<key_t, val_t, seq>::train_rmi(size_t rmi_2nd_stage_model_n) {
   this->rmi_2nd_stage_model_n = rmi_2nd_stage_model_n;
   delete[] rmi_2nd_stage;
-  rmi_2nd_stage = new linear_model_t[rmi_2nd_stage_model_n]();
+  rmi_2nd_stage = new linear_model_t[rmi_2nd_stage_model_n + 1]();
 
   // train 1st stage
   std::vector<key_t> keys(group_n);
