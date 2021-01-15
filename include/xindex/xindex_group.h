@@ -30,7 +30,8 @@
 namespace xindex {
 
 template <class key_t, class val_t, bool seq, size_t max_model_n = 4>
-class alignas(CACHELINE_SIZE) Group : public NVM::NvmStructBase {
+class alignas(CACHELINE_SIZE) Group // : public NVM::NvmStructBase 
+{
   struct ModelInfo;
   struct record;
 
@@ -52,7 +53,9 @@ class alignas(CACHELINE_SIZE) Group : public NVM::NvmStructBase {
     linear_model_t model;
   };
 
-  struct record: public std::pair<key_t, wrapped_val_t>, public NvmStructBase
+  struct record : 
+  // public NVM::NvmStructBase,
+  public std::pair<key_t, wrapped_val_t>
   {
     /* data */
   };

@@ -184,7 +184,9 @@ public:
     void* operator new[](size_t size)
     {
         // std::cout << "Struct alloc array: " << size << " bytes." << std::endl;
-        return data_alloc->alloc(size + 16);
+        void *ret = data_alloc->alloc(size + 16);
+        memset(ret, 0, size + 16);
+        return ret;
     }
 
     void operator delete(void *p, size_t size)
