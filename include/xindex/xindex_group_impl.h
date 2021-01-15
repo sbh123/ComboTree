@@ -243,6 +243,11 @@ Group<key_t, val_t, seq, max_model_n>
   Group *new_group_1 = new Group();
   Group *new_group_2 = new Group();
 
+  if(pivot > data[0].first) {
+    std::cout << "Unexpect out pivot " << pivot.key << ", with " << data[0].first.key << std::endl;
+    pivot = data[0].first;
+  }
+
   new_group_1->pivot = pivot;
   new_group_2->pivot = data[array_size / 2].first;
   if(new_group_2->pivot <= new_group_1->pivot) {
