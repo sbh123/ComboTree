@@ -248,7 +248,7 @@ Group<key_t, val_t, seq, max_model_n>
   if(new_group_2->pivot <= new_group_1->pivot) {
     std::cout << "array_size : " << array_size << std::endl; 
     for(int i = 0; i < array_size; i ++) {
-      std::cout << "data[" << i << "]: " << data[i].key << std::endl;
+      std::cout << "data[" << i << "]: " << data[i].first.key << std::endl;
     }
   }
   assert(new_group_2->pivot > new_group_1->pivot);
