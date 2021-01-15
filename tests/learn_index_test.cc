@@ -71,6 +71,7 @@ static ApproxPos near_search_key(const uint64_t *keys, const uint64_t &key, size
     return {(lo + hi) / 2, lo, hi};
 }
 
+void Btree_Test();
 int main(int argc, char *argv[]) {
     size_t size = 100000;
     if(argc > 1) {
@@ -211,6 +212,54 @@ int main(int argc, char *argv[]) {
         delete btree;
         NVM::data_alloc->Free(pgm_keys, size * sizeof(uint64_t));
     }
+    Btree_Test();
     NVM::env_exit();
     return 0;
+}
+
+void Btree_Test()
+{
+  const int TEST_SIZE = 300000;
+  std::vector<uint64_t> key;
+  Random rnd(0, TEST_SIZE-1);
+
+
+  for (int i = 0; i < TEST_SIZE; ++i)
+    key.push_back(i);
+
+  for (int i = 0; i < TEST_SIZE; ++i)
+    std::swap(key[i], key[rnd.Next()]);
+  
+  btree *btree = new FastFair::btree();
+  auto summaryStats = [](const std::vector<double> &durations, const char *name = "PGM") {
+      double average = std::accumulate(durations.cbegin(), durations.cend() - 1, 0.0) / durations.size();
+      auto minmax = std::minmax(durations.cbegin(), durations.cend() - 1);
+
+      std::cout << "[" << name << "]: " << "Min: " << *minmax.first << std::endl;
+      std::cout << "[" << name << "]: " << "Average: " << average << std::endl;
+      std::cout << "[" << name << "]: " << "Max: " << *minmax.second << std::endl;
+  };
+  std::vector<double> durations;
+  for (int i = 0; i < TEST_SIZE; ++i) {
+    auto startTime = std::chrono::system_clock::now();
+    btree->btree_insert(key[i], (char *)key[i]);
+    auto endTime = std::chrono::system_clock::now();
+    uint64_t ns = std::chrono::duration_cast<std::chrono::nanoseconds>(endTime - startTime).count();
+    durations.push_back(1.0 * ns);
+  }
+  summaryStats(durations, "Fast fair Insert");
+  durations.clear();
+
+  for (int i = 0; i < TEST_SIZE; ++i) {
+    uint64_t value;
+    auto startTime = std::chrono::system_clock::now();
+    char *pvalue = btree->btree_search(key[i]);
+    auto endTime = std::chrono::system_clock::now();
+    uint64_t ns = std::chrono::duration_cast<std::chrono::nanoseconds>(endTime - startTime).count();
+    durations.push_back(1.0 * ns);
+  }
+  summaryStats(durations, "Fast fair Get");
+  
+  durations.clear();
+  delete btree;
 }

@@ -78,7 +78,8 @@ public:
         } 
         size_t kb = used_ / 1024;
         size_t mb = kb / 1024;
-        std::cout << "Common nvm used:" <<  mb  << " Mib, " << kb % 1024 << "kib." << std::endl;
+        std::cout << pmem_file_ << " used:" <<  mb  << " Mib, " << kb % 1024 << "kib." 
+                << " free " <<  freed_ / 1024 / 1024   << " Mib, " << (freed_ / 1024 ) % 1024 << "kib." << std::endl;
     }
 
     void *alloc(size_t size)
@@ -288,7 +289,7 @@ public:
     allocator(const allocator& ) _GLIBCXX_NOTHROW {}
 
     template<typename _Tp1>
-	  allocator(const allocator<_Tp1>& ) _GLIBCXX_NOTHROW { }
+	allocator(const allocator<_Tp1>& ) _GLIBCXX_NOTHROW { }
 
     ~allocator() _GLIBCXX_NOTHROW { }
 

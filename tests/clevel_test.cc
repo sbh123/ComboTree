@@ -11,7 +11,7 @@ using combotree::CLevel;
 using combotree::Random;
 using combotree::NobufBEntry;
 
-#define TEST_SIZE 300000
+const int TEST_SIZE = 300000;
 
 void tmpbentry_test();
 
@@ -92,7 +92,6 @@ void tmpbentry_test()
   Random rnd(0, TEST_SIZE-1);
 
   std::cout << "NobufBentry size: " << sizeof(combotree::NobufBEntry) << std::endl;
-  
   for (int i = 0; i < TEST_SIZE; ++i)
     key.push_back(i);
 
@@ -106,16 +105,37 @@ void tmpbentry_test()
   CLevel::MemControl mem(base_addr, TEST_SIZE * 40);
 
   bentry = new NobufBEntry(0, 4, &mem);
+  auto summaryStats = [](const std::vector<double> &durations, const char *name = "PGM") {
+      double average = std::accumulate(durations.cbegin(), durations.cend() - 1, 0.0) / durations.size();
+      auto minmax = std::minmax(durations.cbegin(), durations.cend() - 1);
 
+      std::cout << "[" << name << "]: " << "Min: " << *minmax.first << std::endl;
+      std::cout << "[" << name << "]: " << "Average: " << average << std::endl;
+      std::cout << "[" << name << "]: " << "Max: " << *minmax.second << std::endl;
+  };
+  std::vector<double> durations;
   for (int i = 0; i < TEST_SIZE; ++i) {
+    auto startTime = std::chrono::system_clock::now();
     assert(bentry->Put(&mem, key[i], key[i]) == true);
+    auto endTime = std::chrono::system_clock::now();
+    uint64_t ns = std::chrono::duration_cast<std::chrono::nanoseconds>(endTime - startTime).count();
+    durations.push_back(1.0 * ns);
   }
+  summaryStats(durations, "Clevel Insert");
+  durations.clear();
 
   for (int i = 0; i < TEST_SIZE; ++i) {
     uint64_t value;
+    auto startTime = std::chrono::system_clock::now();
     assert(bentry->Get(&mem, key[i], value) == true);
     assert(value == key[i]);
+    auto endTime = std::chrono::system_clock::now();
+    uint64_t ns = std::chrono::duration_cast<std::chrono::nanoseconds>(endTime - startTime).count();
+    durations.push_back(1.0 * ns);
   }
+  summaryStats(durations, "Clevel Get");
+
+  durations.clear();
 
   NobufBEntry::Iter iter(bentry, &mem, 1000);
   for (uint64_t i = 1000; i < TEST_SIZE; ++i) {
