@@ -26,6 +26,7 @@ void pgm_dynamic_test();
 int main() {
     Random rnd(0, UINT64_MAX - 1);
     NVM::env_init();
+    NVM::data_init();
     {
         // int size = 10;
         // uint64_t *index_data = (uint64_t *)malloc(size * sizeof(uint64_t));

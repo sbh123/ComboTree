@@ -43,6 +43,7 @@ public:
     virtual ~FastFairDb() {}
     void Init()
     {
+      NVM::data_init(); 
       tree_ = new btree();
     }
 
@@ -142,6 +143,7 @@ public:
 
   void Init()
   {
+    NVM::data_init();
     pgm_ = new DynamicPGM();
   }
   void Info()
@@ -193,6 +195,7 @@ public:
 
   void Init()
   {
+    NVM::data_init();
     prepare_xindex(init_num, bg_num, work_num);
   }
   void Info()
@@ -255,6 +258,7 @@ public:
 
   void Init()
   {
+    NVM::data_init();
     alex_ = new alex_t();
   }
 

@@ -306,6 +306,7 @@ public:
 };
 
 int  env_init();
+int  data_init();
 void env_exit();
 void show_stat();
 

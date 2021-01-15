@@ -78,6 +78,7 @@ int main(int argc, char *argv[]) {
         size = atoi(argv[1]);
     }
     NVM::env_init();
+    NVM::data_init();
     // Random rnd(0, UINT64_MAX - 1);
     Distribute::CaussGenerator rnd(0.0, 2);
     {

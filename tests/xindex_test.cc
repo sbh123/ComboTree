@@ -27,6 +27,7 @@ int main() {
 
     combotree::Random rnd(0, UINT64_MAX - 1);
     NVM::env_init();
+    NVM::data_init();
     {
         xindex_t *xindex = nullptr;
         int size = 100000;

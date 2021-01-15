@@ -25,6 +25,7 @@ int main(int, char**) {
   std::mt19937_64 gen(std::random_device{}());
   std::uniform_int_distribution<PAYLOAD_TYPE> dis;
   NVM::env_init();
+  NVM::data_init();
   for (int i = 0; i < num_keys; i++) {
     values[i].first = i;
     values[i].second = dis(gen);
