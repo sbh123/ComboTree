@@ -54,9 +54,13 @@ class DynamicPGMIndex {
     static_assert(min_level < MinIndexedLevel);
     static_assert(fully_allocated_levels > min_level);
     static_assert(2 * PGMType::epsilon_value < 1ul << MinIndexedLevel);
-
     using Item = std::conditional_t<std::is_pointer_v<V>, ItemA, ItemB>;
-    using Level = std::vector<Item, NVM::allocator<Item>>;
+#ifdef USE_MEM
+    using Alloc = std::allocator<Item>;
+#else
+    using Alloc = NVM::allocator<Item>;
+#endif
+    using Level = std::vector<Item, Alloc>;
     using MemLevel = std::vector<Item>;
 
     uint8_t used_levels;       ///< Equal to 1 + last level whose size is greater than 0, or = min_level if no data.
@@ -159,7 +163,8 @@ class DynamicPGMIndex {
         }
         if (levels[0].size() < buffer_max_size) {
             levels[0].insert(insertion_point, new_item);
-            NVM::Mem_persist(insertion_point.base(), sizeof(Item));
+            // 持久化insertion_point及以后的数据 ？？？
+            NVM::Mem_persist(insertion_point.base(), sizeof(Item) * (levels[0].end() - insertion_point));
             used_levels = used_levels == min_level ? min_level + 1 : used_levels;
             return;
         }

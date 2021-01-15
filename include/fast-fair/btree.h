@@ -36,7 +36,9 @@ using namespace std;
 
 inline void clflush(char *data, int len)
 {
-    pmem_persist(data, len);
+#ifndef USE_MEM
+    NVM::Mem_persist(data, len);
+#endif
 }
 
 namespace FastFair
@@ -44,8 +46,11 @@ namespace FastFair
 
 // const size_t NVM_ValueSize = 256;
 static void alloc_memalign(void **ret, size_t alignment, size_t size) {
-    // posix_memalign(ret, alignment, size);
+#ifdef USE_MEM
+    posix_memalign(ret, alignment, size);
+#else
     *ret =  NVM::data_alloc->alloc(size);
+#endif
 }
 
 class page;

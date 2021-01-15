@@ -551,6 +551,7 @@ public:
   }
 
 class IndexIter {
+  public:
     using difference_type = ssize_t;
     using value_type = const uint64_t;
     using pointer = const uint64_t *;

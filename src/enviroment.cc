@@ -20,7 +20,9 @@ const size_t data_alloc_size = 4 * 1024 * 1024 * 1024UL;
 #endif
 int env_init()
 {
+#ifndef USE_MEM
     common_alloc = new  NVM::Alloc(COMMON_PMEM_FILE, common_alloc_size);
+#endif
     // data_alloc  = new  NVM::Alloc(PMEM_DIR"data", data_alloc_size);
     Common::timers["ABLevel_times"] = Common::Statistic();
     Common::timers["ALevel_times"] = Common::Statistic();
@@ -31,7 +33,9 @@ int env_init()
 
 int data_init() {
     if(!data_alloc) {
+#ifndef USE_MEM
         data_alloc  = new  NVM::Alloc(PMEM_DIR"data", data_alloc_size);
+#endif
     }
     return 0;
 }

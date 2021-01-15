@@ -131,9 +131,12 @@ private:
 };
 
 class PGMDynamicDb : public ycsbc::KvDB {
-
-  // using PGMType = PGM_NVM::PGMIndex<uint64_t>;
-  typedef pgm::DynamicPGMIndex<uint64_t, char *, PGM_OLD_NVM::PGMIndex<uint64_t>> DynamicPGM;
+#ifdef USE_MEM
+  using PGMType = pgm::PGMIndex<uint64_t>;
+#else
+  using PGMType = PGM_OLD_NVM::PGMIndex<uint64_t>;
+#endif
+  typedef pgm::DynamicPGMIndex<uint64_t, char *, PGMType> DynamicPGM;
 public:
   PGMDynamicDb(): pgm_(nullptr) {}
   PGMDynamicDb(DynamicPGM *pgm): pgm_(pgm) {}
@@ -245,10 +248,14 @@ private:
 };
 
 class AlexDB : public ycsbc::KvDB  {
- 
   typedef uint64_t KEY_TYPE;
   typedef uint64_t PAYLOAD_TYPE;
-  typedef alex::Alex<KEY_TYPE, PAYLOAD_TYPE, alex::AlexCompare, NVM::allocator<std::pair<KEY_TYPE, PAYLOAD_TYPE>>> alex_t;
+#ifdef USE_MEM
+  using Alloc = std::allocator<std::pair<KEY_TYPE, PAYLOAD_TYPE>>;
+#else
+  using Alloc = NVM::allocator<std::pair<KEY_TYPE, PAYLOAD_TYPE>>;
+#endif
+  typedef alex::Alex<KEY_TYPE, PAYLOAD_TYPE, alex::AlexCompare, Alloc> alex_t;
 public:
   AlexDB(): alex_(nullptr) {}
   AlexDB(alex_t *alex): alex_(alex) {}
@@ -281,7 +288,7 @@ public:
   int Update(uint64_t key, uint64_t value) {
       uint64_t *addrs = (alex_->get_payload(key));
       *addrs = value;
-      pmem_persist(addrs, sizeof(uint64_t));
+      NVM::Mem_persist(addrs, sizeof(uint64_t));
       return 1;
   }
   int Scan(uint64_t start_key, int len, std::vector<std::pair<uint64_t, uint64_t>>& results) 
