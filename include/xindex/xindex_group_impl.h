@@ -245,6 +245,12 @@ Group<key_t, val_t, seq, max_model_n>
 
   new_group_1->pivot = pivot;
   new_group_2->pivot = data[array_size / 2].first;
+  if(new_group_2->pivot <= new_group_1->pivot) {
+    std::cout << "array_size : " << array_size << std::endl; 
+    for(int i = 0; i < array_size; i ++) {
+      std::cout << "data[" << i << "]: " << data[i].key << std::endl;
+    }
+  }
   assert(new_group_2->pivot > new_group_1->pivot);
   new_group_1->data = data;
   new_group_2->data = data;
