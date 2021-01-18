@@ -148,6 +148,13 @@ void ComboTree::ChangeToComboTree_() {
   blevel_ = new BLevel(exist_kv.size());
   old_blevel_ = blevel_;
   blevel_->Expansion(exist_kv);
+  // {
+  //   Iter it(this);
+  //   int idx = 0;
+  //   do {
+  //     std::cout << "Iter[" << idx ++ << "]: Key: " << it.key() << ", value: " << it.value() << std::endl;
+  //   } while(it.next());
+  // }
 
   {
     std::lock_guard<std::shared_mutex> lock(alevel_lock_);
@@ -176,6 +183,13 @@ void ComboTree::ExpandComboTree_() {
     return;
 
   LOG(Debug::INFO, "preparing to expand combotree. current size is %ld", Size());
+  // {
+  //   Iter it(this);
+  //   int idx = 0;
+  //   do {
+  //     std::cout << "Iter[" << idx ++ << "]: Key: " << it.key() << ", value: " << it.value() << std::endl;
+  //   } while(it.next());
+  // }
 
   permit_delete_.store(false);
   sleeped_threads_.store(1);
@@ -251,8 +265,8 @@ void ComboTree::ExpandComboTree_() {
 #endif // BRANGE
 }
 
-bool ComboTree::Put(uint64_t key, uint64_t value) {
-  bool ret;
+status ComboTree::Put(uint64_t key, uint64_t value) {
+  status ret;
   int wait = 0;
   while (true) {
     // the order of comparison should not be changed
@@ -267,10 +281,14 @@ bool ComboTree::Put(uint64_t key, uint64_t value) {
     } else if (status_.load(std::memory_order_acquire) == State::USING_COMBO_TREE) {
       ret = learn_index_->Put(key, value);
       CheckKey(key);
-      if (!ret) continue;
+      // if (!ret) continue;
+      if(ret == status::Full) {
+         ExpandComboTree_();
+         continue;
+      }
       if (Size() >= EXPANSION_FACTOR * BLEVEL_EXPAND_BUF_KEY * blevel_->Entries())
         ExpandComboTree_();
-      ret = true;
+      ret = status::OK;
       break;
     } else if (status_.load(std::memory_order_acquire) == State::PREPARE_EXPANDING) {
       if (need_sleep_) {
@@ -314,7 +332,7 @@ bool ComboTree::Put(uint64_t key, uint64_t value) {
           ret = learn_index_->Put(key, value);
           CheckKey(key);
         }
-        if (!ret) continue;
+        if (ret != status::OK) continue;
         break;
       }
 #endif // BRANGE

@@ -89,14 +89,14 @@ class PmemKV {
 
   }
 
-  bool Put(uint64_t key, uint64_t value) 
+  status Put(uint64_t key, uint64_t value) 
   {
     WriteRef_();
     if (!write_valid_.load(std::memory_order_acquire))
-      return false;
+      return status::Failed;
     kv_data[key] = value;
     WriteUnRef_();
-    return true;
+    return status::OK;
   }
 
   bool Update(uint64_t key, uint64_t value)

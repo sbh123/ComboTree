@@ -6,18 +6,20 @@
 #include "ycsb/ycsb-c.h"
 #include "nvm_alloc.h"
 #include "common_time.h"
-#include "combotree_config.h"
+#include "../src/combotree_config.h"
 #include "combotree/combotree.h"
 #include "fast-fair/btree.h"
 #include "learnindex/pgm_index_dynamic.hpp"
 #include "learnindex/rmi.h"
 #include "xindex/xindex_impl.h"
 #include "alex/alex.h"
+#include "stx/btree_map.h"
 
 using combotree::ComboTree;
 using FastFair::btree;
 using namespace std;
 using xindex::XIndex;
+
 
 const char *workloads[] = {
   // "workloada.spec",
@@ -245,6 +247,60 @@ private:
     xindex_ = new xindex_t(initial_keys, vals, fg_n, bg_n);
   }
   xindex_t *xindex_;
+};
+
+class StxDB : public ycsbc::KvDB  {
+  typedef uint64_t KEY_TYPE;
+  typedef uint64_t PAYLOAD_TYPE;
+  typedef stx::btree_map<KEY_TYPE, PAYLOAD_TYPE> btree_t;
+public:
+  StxDB(): btree_(nullptr) {}
+  StxDB(btree_t *btree): btree_(btree) {}
+  virtual ~StxDB() {
+    delete btree_;
+  }
+
+  void Init()
+  {
+    btree_ = new btree_t();
+  }
+
+  void Info()
+  {
+  }
+
+  int Put(uint64_t key, uint64_t value) 
+  {
+    btree_->insert(key, value);
+    return 1;
+  }
+  int Get(uint64_t key, uint64_t &value)
+  {
+      value = btree_->find(key).data();
+      // assert(value == key);
+      return 1;
+  }
+  int Update(uint64_t key, uint64_t value) {
+      btree_->find(key).data() = value;
+      return 1;
+  }
+  int Scan(uint64_t start_key, int len, std::vector<std::pair<uint64_t, uint64_t>>& results) 
+  {
+    auto it = btree_->lower_bound(start_key);
+    int num_entries = 0;
+    while (num_entries < len && it != btree_->end()) {
+      results.push_back({it.key(), it.data()});
+      num_entries ++;
+      it++;
+    }
+    return 1;
+  } 
+  void PrintStatic() {
+    // std::cerr << "Alevel average cost: " << Common::timers["ABLevel_times"].avg_latency() << std::endl;
+    // std::cerr << "Clevel average cost: " << Common::timers["Clevel_times"].avg_latency() << std::endl;
+  }
+private:
+  btree_t *btree_;
 };
 
 class AlexDB : public ycsbc::KvDB  {

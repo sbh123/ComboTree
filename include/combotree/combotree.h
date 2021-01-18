@@ -21,15 +21,24 @@ struct Pair {
   uint64_t value;
 };
 
+enum status {
+  Failed = -1,
+  OK = 0,
+  Full,
+  Exist,
+  NoExist,
+};
+
 class ComboTree {
  public:
   ComboTree(std::string pool_dir, size_t pool_size, bool create = true);
   ~ComboTree();
 
-  bool Put(uint64_t key, uint64_t value);
+  status Put(uint64_t key, uint64_t value);
   bool Update(uint64_t key, uint64_t value);
   bool Get(uint64_t key, uint64_t& value) const;
   bool Delete(uint64_t key);
+
   size_t Scan(uint64_t start_key, size_t max_size,
       std::vector<std::pair<uint64_t, uint64_t>>& results);
   size_t Scan(uint64_t min_key, uint64_t max_key, size_t max_size,

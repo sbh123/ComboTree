@@ -13,16 +13,22 @@
 
 #include "bentry.h"
 #include "common_time.h"
+#include "pointer_bentry.h"
+
 namespace combotree {
 
 class Test;
-// #define NO_ENTRY_BUF
+#define POINTER_BENTRY
 class BLevel {
-#ifdef NO_ENTRY_BUF
+#ifdef POINTER_BENTRY
+    typedef combotree::PointerBEntry bentry_t;
+#else
+#if NO_ENTRY_BUF
   typedef combotree::NobufBEntry bentry_t;
 #else
   typedef combotree::BEntry bentry_t;
 #endif // NO_ENTRY_BUF
+#endif // POINTER_BENTRY
 
 public:
     class IndexIter;
@@ -32,7 +38,7 @@ public:
   BLevel(size_t entries);
   ~BLevel();
 
-  bool Put(uint64_t key, uint64_t value, uint64_t begin, uint64_t end);
+  status Put(uint64_t key, uint64_t value, uint64_t begin, uint64_t end);
   bool Update(uint64_t key, uint64_t value, uint64_t begin, uint64_t end);
   bool Get(uint64_t key, uint64_t& value, uint64_t begin, uint64_t end) const;
   bool Delete(uint64_t key, uint64_t* value, uint64_t begin, uint64_t end);
@@ -42,7 +48,7 @@ public:
   bool GetNearPos(uint64_t key, uint64_t& value, uint64_t pos) const;
   bool DeleteNearPos(uint64_t key, uint64_t* value, uint64_t pos);
 
-  bool PutRange(uint64_t key, uint64_t value, int range, uint64_t end);
+  status PutRange(uint64_t key, uint64_t value, int range, uint64_t end);
   bool UpdateRange(uint64_t key, uint64_t value, int range, uint64_t end);
   bool GetRange(uint64_t key, uint64_t& value, int range, uint64_t end) const;
   bool DeleteRange(uint64_t key, uint64_t* value, int range, uint64_t end);
@@ -490,7 +496,7 @@ public:
   void ExpandPut_(ExpandData& data, uint64_t key, uint64_t value);
   void ExpandFinish_(ExpandData& data);
 
-  ALWAYS_INLINE bool Put_(uint64_t key, uint64_t value, uint64_t physical_idx
+  ALWAYS_INLINE status Put_(uint64_t key, uint64_t value, uint64_t physical_idx
 #ifdef BRANGE
                                   , std::atomic<size_t>* interval_size
 #endif
@@ -501,14 +507,15 @@ public:
 #endif
     // Common::timers["Clevel_times"].start();
     if (!entries_[physical_idx].IsValid())
-      return false;
-    entries_[physical_idx].Put(&clevel_mem_, key, value);
+      return status::Failed;
+
+    auto ret = entries_[physical_idx].Put(&clevel_mem_, key, value);
     size_.fetch_add(1, std::memory_order_relaxed);
 #ifdef BRANGE
     interval_size->fetch_add(1, std::memory_order_relaxed);
 #endif
     // Common::timers["Clevel_times"].end();
-    return true;
+    return ret;
   }
 
   ALWAYS_INLINE bool Update_(uint64_t key, uint64_t value, uint64_t physical_idx) const {

@@ -152,6 +152,13 @@ class __attribute__((packed)) CLevel {
       return ret;
     }
 
+    template<class T>
+    T* Allocate() {
+      assert((uint8_t*)cur_addr_.load() + sizeof(T) < end_addr_);
+      T * ret = (T *)cur_addr_.fetch_add(sizeof(T));
+      return ret;
+    }
+
     uint64_t BaseAddr() const {
       return base_addr_;
     }

@@ -71,6 +71,11 @@ void stream_store_entry(void* dest, void* source) {
 } // anonymous namespace
 
 void BLevel::ExpandData::FlushToEntry(bentry_t* entry, int prefix_len, CLevel::MemControl* mem) {
+#ifdef POINTER_BENTRY
+  for(int i = 0; i < buf_count; i ++) {
+    entry->Put(mem, key_buf[i], value_buf[BLEVEL_EXPAND_BUF_KEY-i-1]);
+  }
+#else 
 #ifdef NO_ENTRY_BUF
   for(int i = 0; i < buf_count; i ++) {
     entry->Put(mem, key_buf[i], value_buf[BLEVEL_EXPAND_BUF_KEY-i-1]);
@@ -111,6 +116,7 @@ void BLevel::ExpandData::FlushToEntry(bentry_t* entry, int prefix_len, CLevel::M
   fence();
 #endif // STREAMING_STORE
 #endif // NO_ENTRY_BUF
+#endif // POINTER_BENTRY
   buf_count = 0;
 }
 
@@ -394,6 +400,19 @@ void BLevel::ExpandRange_(BLevel* old_blevel, int thread_id) {
       old_entry = &old_blevel->entries_[old_index];
 #endif
 
+#ifdef POINTER_BENTRY
+      {
+        expand_meta.clevel_count++;
+        bentry_t::Iter biter(old_entry, old_mem);
+        uint64_t total_cnt = 0;
+        do {
+          total_cnt++;
+          ExpandPut_(expand_meta, biter.key(), biter.value());
+        } while(biter.next());
+        expand_meta.clevel_data_count += total_cnt - old_entry->buf.entries;
+        expand_meta.bentry_max_count =  std::max(expand_meta.bentry_max_count, total_cnt);
+      }
+#else
       if (old_entry->clevel.HasSetup()) {
         expand_meta.clevel_count++;
         bentry_t::Iter biter(old_entry, old_mem);
@@ -418,6 +437,8 @@ void BLevel::ExpandRange_(BLevel* old_blevel, int thread_id) {
 #endif // BUF_SORT
       }
 #endif // NO_ENTRY_BUF
+
+#endif // POINTER_BENTRY
       old_blevel->entries_[old_index].SetInvalid();
     }
   }
@@ -758,7 +779,7 @@ uint64_t BLevel::FindByRange_(uint64_t key, int range, uint64_t end,
   return right;
 }
 
-bool BLevel::PutRange(uint64_t key, uint64_t value, int range, uint64_t end) {
+status BLevel::PutRange(uint64_t key, uint64_t value, int range, uint64_t end) {
   // assert(key >= entries_[ranges_[range].physical_entry_start].entry_key);
   // assert(key < expanded_max_key_[range]);
   std::atomic<size_t>* interval_size;
@@ -784,7 +805,7 @@ bool BLevel::DeleteRange(uint64_t key, uint64_t* value, int range, uint64_t end)
 }
 #endif // BRANGE
 
-bool BLevel::Put(uint64_t key, uint64_t value, uint64_t begin, uint64_t end) {
+status BLevel::Put(uint64_t key, uint64_t value, uint64_t begin, uint64_t end) {
 #ifdef BRANGE
   std::atomic<size_t>* interval_size;
   uint64_t idx = Find_(key, begin, end, &interval_size);
@@ -866,10 +887,14 @@ bool BLevel::DeleteNearPos(uint64_t key, uint64_t* value, uint64_t pos) {
 
 size_t BLevel::CountCLevel() const {
   size_t cnt = 0;
+#ifdef POINTER_BENTRY
+  return Entries();
+#else
   for (uint64_t i = 0; i < Entries(); ++i)
     if (entries_[i].clevel.HasSetup())
       cnt++;
   return cnt;
+#endif 
 }
 
 void BLevel::PrefixCompression() const {

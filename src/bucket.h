@@ -25,7 +25,7 @@ enum status {
 /**
  * max 4 entry
  */
-class Bucket { // without Bucket main key
+class Buncket { // without Buncket main key
   // Frist 8 byte head 
   uint64_t main_key;
   void *private_data;
@@ -158,18 +158,18 @@ class Bucket { // without Bucket main key
   static_assert(sizeof(KvBuffer<248, 8>) == 256);
 
 public:
-  Bucket(uint64_t key, int prefix_len) : main_key(key), prefix_bytes(prefix_len), entries(0) {
+  Buncket(uint64_t key, int prefix_len) : main_key(key), prefix_bytes(prefix_len), entries(0) {
     private_data = new char[256];
     private_data = new (private_data) KvBuffer<248, 8>(prefix_len);
   }
 
-  Bucket(uint64_t key, uint64_t value, int prefix_len) : main_key(key), prefix_bytes(prefix_len)  {
+  Buncket(uint64_t key, uint64_t value, int prefix_len) : main_key(key), prefix_bytes(prefix_len)  {
     private_data = new char[256];
     private_data = new (private_data) KvBuffer<248, 8>(prefix_len);
     Put(nullptr, key, value);
   }
 
-  ~Bucket() {
+  ~Buncket() {
     delete []((char *)private_data);
   }
 
@@ -270,12 +270,8 @@ public:
   }
 
     // FIXME: flush and fence?
-  void SetInvalid() {  }
-  bool IsValid()    { return false; }
-
-  void FlushToCLevel(CLevel::MemControl* mem) {
-
-  }
+  void SetInvalid() { header = 0;}
+  bool IsValid()    { return header == 0;}
 
   class Iter {
 

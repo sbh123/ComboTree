@@ -162,6 +162,7 @@ add_test(alex_test alex_test)
 
 ## bucket_test
 add_executable(bucket_test tests/bucket_test.cc)
+target_link_libraries(bucket_test combotree)
 add_test(bucket_test bucket_test)
 
 ## microbench

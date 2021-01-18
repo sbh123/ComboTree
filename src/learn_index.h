@@ -16,7 +16,7 @@ class Learn_Index {
 public:
   Learn_Index(BLevel* blevel, int span = DEFAULT_SPAN);
   ~Learn_Index();
-  ALWAYS_INLINE bool Put(uint64_t key, uint64_t value) {
+  ALWAYS_INLINE status Put(uint64_t key, uint64_t value) {
     uint64_t begin, end;
     GetBLevelRange_(key, begin, end);
     return blevel_->Put(key, value, begin, end);

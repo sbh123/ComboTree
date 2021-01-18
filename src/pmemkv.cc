@@ -1,5 +1,6 @@
 #include <cassert>
 #include <filesystem>
+#include "combotree/combotree.h"
 #include "combotree_config.h"
 #include "pmemkv.h"
 
