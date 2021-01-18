@@ -72,9 +72,10 @@ void stream_store_entry(void* dest, void* source) {
 
 void BLevel::ExpandData::FlushToEntry(bentry_t* entry, int prefix_len, CLevel::MemControl* mem) {
 #ifdef POINTER_BENTRY
-  for(int i = 0; i < buf_count; i ++) {
-    entry->Put(mem, key_buf[i], value_buf[BLEVEL_EXPAND_BUF_KEY-i-1]);
-  }
+  // for(int i = 0; i < buf_count; i ++) {
+  //   entry->Put(mem, key_buf[i], value_buf[BLEVEL_EXPAND_BUF_KEY-i-1]);
+  // }
+  entry->Load(mem, key_buf, &value_buf[BLEVEL_EXPAND_BUF_KEY - buf_count], buf_count);
 #else 
 #ifdef NO_ENTRY_BUF
   for(int i = 0; i < buf_count; i ++) {

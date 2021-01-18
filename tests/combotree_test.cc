@@ -100,6 +100,21 @@ int main(void) {
       // uint64_t v = iter.value();
       // assert(right_iter->first == riter.key());
       // assert(right_iter->second == riter.value());
+      if(right_iter->first != iter.key()) {
+        ComboTree::Iter it(tree, start_key);
+        auto map_it = right_kv.lower_bound(start_key);
+        for (int z = 0; z < 100 ; ++z) {
+          std::cout << "Iter[" << z << "]: Key: " << it.key() << ", value: " << it.value() << std::endl;
+          std::cout << "Map Iter[" << z << "]: Key: " << map_it->first << ", value: " << map_it->second << std::endl;
+          if(it.key() != map_it->first) {
+            uint64_t value;
+            tree->Get(map_it->first, value); 
+          }
+          it.next();
+          map_it ++;   
+        }
+        std::cout << "Unexpected." << std::endl;
+      }
       assert(right_iter->first == iter.key());
       assert(right_iter->second == iter.value());
       right_iter++;

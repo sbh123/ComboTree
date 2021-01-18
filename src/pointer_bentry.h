@@ -9,6 +9,7 @@
 #include "combotree/combotree.h"
 #include "combotree_config.h"
 #include "bitops.h"
+#include "nvm_alloc.h"
 #include "kvbuffer.h"
 #include "clevel.h"
 #include "pmem.h"
@@ -104,6 +105,21 @@ public:
 
     ~Buncket() {
         
+    }
+
+    status Load(uint64_t *keys, uint64_t *values, int count) {
+        assert(entries == 0 && count < max_entries);
+
+        for(int target_idx = 0; target_idx < count; target_idx ++) {
+            assert(pvalue(target_idx) > pkey(target_idx));
+            memcpy(pvalue(target_idx), &values[count - target_idx - 1], value_size);
+            memcpy(pkey(target_idx), &keys[target_idx], suffix_bytes);
+            set_bit(target_idx, bitmap);
+            total_indexs[target_idx] = target_idx;
+            entries ++;
+        }
+        NVM::Mem_persist(this, sizeof(*this));
+        return status::OK;
     }
 
     status Expand_(CLevel::MemControl *mem, Buncket *&next, uint64_t &split_key, int &prefix_len) {
@@ -388,7 +404,7 @@ struct  PointerBEntry {
         entrys[0].buf.entries = 1;
         entrys[0].entry_key = key;
         entrys[0].pointer.Setup(mem, key, prefix_len);
-        // flush((void *)&entrys[0]);
+        flush((void *)&entrys[0]);
     //   clevel.Setup(mem, buf.suffix_bytes);
       // std::cout << "Entry key: " << key << std::endl;
     }
@@ -402,8 +418,8 @@ struct  PointerBEntry {
         entrys[0].entry_key = key;
         entrys[0].pointer.Setup(mem, key, prefix_len);
         (entrys[0].pointer.pointer(mem->BaseAddr()))->Put(mem, key, value);
-        // flush(&entrys[0]);
-      // std::cout << "Entry key: " << key << std::endl;
+        flush(&entrys[0]);
+        std::cout << "Entry key: " << key << std::endl;
     }
 
     int Find_pos(uint64_t key) const {
@@ -435,7 +451,7 @@ struct  PointerBEntry {
             entrys[pos + 1].buf.suffix_bytes = 8 - prefix_len;
             entrys[0].buf.entries ++;
             // this->Show(mem);
-            // flush(&entrys[0]);
+            flush(&entrys[0]);
             goto retry;
         }
         if(ret != status::OK) {
@@ -475,6 +491,13 @@ struct  PointerBEntry {
             (entrys[i].pointer.pointer(mem->BaseAddr()))->Show();
         }
     }
+
+    // Only use when expand
+    status Load(CLevel::MemControl* mem, uint64_t *keys, uint64_t *values, int count) {
+        assert(buf.entries == 1);
+        Pointer(0, mem)->Load(keys, values, count);
+        return status::OK;
+    }
     // FIXME: flush and fence?
     void SetInvalid() { entrys[0].buf.meta = 0; }
     bool IsValid()    { return entrys[0].buf.meta != 0; }
@@ -500,14 +523,13 @@ struct  PointerBEntry {
               cur_idx = entry_count;
               return ;
           }
+          cur_idx = pos;
           if(entry_->entrys[pos].IsValid()) {
               new (&biter_) buncket_t::Iter(entry_->Pointer(pos, mem), entry_->entrys[pos].buf.prefix_bytes, start_key);
               if(biter_.end()) {
-                  cur_idx = pos + 1;
-                  return ;
+                  next();
               }
           }
-          cur_idx = pos;
       }
 
       ALWAYS_INLINE uint64_t key() const {
