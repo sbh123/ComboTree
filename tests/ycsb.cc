@@ -90,7 +90,7 @@ public:
     void Init()
     {
 #ifdef SERVER
-      tree_ = new ComboTree("/pmem0/combotree/", (1024*1024*1024*100UL), true);
+      tree_ = new ComboTree("/pmem0/", (1024*1024*1024*100UL), true);
 #else
       tree_ = new ComboTree("/mnt/pmem0/", (1024*1024*512UL), true);
 #endif
