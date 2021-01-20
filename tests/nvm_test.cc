@@ -4,6 +4,10 @@
 #include <cstring>
 #include <future>
 #include <sys/unistd.h>
+#include <stdlib.h>
+#include <stdint.h>
+#include <sys/mman.h>
+#include <memory.h>
 
 #include "nvm_alloc.h"
 #include "random.h"
@@ -25,13 +29,29 @@ int main()
     NVM_DRAM_TEST(4UL << 30, 1e6, true);
     return 0;
 }
+// Dram 测试的时候
+// #先查看系统有多少已经预留的大页内存
+// # cat /proc/meminfo |grep -i huge
+// #预留192个大页
+// # sysctl vm.nr_hugepages=4096
+// #查看是否预留成功
+// # cat /proc/meminfo |grep -i huge
 
 void NVM_DRAM_TEST(size_t size, size_t operations, bool NVM) {
     void *base_addr = nullptr;
     size_t map_len = 0;
     if(NVM) {
         base_addr = PmemMapFile(COMMON_PMEM_FILE, size, &map_len);
-    }
+    } else {
+        char *m = NULL;
+        base_addr = mmap(NULL, size, PROT_READ | PROT_WRITE,MAP_PRIVATE | MAP_ANONYMOUS | 0x40000, -1, 0);
+        if (base_addr == MAP_FAILED) {
+            perror("map mem");
+            base_addr = NULL;
+            return ;
+        }
+
+    }   
     // 随机读
     for(size_t i = 0; i < ArrayLen(opsizes); i ++) {
         size_t opsize = opsizes[i];
@@ -72,5 +92,7 @@ void NVM_DRAM_TEST(size_t size, size_t operations, bool NVM) {
 
     if(NVM) {
         pmem_unmap(base_addr, map_len);
+    } else {
+        munmap(base_addr, size);
     }
 }
