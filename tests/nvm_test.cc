@@ -22,7 +22,7 @@ void NVM_DRAM_TEST(size_t size, size_t operations, bool NVM);
 
 int main()
 {
-    NVM_DRAM_TEST(1UL << 30, 1e6, true);
+    NVM_DRAM_TEST(4UL << 30, 1e6, true);
     return 0;
 }
 
