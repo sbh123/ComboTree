@@ -31,7 +31,7 @@ class TestBase {
     Config::SetBaseAddr(addr);
     Config::SetPmemObjFile(pmemobj_file, pmemobj_size);
 
-    std::cout << "flush method : " << FLUSH_METHOD << std::endl;
+    std::cout << "clflush method : " << FLUSH_METHOD << std::endl;
     std::cout << "pmem addr    : " << pmemaddr_ << std::endl;
     std::cout << "aligned addr : " << addr << std::endl;
   }

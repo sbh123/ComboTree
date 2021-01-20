@@ -83,7 +83,7 @@ void BLevel::ExpandData::FlushToEntry(bentry_t* entry, int prefix_len, CLevel::M
   }
 #else
   while (buf_count > entry->buf.max_entries) {
-    // flush last entry.max_entries data to clevel
+    // clflush last entry.max_entries data to clevel
     // copy value
     memcpy(entry->buf.pvalue(entry->buf.max_entries-1),
            &value_buf[BLEVEL_EXPAND_BUF_KEY-buf_count], 8*entry->buf.max_entries);
@@ -112,8 +112,8 @@ void BLevel::ExpandData::FlushToEntry(bentry_t* entry, int prefix_len, CLevel::M
   for (int i = 0; i < buf_count; ++i)
     memcpy(entry->buf.pkey(i), &key_buf[i], 8 - prefix_len);
   entry->buf.entries = buf_count;
-  flush(entry);
-  flush((uint8_t*)entry+64);
+  clflush(entry);
+  clflush((uint8_t*)entry+64);
   fence();
 #endif // STREAMING_STORE
 #endif // NO_ENTRY_BUF

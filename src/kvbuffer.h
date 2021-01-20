@@ -136,7 +136,7 @@ struct KVBuffer {
 
   ALWAYS_INLINE void Clear() {
     entries = 0;
-    flush(&meta);
+    clflush(&meta);
     fence();
   }
 
@@ -148,8 +148,8 @@ struct KVBuffer {
     memcpy(pvalue(pos), &value, value_size);
     memcpy(pkey(pos), new_key, suffix_bytes);
     entries++;
-    flush(pvalue(pos));
-    flush(&meta);
+    clflush(pvalue(pos));
+    clflush(&meta);
     fence();
     return true;
 #else
@@ -157,8 +157,8 @@ struct KVBuffer {
     memcpy(pkey(pos), new_key, suffix_bytes);
     memcpy(pvalue(pos), &value, value_size);
     entries++;
-    flush(pvalue(pos));
-    flush(&meta);
+    clflush(pvalue(pos));
+    clflush(&meta);
     fence();
     return true;
 #endif // BUF_SORT
@@ -166,7 +166,7 @@ struct KVBuffer {
 
   ALWAYS_INLINE bool Update(int pos, uint64_t value) {
     memcpy(pvalue(pos), &value, value_size);
-    flush(pvalue(pos));
+    clflush(pvalue(pos));
     fence();
     return true;
   }
@@ -181,8 +181,8 @@ struct KVBuffer {
     memmove(pkey(pos), pkey(pos+1), suffix_bytes*(entries-pos-1));
     memmove(pvalue(entries-2), pvalue(entries-1), value_size*(entries-pos-1));
     entries--;
-    flush(&meta);
-    flush(pvalue(pos));
+    clflush(&meta);
+    clflush(pvalue(pos));
     fence();
     return true;
 #else
@@ -191,13 +191,13 @@ struct KVBuffer {
       // if system crashed after key move and before update
       // of entries, it will be fixed during recovery.
       memcpy(pkey(pos), pkey(entries - 1), suffix_bytes);
-      flush(pkey(pos));
+      clflush(pkey(pos));
       fence();
       memcpy(pvalue(pos), pvalue(entries - 1), value_size);
-      flush(pvalue(pos));
+      clflush(pvalue(pos));
     }
     entries--;
-    flush(&meta);
+    clflush(&meta);
     fence();
     return true;
 #endif // BUF_SORT

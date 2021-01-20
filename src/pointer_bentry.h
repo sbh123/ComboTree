@@ -66,7 +66,7 @@ class Buncket { // without Buncket main key
       memcpy(pvalue(target_idx), &value, value_size);
       memcpy(pkey(target_idx), &new_key, suffix_bytes);
       set_bit(target_idx, bitmap);
-      flush(pvalue(target_idx));
+      clflush(pvalue(target_idx));
       fence();
       data_index = target_idx;
       return status::OK;
@@ -74,7 +74,7 @@ class Buncket { // without Buncket main key
 
     status SetValue(int pos, uint64_t value) {
       memcpy(pvalue(pos), &value, value_size);
-      flush(pvalue(pos));
+      clflush(pvalue(pos));
       fence();
       return status::OK;
     }
@@ -132,7 +132,7 @@ public:
             next->Put(nullptr, key(i), value(i));
         }
         next->next_bucket = this->next_bucket;
-        flush(next);
+        clflush(next);
 
         this->next_bucket = next;
         fence();
@@ -140,7 +140,7 @@ public:
             DeletePos(total_indexs[i]);
         }
         entries = entries / 2;
-        flush(&header);
+        clflush(&header);
         fence();
         return status::OK;
     }
@@ -194,7 +194,7 @@ public:
             memmove(&total_indexs[pos + 1], &total_indexs[pos], entries - pos - 1);
         }
         total_indexs[pos] = idx;
-        flush(&header); 
+        clflush(&header); 
         return status::OK;
     }
 
@@ -243,7 +243,7 @@ public:
         if(value) {
             *value = this->value(pos);
         }
-        flush(&header);
+        clflush(&header);
         fence();
         return status::OK;
     }
@@ -404,7 +404,7 @@ struct  PointerBEntry {
         entrys[0].buf.entries = 1;
         entrys[0].entry_key = key;
         entrys[0].pointer.Setup(mem, key, prefix_len);
-        flush((void *)&entrys[0]);
+        clflush((void *)&entrys[0]);
     //   clevel.Setup(mem, buf.suffix_bytes);
       // std::cout << "Entry key: " << key << std::endl;
     }
@@ -418,7 +418,7 @@ struct  PointerBEntry {
         entrys[0].entry_key = key;
         entrys[0].pointer.Setup(mem, key, prefix_len);
         (entrys[0].pointer.pointer(mem->BaseAddr()))->Put(mem, key, value);
-        flush(&entrys[0]);
+        clflush(&entrys[0]);
         std::cout << "Entry key: " << key << std::endl;
     }
 
@@ -451,7 +451,7 @@ struct  PointerBEntry {
             entrys[pos + 1].buf.suffix_bytes = 8 - prefix_len;
             entrys[0].buf.entries ++;
             // this->Show(mem);
-            flush(&entrys[0]);
+            clflush(&entrys[0]);
             goto retry;
         }
         if(ret != status::OK) {
@@ -498,7 +498,7 @@ struct  PointerBEntry {
         Pointer(0, mem)->Load(keys, values, count);
         return status::OK;
     }
-    // FIXME: flush and fence?
+    // FIXME: clflush and fence?
     void SetInvalid() { entrys[0].buf.meta = 0; }
     bool IsValid()    { return entrys[0].buf.meta != 0; }
 

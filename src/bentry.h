@@ -34,7 +34,7 @@ struct __attribute__((aligned(64))) BEntry {
     bool Get(CLevel::MemControl* mem, uint64_t key, uint64_t& value) const;
     bool Delete(CLevel::MemControl* mem, uint64_t key, uint64_t* value);
 
-    // FIXME: flush and fence?
+    // FIXME: clflush and fence?
     void SetInvalid() { buf.meta = 0; }
     bool IsValid()    { return buf.meta != 0; }
 
@@ -275,7 +275,7 @@ struct __attribute__((aligned(64))) BEntry {
       return clevel.Delete(mem, key, value);
     }
 
-    // FIXME: flush and fence?
+    // FIXME: clflush and fence?
     void SetInvalid() { buf.meta = 0; }
     bool IsValid()    { return buf.meta != 0; }
 

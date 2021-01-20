@@ -131,8 +131,8 @@ class Buncket { // without Buncket main key
       memcpy(pkey(target_idx), &new_key, suffix_bytes);
       set_bit(target_idx, bitmap);
       entries++;
-      flush(pvalue(target_idx));
-      flush(&header); 
+      clflush(pvalue(target_idx));
+      clflush(&header); 
       fence();
       data_index = target_idx;
       return status::OK;
@@ -140,8 +140,8 @@ class Buncket { // without Buncket main key
 
     status SetValue(int pos, uint64_t value) {
       memcpy(pvalue(pos), &value, value_size);
-      flush(pvalue(pos));
-      flush(&header); 
+      clflush(pvalue(pos));
+      clflush(&header); 
       fence();
       return status::OK;
     }
@@ -149,7 +149,7 @@ class Buncket { // without Buncket main key
     status DeletePos(int pos) {
       clear_bit(pos, &bitmap);
       entries--;
-      flush(&header); 
+      clflush(&header); 
       fence();
       return status::OK;
     }
@@ -218,7 +218,7 @@ public:
       memmove(&total_indexs[pos + 1], &total_indexs[pos], entries - pos - 1);
     }
     total_indexs[pos] = idx;
-    flush(&header);
+    clflush(&header);
     return status::OK;
   }
   status Update(CLevel::MemControl* mem, uint64_t key, uint64_t value)
@@ -265,11 +265,11 @@ public:
     if(value) {
       *value = this->value(total_indexs[pos]);
     }
-    flush(&header);
+    clflush(&header);
     return status::OK;
   }
 
-    // FIXME: flush and fence?
+    // FIXME: clflush and fence?
   void SetInvalid() { header = 0;}
   bool IsValid()    { return header == 0;}
 

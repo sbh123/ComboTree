@@ -58,7 +58,7 @@ configure_file(
   "${PROJECT_SOURCE_DIR}/src/combotree_config.h"
 )
 
-# -march=native used to detect CPU flags and use corrosponding flush instruction
+# -march=native used to detect CPU flags and use corrosponding clflush instruction
 set(CMAKE_CXX_FLAGS "-march=native -Wall -Wno-reorder")
 
 # Require C++17
@@ -164,6 +164,11 @@ add_test(alex_test alex_test)
 add_executable(bucket_test tests/bucket_test.cc)
 target_link_libraries(bucket_test combotree)
 add_test(bucket_test bucket_test)
+
+## nvm_test
+add_executable(nvm_test tests/nvm_test.cc)
+target_link_libraries(nvm_test pmem)
+add_test(nvm_test nvm_test)
 
 ## microbench
 add_executable(microbench tests/microbench.cc)

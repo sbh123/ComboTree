@@ -31,7 +31,7 @@ bool BEntry::Put(CLevel::MemControl* mem, uint64_t key, uint64_t value) {
   // already in, update
   if (exist) {
     *(uint64_t*)buf.pvalue(pos) = value;
-    flush(buf.pvalue(pos));
+    clflush(buf.pvalue(pos));
     fence();
     return false;
   } else {
