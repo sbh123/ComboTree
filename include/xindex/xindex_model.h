@@ -20,6 +20,7 @@
  *     https://ppopp20.sigplan.org/details/PPoPP-2020-papers/13/XIndex-A-Scalable-Learned-Index-for-Multicore-Data-Storage
  */
 
+#include "nvm_alloc.h"
 #include "mkl.h"
 #include "mkl_lapacke.h"
 
@@ -29,7 +30,7 @@
 namespace xindex {
 
 template <class key_t>
-class LinearModel {
+class LinearModel : public NVM::NvmStructBase  {
   typedef std::array<double, key_t::model_key_size()> model_key_t;
   template <class key_t_, class val_t, bool seq>
   friend class Root;

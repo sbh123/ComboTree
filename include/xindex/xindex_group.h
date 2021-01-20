@@ -23,6 +23,7 @@
 #include "xindex_buffer.h"
 #include "xindex_model.h"
 #include "xindex_util.h"
+#include "nvm_alloc.h"
 
 #if !defined(XINDEX_GROUP_H)
 #define XINDEX_GROUP_H
@@ -30,7 +31,8 @@
 namespace xindex {
 
 template <class key_t, class val_t, bool seq, size_t max_model_n = 4>
-class alignas(CACHELINE_SIZE) Group {
+class alignas(CACHELINE_SIZE) Group : public NVM::NvmStructBase {
+
   struct ModelInfo;
 
   typedef LinearModel<key_t> linear_model_t;
@@ -39,7 +41,11 @@ class alignas(CACHELINE_SIZE) Group {
   typedef atomic_val_t wrapped_val_t;
   typedef AltBtreeBuffer<key_t, val_t> buffer_t;
   typedef uint64_t version_t;
-  typedef std::pair<key_t, wrapped_val_t> record_t;
+  struct record : public NVM::NvmStructBase, std::pair<key_t, wrapped_val_t>
+  {
+    
+  };
+  typedef record record_t;
 
   template <class key_tt, class val_tt, bool sequential>
   friend class XIndex;

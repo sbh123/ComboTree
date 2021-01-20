@@ -63,6 +63,7 @@ void Group<key_t, val_t, seq, max_model_n>::init(
     assert(data[rec_i].first >= data[rec_i - 1].first);
   }
 
+  NVM::Mem_persist(data, array_size * sizeof(record_t));
   init_models(model_n);
 }
 
@@ -207,6 +208,7 @@ Group<key_t, val_t, seq, max_model_n>
   new_group->buffer_temp = buffer_temp;
   new_group->next = next;
 
+  NVM::Mem_persist(new_group, sizeof(Group));
   return new_group;
 }
 
@@ -230,6 +232,7 @@ Group<key_t, val_t, seq, max_model_n>
   new_group->buffer_temp = buffer_temp;
   new_group->next = next;
 
+  NVM::Mem_persist(new_group, sizeof(Group));
   return new_group;
 }
 
@@ -275,6 +278,9 @@ Group<key_t, val_t, seq, max_model_n>
   new_group_1->next = new_group_2;
   new_group_2->next = next;
 
+  NVM::Mem_persist(new_group_1, sizeof(Group));
+  NVM::Mem_persist(new_group_2, sizeof(Group));
+
   return new_group_1;
 }
 
@@ -304,6 +310,8 @@ Group<key_t, val_t, seq, max_model_n>
   new_group_1->next = new_group_2;
   new_group_2->next = next->next;
 
+  NVM::Mem_persist(new_group_1, sizeof(Group));
+  NVM::Mem_persist(new_group_2, sizeof(Group));
   return new_group_1;
 }
 
@@ -340,6 +348,7 @@ Group<key_t, val_t, seq, max_model_n>
   new_group->buffer = buffer_temp;
   new_group->next = next_group.next;
 
+  NVM::Mem_persist(new_group, sizeof(Group));
   return new_group;
 }
 
@@ -367,6 +376,7 @@ Group<key_t, val_t, seq, max_model_n>
   new_group->buffer = buffer_temp;
   new_group->next = next;
 
+  NVM::Mem_persist(new_group, sizeof(Group));
   return new_group;
 }
 
@@ -438,7 +448,9 @@ inline result_t Group<key_t, val_t, seq, max_model_n>::update_to_array(
           record_t *prev_data = nullptr;
           capacity = array_size * seq_insert_reserve_factor;
           record_t *new_data = new record_t[capacity + 1]();
-          memcpy(new_data, data, array_size * sizeof(record_t));
+          // memcpy(new_data, data, array_size * sizeof(record_t));
+          std::copy(data, data + array_size, new_data);
+          NVM::Mem_persist(data, array_size * sizeof(record_t));
           prev_data = data;
           data = new_data;
 
@@ -730,8 +742,10 @@ inline void Group<key_t, val_t, seq, max_model_n>::merge_refs_n_split(
   new_array_size_2 = intermediate_size - split_pos;
   new_capacity_2 = new_array_size_2 * seq_insert_reserve_factor;
   new_data_2 = new record_t[new_capacity_2 + 1]();
-  memcpy(new_data_2, intermediate + split_pos,
-         new_array_size_2 * sizeof(record_t));
+  // memcpy(new_data_2, intermediate + split_pos,
+  //        new_array_size_2 * sizeof(record_t));
+  std::copy(intermediate + split_pos, intermediate + split_pos + new_array_size_2, new_data_2);
+  NVM::Mem_persist(new_data_2, new_array_size_2 * sizeof(record_t));
 
   assert((int32_t)new_array_size_1 <= new_capacity_1);
   assert((int32_t)new_array_size_2 <= new_capacity_2);
@@ -819,6 +833,7 @@ inline void Group<key_t, val_t, seq, max_model_n>::merge_refs_internal(
   }
 
   new_array_size = count;
+  NVM::Mem_persist(new_data, new_array_size * sizeof(record_t));
   // assert(count > 0);
 }
 

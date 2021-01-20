@@ -28,7 +28,7 @@ static inline void *PmemMapFile(const std::string &file_name, const size_t file_
     return pmem_addr_;
 }
 
-#define USE_MEM
+// #define USE_MEM
 #ifdef USE_MEM
 
 static inline void Mem_persist(const void *addr, size_t len) {
@@ -176,6 +176,7 @@ public:
 };
 
 class NvmStructBase {
+#ifndef USE_MEM
 public:
     void* operator new(size_t size)
     {
@@ -186,8 +187,7 @@ public:
     void* operator new[](size_t size)
     {
         // std::cout << "Struct alloc array: " << size << " bytes." << std::endl;
-        void *ret = data_alloc->alloc(size + 16);
-        memset(ret, 0, size + 16);
+        void *ret = data_alloc->alloc(size);
         return ret;
     }
 
@@ -208,7 +208,7 @@ public:
         // std::cout << "Struct array free addrs: " << p <<  "." << std::endl;
         data_alloc->Free(p);
     }
-    
+#endif 
 };
 
 template<typename T, typename A>

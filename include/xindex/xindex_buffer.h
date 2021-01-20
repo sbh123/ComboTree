@@ -31,7 +31,7 @@ const uint8_t alt_buf_fanout = 16;
 const uint8_t node_capacity = alt_buf_fanout - 1;
 
 template <class key_t, class val_t>
-class AltBtreeBuffer {
+class AltBtreeBuffer : public NVM::NvmStructBase {
   template <class key_t_, class val_t_, bool optt, size_t max_model_n>
   friend class Group;
   class Node;

@@ -47,7 +47,8 @@ AltBtreeBuffer<key_t, val_t>::AltBtreeBuffer() {
 template <class key_t, class val_t>
 AltBtreeBuffer<key_t, val_t>::~AltBtreeBuffer() {
   for (size_t b_i = 0; b_i < allocated_blocks.size(); ++b_i) {
-    std::free(allocated_blocks[b_i]);
+    // std::free(allocated_blocks[b_i]);
+    NVM::data_alloc->Free(allocated_blocks[b_i]);
   }
 }
 
@@ -241,6 +242,7 @@ void AltBtreeBuffer<key_t, val_t>::insert_leaf(const key_t &key,
     target->version++;
     memory_fence();
     target->unlock();
+    NVM::Mem_persist(target, sizeof(leaf_t));
     size_est++;
     return;
   } else {
@@ -310,6 +312,9 @@ void AltBtreeBuffer<key_t, val_t>::split_n_insert_leaf(const key_t &insert_key,
   }
   key_t split_key = sib_ptr->keys[0];
 
+  NVM::Mem_persist(sib_ptr, sizeof(leaf_t));
+  NVM::Mem_persist(node_ptr, sizeof(leaf_t));
+
   while (true) {
     // lock the right parent
     internal_t *parent_ptr;
@@ -351,6 +356,7 @@ void AltBtreeBuffer<key_t, val_t>::split_n_insert_leaf(const key_t &insert_key,
       parent_ptr->node_t::unlock();
       node_ptr->node_t::unlock();
       sib_ptr->node_t::unlock();
+      NVM::Mem_persist(parent_ptr, sizeof(internal_t));
       return;
     } else if (!parent_ptr->is_full()) {
       int slot = parent_ptr->find_first_larger_than(split_key);
@@ -393,6 +399,7 @@ void AltBtreeBuffer<key_t, val_t>::split_n_insert_leaf(const key_t &insert_key,
       parent_ptr->node_t::unlock();
       node_ptr->node_t::unlock();
       sib_ptr->node_t::unlock();
+      NVM::Mem_persist(parent_ptr, sizeof(internal_t));
       return;
     } else {  // recursive split, knock the parent as the new node to split
       node_t *prev_sib_ptr = sib_ptr;
@@ -514,13 +521,17 @@ void AltBtreeBuffer<key_t, val_t>::split_n_insert_leaf(const key_t &insert_key,
         assert(((internal_t *)sib_ptr)->children[child_i]->parent ==
                (internal_t *)sib_ptr);
       }
+      NVM::Mem_persist(sib_ptr, sizeof(internal_t));
     }
+    NVM::Mem_persist(parent_ptr, sizeof(internal_t));
   }
+
 }
 
 template <class key_t, class val_t>
 inline void AltBtreeBuffer<key_t, val_t>::allocate_new_block() {
-  uint8_t *p = (uint8_t *)std::malloc(node_n_per_block * node_size);
+  // uint8_t *p = (uint8_t *)std::malloc(node_n_per_block * node_size);
+  uint8_t *p = (uint8_t *)(NVM::data_alloc->alloc)(node_n_per_block * node_size);
   allocated_blocks.push_back(p);
 }
 

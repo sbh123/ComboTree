@@ -457,7 +457,7 @@ int main(int argc, const char *argv[])
       }
       double duration = timer.End();
       cout << "# Loading_records:\t" << sum << " throughput (KTPS)" <<endl;
-      cout << props["dbname"] << "\tLoad thread:" << '\t' << 1 << '\t';
+      cout << props["dbname"] << "\tLoad_thread:" << '\t' << 1 << '\t';
       cout << total_ops / duration / 1000 << endl << endl;
     }
     db->Info();
