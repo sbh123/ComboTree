@@ -219,6 +219,7 @@ template <class key_t, class val_t, bool seq>
 void XIndex<key_t, val_t, seq>::terminate_bg() {
   config.exited = true;
   bg_running = false;
+  pthread_join(bg_master, nullptr);
 }
 
 }  // namespace xindex

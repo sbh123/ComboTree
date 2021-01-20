@@ -20,4 +20,13 @@ static_assert(0, "cache line clflush not supported!");
 #define fence _mm_sfence
 #define FENCE_METHOD  "_mm_sfence"
 
+#define CACHE_LINE_SIZE 64
+static inline void _nvm_perisist(void *data, size_t len)
+{
+  char *ptr = (char *)((unsigned long)data &~(CACHE_LINE_SIZE-1));
+  for(; ptr < (char *)data+len; ptr+=CACHE_LINE_SIZE) {
+    clflush(ptr);
+  }
+}
+
 #define ALWAYS_INLINE inline __attribute__((always_inline))

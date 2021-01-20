@@ -15,6 +15,15 @@
 #include "pmem.h"
 
 namespace combotree {
+
+// Less then 64 bits
+static inline int Find_first_zero_bit(void *data, size_t bits)
+{
+    uint64_t bitmap = (*(uint64_t *)data);
+    int pos = _tzcnt_u64(~bitmap);
+    return pos > bits ? bits : pos;
+}
+
 template<const size_t bucket_size = 256, const size_t value_size = 8>
 class Buncket { // without Buncket main key
     ALWAYS_INLINE size_t maxEntrys(int idx) const {
@@ -63,8 +72,8 @@ class Buncket { // without Buncket main key
         return status::Full;
       }
       assert(pvalue(target_idx) > pkey(target_idx));
-      memcpy(pvalue(target_idx), &value, value_size);
       memcpy(pkey(target_idx), &new_key, suffix_bytes);
+      memcpy(pvalue(target_idx), &value, value_size);
       set_bit(target_idx, bitmap);
       clflush(pvalue(target_idx));
       fence();
@@ -112,8 +121,8 @@ public:
 
         for(int target_idx = 0; target_idx < count; target_idx ++) {
             assert(pvalue(target_idx) > pkey(target_idx));
-            memcpy(pvalue(target_idx), &values[count - target_idx - 1], value_size);
             memcpy(pkey(target_idx), &keys[target_idx], suffix_bytes);
+            memcpy(pvalue(target_idx), &values[count - target_idx - 1], value_size);
             set_bit(target_idx, bitmap);
             total_indexs[target_idx] = target_idx;
             entries ++;

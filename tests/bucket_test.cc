@@ -1,9 +1,11 @@
 #include <iostream>
 #include <vector>
+#include <x86intrin.h>
 #include "../src/combotree_config.h"
 // #include "../src/bucket.h"
 #include "../src/pointer_bentry.h"
 #include "nvm_alloc.h"
+#include "bitops.h"
 #include "random.h"
 
 using combotree::Buncket;
@@ -18,10 +20,11 @@ using namespace std;
 
 void Buncket_test();
 void PointerBEntry_test();
-
+void bit_test();
 int main() {
     // Buncket_test();
-    PointerBEntry_test();
+    // PointerBEntry_test();
+    bit_test();
     return 0;
 }
 
@@ -135,4 +138,14 @@ void PointerBEntry_test() {
         while(it.next()); 
     }
     delete pointer_bentry;
+}
+
+void bit_test()
+{
+   uint64_t bitmap = 0; 
+   for(int i = 0; i < 20; i ++) {
+       int pos = _tzcnt_u64(~bitmap);;
+       set_bit(pos, &bitmap);
+       std::cout << "pos = " << pos << std::endl;
+   }
 }
