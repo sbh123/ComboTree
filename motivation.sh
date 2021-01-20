@@ -14,7 +14,7 @@ function OperateDiffLoad() {
     do
         sed -r -i "s/recordcount=.*/recordcount=$RecordCount/1" ${WorkLoadsDir}/workload_read.spec
         sed -r -i "s/recordcount=.*/recordcount=$RecordCount/1" ${WorkLoadsDir}/workload_insert.spec
-        ${ExecDir}/ycsb -db $DBName -threads 1 -P $WorkLoadsDir
+        ${ExecDir}/ycsb -db $DBName -threads 1 -P $WorkLoadsDir 
         sleep 60
     done
 }
@@ -30,5 +30,15 @@ function OperateDiffDB() {
     done
 }
 
+function OperateDiffInsert() {
+    WorkLoadsDir="./include/ycsb/insert_ratio"
+    for DBName in $DBs;
+    do
+        ${ExecDir}/ycsb -db $DBName -threads 1 -P $WorkLoadsDir > ${DBName}_insert_ratio.log
+        sleep 60
+    done
+}
+
 # OperateDiffLoad
-OperateDiffDB
+# OperateDiffDB
+OperateDiffInsert

@@ -28,14 +28,14 @@ const char *workloads[] = {
   // "workloadd.spec",
   // "workloade.spec",
   // "workloadf.spec",
-  // "workloada_insert_0.spec",
-  // "workloada_insert_10.spec",
-  // "workloada_insert_20.spec",
-  // "workloada_insert_50.spec",
-  // "workloada_insert_80.spec",
-  // "workloada_insert_100.spec",
-  "workload_read.spec",
-  "workload_insert.spec",
+  "workloada_insert_0.spec",
+  "workloada_insert_10.spec",
+  "workloada_insert_20.spec",
+  "workloada_insert_50.spec",
+  "workloada_insert_80.spec",
+  "workloada_insert_100.spec",
+  // "workload_read.spec",
+  // "workload_insert.spec",
 
 };
 
