@@ -17,7 +17,7 @@
 using namespace NVM;
 
 const size_t opsizes[] = {
-    8, 16, 64, 128, 256, 512, 1024
+    8, 16, 32, 64, 128, 256, 512, 1024
 };
 
 #define ArrayLen(arry) (sizeof(arry) / sizeof(arry[0]))
