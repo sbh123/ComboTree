@@ -47,7 +47,7 @@ class DynamicPGMIndex {
     template<typename T, typename A=std::allocator<T>>
     class DefaultInitAllocator;
 
-    constexpr static uint8_t min_level = 9; ///< 2^min_level-1 is the size of the sorted buffer for new items.
+    constexpr static uint8_t min_level = 6; ///< 2^min_level-1 is the size of the sorted buffer for new items.
     constexpr static uint8_t fully_allocated_levels = std::max(15, min_level + 1);
     constexpr static size_t buffer_max_size = (1ull << (min_level + 1)) - 1;
 
@@ -164,6 +164,7 @@ class DynamicPGMIndex {
         if (levels[0].size() < buffer_max_size) {
             levels[0].insert(insertion_point, new_item);
             // 持久化insertion_point及以后的数据 ？？？
+            // std::cout << "Persist len: " << levels[0].end() - insertion_point << std::endl;
             NVM::Mem_persist(insertion_point.base(), sizeof(Item) * (levels[0].end() - insertion_point));
             used_levels = used_levels == min_level ? min_level + 1 : used_levels;
             return;
