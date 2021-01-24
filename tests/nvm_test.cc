@@ -43,14 +43,13 @@ void NVM_DRAM_TEST(size_t size, size_t operations, bool NVM) {
     if(NVM) {
         base_addr = PmemMapFile(COMMON_PMEM_FILE, size, &map_len);
     } else {
-        char *m = NULL;
-        base_addr = mmap(NULL, size, PROT_READ | PROT_WRITE,MAP_PRIVATE | MAP_ANONYMOUS | 0x40000, -1, 0);
-        if (base_addr == MAP_FAILED) {
-            perror("map mem");
-            base_addr = NULL;
-            return ;
-        }
-
+        // base_addr = mmap(NULL, size, PROT_READ | PROT_WRITE,MAP_PRIVATE | MAP_ANONYMOUS | 0x40000, -1, 0);
+        // if (base_addr == MAP_FAILED) {
+        //     perror("map mem");
+        //     base_addr = NULL;
+        //     return ;
+        // }
+        base_addr = malloc(size);
     }   
     // 随机读
     for(size_t i = 0; i < ArrayLen(opsizes); i ++) {
@@ -93,6 +92,7 @@ void NVM_DRAM_TEST(size_t size, size_t operations, bool NVM) {
     if(NVM) {
         pmem_unmap(base_addr, map_len);
     } else {
-        munmap(base_addr, size);
+        // munmap(base_addr, size);
+        free(base_addr);
     }
 }
