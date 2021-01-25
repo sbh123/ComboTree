@@ -141,9 +141,9 @@ public:
     }
 
     status Expand_(CLevel::MemControl *mem, Buncket *&next, uint64_t &split_key, int &prefix_len) {
-        int expand_pos = entries / 2;
+        // int expand_pos = entries / 2;
         next = new (mem->Allocate<Buncket>()) Buncket(key(entries / 2), prefix_bytes);
-        int idx = 0;
+        // int idx = 0;
         split_key = key(entries / 2);
         prefix_len = prefix_bytes;
         for(int i = entries / 2; i < entries; i ++) {

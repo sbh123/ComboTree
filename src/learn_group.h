@@ -198,11 +198,15 @@ class RootModel {
 public:
     class Iter;
     class IndexIter;
+    RootModel() : nr_groups_(0), max_groups_(64) {
+        clevel_mem_ = new CLevel::MemControl(CLEVEL_PMEM_FILE, CLEVEL_PMEM_FILE_SIZE);
+        groups_ = (LearnGroup **)NVM::data_alloc->alloc(64 * sizeof(LearnGroup *));
+    }
+
     RootModel(size_t max_groups, CLevel::MemControl *clevel_mem) 
         : nr_groups_(0), max_groups_(max_groups), clevel_mem_(clevel_mem)
     {
         groups_ = (LearnGroup **)NVM::data_alloc->alloc(max_groups * sizeof(LearnGroup *));
-
     }
     ~RootModel() {
         for(size_t i = 0; i < nr_groups_; i++) {
@@ -325,6 +329,10 @@ public:
         return ret;
     }
 
+    void Info() {
+        std::cout << "nr_groups: " << nr_groups_ << std::endl;
+        clevel_mem_->Usage();
+    }
 
 private:
     uint64_t nr_groups_;

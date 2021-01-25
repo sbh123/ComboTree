@@ -168,7 +168,7 @@ class DynamicPGMIndex {
         const auto tmp2 = tmp_b.begin();
         const auto mod = (up_to_level - min_level) % 2;
 
-        auto it = std::move(levels[0].begin(), levels[0].end(), mod ? tmp1 : tmp2);
+        std::move(levels[0].begin(), levels[0].end(), mod ? tmp1 : tmp2);
         actual_size = std::distance(levels[0].begin(), levels[0].end());
         uint8_t limit = level(target).empty() ? up_to_level : up_to_level + 1;
         for (uint8_t i = 1 + min_level; i <= limit; ++i) {

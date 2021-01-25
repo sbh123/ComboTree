@@ -328,7 +328,7 @@ public:
      */
     // Assert height = 0
     int __search_near_pos(const K &key, size_t pos, size_t size, bool greater) const {
-        auto k = std::max(first_key, key);
+        // auto k = std::max(first_key, key);
         int lo, hi;
         if (greater) {
             size_t step = 1;
