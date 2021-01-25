@@ -30,12 +30,20 @@ class Buncket { // without Buncket main key
         return max_entries;
     }
 
+    // ALWAYS_INLINE void* pkey(int idx) const {
+    //   return (void*)&buf[idx*suffix_bytes];
+    // }
+
+    // ALWAYS_INLINE void* pvalue(int idx) const {
+    //   return (void*)&buf[buf_size-(idx+1)*value_size];
+    // }
+
     ALWAYS_INLINE void* pkey(int idx) const {
-      return (void*)&buf[idx*suffix_bytes];
+      return (void*)&buf[idx*(suffix_bytes+ value_size)];
     }
 
     ALWAYS_INLINE void* pvalue(int idx) const {
-      return (void*)&buf[buf_size-(idx+1)*value_size];
+      return (void*)&buf[idx*(suffix_bytes+ value_size) + suffix_bytes];
     }
 
     ALWAYS_INLINE uint64_t key(int idx, uint64_t key_prefix) const {
@@ -75,7 +83,8 @@ class Buncket { // without Buncket main key
       memcpy(pkey(target_idx), &new_key, suffix_bytes);
       memcpy(pvalue(target_idx), &value, value_size);
       set_bit(target_idx, bitmap);
-      clflush(pvalue(target_idx));
+    //   clflush(pvalue(target_idx));
+      NVM::Mem_persist(pkey(target_idx), suffix_bytes + value_size);
       fence();
       data_index = target_idx;
       return status::OK;
@@ -433,6 +442,15 @@ struct  PointerBEntry {
         // std::cout << "Entry key: " << key << std::endl;
     }
 
+    PointerBEntry(const entry *entry, CLevel::MemControl* mem = nullptr)
+    {
+        memset(this, 0, sizeof(PointerBEntry));
+        entrys[0] = *entry;
+        entrys[0].buf.entries = 1;
+        clflush(&entrys[0]);
+        // std::cout << "Entry key: " << key << std::endl;
+    }
+
     int Find_pos(uint64_t key) const {
         int pos = 0;
         while(pos < entry_count && entrys[pos].IsValid() && entrys[pos].entry_key <= key) pos ++;
@@ -465,9 +483,9 @@ struct  PointerBEntry {
             clflush(&entrys[0]);
             goto retry;
         }
-        if(ret != status::OK) {
-            std::cout << "Put failed " << ret << std::endl;
-        }
+        // if(ret != status::OK) {
+        //     std::cout << "Put failed " << ret << std::endl;
+        // }
         return ret;
     }
     bool Update(CLevel::MemControl* mem, uint64_t key, uint64_t value) {
@@ -575,6 +593,46 @@ struct  PointerBEntry {
       buncket_t::Iter biter_;
     };
     using NoSortIter = Iter;
+
+
+    class EntryIter {
+     public:
+      EntryIter() {}
+
+      EntryIter(const PointerBEntry* entry)
+        : entry_(entry)
+      {
+          cur_idx = 0;
+      }
+
+    //   ALWAYS_INLINE uint64_t key() const {
+    //     return biter_.key();
+    //   }
+
+    //   ALWAYS_INLINE uint64_t value() const {
+    //     return biter_.value();
+    //   }
+
+      const PointerBEntry::entry& operator*() { return entry_->entrys[cur_idx]; }
+
+
+      ALWAYS_INLINE bool next() {
+          cur_idx ++;
+          if(cur_idx <  entry_->buf.entries) {
+              return true;
+          } 
+          cur_idx = entry_->buf.entries;
+          return false;
+      }
+
+      ALWAYS_INLINE bool end() const {
+        return cur_idx >= entry_->buf.entries;
+      }
+
+     private:
+      const PointerBEntry* entry_;
+      int cur_idx;
+    };
 };
 
 } // namespace combotree

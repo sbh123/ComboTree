@@ -166,9 +166,10 @@ void Learn_Group_test()
     std::map<uint64_t, uint64_t> right_kv;
     const uint64_t TEST_SIZE = 3000;
 
-    CLevel::MemControl mem(COMMON_PMEM_FILE, ONE_MIB);
+    CLevel::MemControl mem(COMMON_PMEM_FILE, 100 * ONE_MIB);
     NVM::data_init();
     Random rnd(0, UINT64_MAX - 1);
+    right_kv.emplace(0, UINT64_MAX);
     for (uint64_t i = 0; i < TEST_SIZE; ++i) {
         uint64_t key = rnd.Next();
         if (right_kv.count(key)) {
@@ -180,7 +181,7 @@ void Learn_Group_test()
     }
     exist_kv.assign(right_kv.begin(), right_kv.end());
 
-    root = new combotree::RootModel(TEST_SIZE / 32, &mem);
+    root = new combotree::RootModel(45, &mem);
     root->Load(exist_kv);
 
     for(int i = 0; i < exist_kv.size(); i ++) {
@@ -191,7 +192,7 @@ void Learn_Group_test()
             assert(value == exist_kv[i].second);
         }
     }
-    for(int i = 0; i < 2000; i ++) {
+    for(int i = 0; i < TEST_SIZE * 128; i ++) {
         uint64_t key = rnd.Next();
         if (right_kv.count(key)) {
             i--;
@@ -205,6 +206,7 @@ void Learn_Group_test()
         if(value != new_value) {
             root->Put(key, value);
             root->Get(key, new_value);
+            std::cout << "Failed num: " << i << std::endl;
             assert(value == new_value);
         }
     }
