@@ -1,9 +1,11 @@
 #include <iostream>
 #include <vector>
+#include <map>
 #include <x86intrin.h>
 #include "../src/combotree_config.h"
 // #include "../src/bucket.h"
 #include "../src/pointer_bentry.h"
+#include "../src/learn_group.h"
 #include "nvm_alloc.h"
 #include "bitops.h"
 #include "random.h"
@@ -13,6 +15,7 @@ using combotree::PointerBEntry;
 using combotree::status;
 using combotree::Random;
 using combotree::CLevel;
+using combotree::Debug;
 
 using namespace std;
 
@@ -21,10 +24,15 @@ using namespace std;
 void Buncket_test();
 void PointerBEntry_test();
 void bit_test();
+void Learn_Group_test();
+
 int main() {
+    NVM::env_init();
     // Buncket_test();
     // PointerBEntry_test();
-    bit_test();
+    // bit_test();
+    Learn_Group_test();
+    NVM::env_exit();
     return 0;
 }
 
@@ -148,4 +156,67 @@ void bit_test()
        set_bit(pos, &bitmap);
        std::cout << "pos = " << pos << std::endl;
    }
+}
+
+void Learn_Group_test()
+{
+    combotree::RootModel *root;
+    std::vector<uint64_t> key;
+    std::vector<std::pair<uint64_t,uint64_t>> exist_kv;
+    std::map<uint64_t, uint64_t> right_kv;
+    const uint64_t TEST_SIZE = 3000;
+
+    CLevel::MemControl mem(COMMON_PMEM_FILE, ONE_MIB);
+    NVM::data_init();
+    Random rnd(0, UINT64_MAX - 1);
+    for (uint64_t i = 0; i < TEST_SIZE; ++i) {
+        uint64_t key = rnd.Next();
+        if (right_kv.count(key)) {
+            i--;
+            continue;
+        }
+        uint64_t value = rnd.Next();
+        right_kv.emplace(key, value);
+    }
+    exist_kv.assign(right_kv.begin(), right_kv.end());
+
+    root = new combotree::RootModel(TEST_SIZE / 32, &mem);
+    root->Load(exist_kv);
+
+    for(int i = 0; i < exist_kv.size(); i ++) {
+        uint64_t value;
+        root->Get(exist_kv[i].first, value);
+        if(value != exist_kv[i].second) {
+            printf("Get %d key, expect %lu, find %lu.\n", i, exist_kv[i].second, value);
+            assert(value == exist_kv[i].second);
+        }
+    }
+    for(int i = 0; i < 2000; i ++) {
+        uint64_t key = rnd.Next();
+        if (right_kv.count(key)) {
+            i--;
+            continue;
+        }
+        uint64_t value = rnd.Next();
+        exist_kv.push_back({key, value});
+        root->Put(key, value);
+        uint64_t new_value;
+        root->Get(key, new_value);
+        if(value != new_value) {
+            root->Put(key, value);
+            root->Get(key, new_value);
+            assert(value == new_value);
+        }
+    }
+
+    for(int i = 0; i < exist_kv.size(); i ++) {
+        uint64_t value;
+        root->Get(exist_kv[i].first, value);
+        if(value != exist_kv[i].second) {
+            printf("Get %d key, expect %lu, find %lu.\n", i, exist_kv[i].second, value);
+            root->Get(exist_kv[i].first, value);
+            assert(value == exist_kv[i].second);
+        }
+    }
+    delete root;
 }

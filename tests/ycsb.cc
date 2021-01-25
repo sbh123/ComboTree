@@ -154,9 +154,15 @@ public:
     NVM::data_init();
     pgm_ = new DynamicPGM();
   }
+
   void Info()
   {
     NVM::show_stat();
+  }
+
+  void Begin_trans()
+  {
+    pgm_->trans_to_read();
   }
   int Put(uint64_t key, uint64_t value) 
   {
@@ -471,6 +477,7 @@ int main(int argc, const char *argv[])
       total_ops = stoi(props[ycsbc::CoreWorkload::OPERATION_COUNT_PROPERTY]);
       cerr << props["dbname"] << " start \t" << workloads[i] << "\t: ops " << total_ops << endl;
       utils::Timer<double> timer;
+      db->Begin_trans();
       timer.Start();
       for (int i = 0; i < num_threads; ++i) {
           actual_ops.emplace_back(async(launch::async,

@@ -85,13 +85,14 @@ void pgm_dynamic_test()
     Random rnd(0, UINT64_MAX - 1);
     db_t *db = new db_t();
     std::cout<< "DB: " << db << std::endl;
-    int test_num =100;
+    int test_num =100000;
     std::vector<uint64_t> keys;
     for(int i = 0; i < test_num; i ++) {
         uint64_t key = rnd.Next();
         db->insert(key, (char *)key);
         keys.push_back(key);
     }
+    db->trans_to_read();
     for(int i = 0; i < test_num; i ++) {
         auto it = db->find(keys[i]);
         assert(it->first == (uint64_t)(it->second));

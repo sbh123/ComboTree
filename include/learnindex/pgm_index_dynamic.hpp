@@ -154,6 +154,56 @@ class DynamicPGMIndex {
         }
     }
 
+    void merge_to_bottom(uint8_t up_to_level,
+                        size_t size_hint) {
+        auto target = up_to_level + 1;
+        auto actual_size = size_t(1) << (1 + min_level);
+        assert((1ull << target) - level(target).size() >= actual_size);
+
+        MemLevel tmp_a(size_hint);
+        MemLevel tmp_b(size_hint + level(target).size());
+
+        // Insert new_item in sorted order in the first level
+        const auto tmp1 = tmp_a.begin();
+        const auto tmp2 = tmp_b.begin();
+        const auto mod = (up_to_level - min_level) % 2;
+
+        auto it = std::move(levels[0].begin(), levels[0].end(), mod ? tmp1 : tmp2);
+        actual_size = std::distance(levels[0].begin(), levels[0].end());
+        uint8_t limit = level(target).empty() ? up_to_level : up_to_level + 1;
+        for (uint8_t i = 1 + min_level; i <= limit; ++i) {
+            bool alternate = (i - min_level) % 2 == mod;
+            auto tmp_it = alternate ? tmp1 : tmp2;
+            auto out_it = alternate ? tmp2 : tmp1;
+            decltype(out_it) out_end;
+
+            bool can_delete_permanently = i == used_levels - 1;
+            if (can_delete_permanently)
+                out_end = merge<true>(tmp_it, tmp_it + actual_size, level(i).begin(), level(i).end(), out_it);
+            else
+                out_end = merge<false>(tmp_it, tmp_it + actual_size, level(i).begin(), level(i).end(), out_it);
+            actual_size = std::distance(out_it, out_end);
+
+            // Empty this level and the corresponding index
+            level(i).clear();
+            if (i >= MinIndexedLevel)
+                pgm(i) = PGMType();
+        }
+
+        tmp_b.resize(actual_size);
+        target = std::max<uint8_t>(ceil_log2(actual_size), min_level + 1);
+        levels[0].resize(0);
+        // levels[target - min_level] = std::move(tmp_b);
+        levels[target - min_level].assign(tmp_b.begin(), tmp_b.end());
+        NVM::Mem_persist(levels[target - min_level].data(), sizeof(Item) * actual_size);
+
+        // Rebuild index, if needed
+        if (target >= MinIndexedLevel) {
+            pgm(target) = PGMType(level(target).begin(), level(target).end());
+        }
+        used_levels = target + 1;
+    }
+
     void insert(const Item &new_item) {
         auto insertion_point = std::lower_bound(levels[0].begin(), levels[0].end(), new_item);
         if (insertion_point != levels[0].end() && *insertion_point == new_item) {
@@ -245,6 +295,24 @@ public:
             pgms = decltype(pgms)(used_levels - MinIndexedLevel);
             pgm(used_levels - 1) = PGMType(target.begin(), target.end());
         }
+    }
+
+    void trans_to_read() {
+        size_t slots_required = std::distance(levels[0].begin(), levels[0].end());
+        uint8_t i;
+        for (i = min_level + 1; i < used_levels; ++i) {
+            slots_required += level(i).size();
+        }
+        std::cout << "Total slot: " << slots_required << std::endl;
+        auto need_new_level = slots_required > (1ull << (used_levels -1));
+        if (need_new_level) {
+            ++used_levels;
+            levels.emplace_back();
+            if (i - MinIndexedLevel >= int(pgms.size()))
+                pgms.emplace_back();
+        }
+
+        merge_to_bottom(used_levels - 1 - need_new_level, slots_required);
     }
 
     /**

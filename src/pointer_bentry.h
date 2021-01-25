@@ -211,7 +211,8 @@ public:
         bool find = false;
         int pos = Find(key, find);
         if(!find && this->value(pos) == 0) {
-        return status::NoExist;
+            Show();
+            return status::NoExist;
         }
         SetValue(total_indexs[pos], value);
         return status::OK;
@@ -222,7 +223,8 @@ public:
         bool find = false;
         int pos = Find(key, find);
         if(!find || this->value(pos)== 0) {
-        return status::NoExist;
+            Show();
+            return status::NoExist;
         }
         value = this->value(pos);
         return status::OK;
@@ -257,7 +259,7 @@ public:
         return status::OK;
     }
 
-    void Show() {
+    void Show() const {
         std::cout << "This: " << this << std::endl;
         for(int i = 0; i < entries; i ++) {
             std::cout << "key: " << key(i) << ", value: " << value(i) << std::endl;
@@ -428,7 +430,7 @@ struct  PointerBEntry {
         entrys[0].pointer.Setup(mem, key, prefix_len);
         (entrys[0].pointer.pointer(mem->BaseAddr()))->Put(mem, key, value);
         clflush(&entrys[0]);
-        std::cout << "Entry key: " << key << std::endl;
+        // std::cout << "Entry key: " << key << std::endl;
     }
 
     int Find_pos(uint64_t key) const {
