@@ -41,7 +41,7 @@
     COUT_POS();                    \
     abort();                       \
   }
-
+#define NDEBUGGING
 #if defined(NDEBUGGING)
 #define DEBUG_THIS(this)
 #else

@@ -22,7 +22,7 @@ option(NO_ENTRY_BUF     "BEntry without KVBuffer" OFF)
 # use `make clean && make CXX_DEFINES="-DNAME=VALUE"` to override during compile
 if(SERVER)
   set(PMEM_DIR              \"/pmem0/\")
-  set(CLEVEL_PMEM_FILE_SIZE "(1024*1024*1024*16UL)")
+  set(CLEVEL_PMEM_FILE_SIZE "(1024*1024*1024*32UL)")
   set(CLEVEL_PMEM_FILE      \"/pmem0/combotree-clevel-\")
   set(BLEVEL_PMEM_FILE      \"/pmem0/combotree-blevel-\")
   set(ALEVEL_PMEM_FILE      \"/pmem0/combotree-alevel-\")

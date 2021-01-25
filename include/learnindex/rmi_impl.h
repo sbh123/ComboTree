@@ -399,7 +399,7 @@ void TwoStageRMI<key_t, root_error_bound>::adjust_rmi(const std::vector<key_t> &
     }
     mean_error =
         std::accumulate(errors.begin(), errors.end(), 0.0) / errors.size();
-    std::cout << "Train finished: " << mean_error << ", " << max_error << std::endl;
+    // std::cout << "Train finished: " << mean_error << ", " << max_error << std::endl;
     if (mean_error > root_error_bound) {
       if (rmi_2nd_stage_model_n == max_model_n) {
         break;
@@ -480,7 +480,7 @@ void TwoStageRMI<key_t, root_error_bound>::adjust_rmi(RandomIt first, RandomIt l
       max_error = std::max(max_error, error);
     }
     mean_error = mean_error / keys_n;
-    std::cout << "Train finished: " << mean_error << ", " << max_error << std::endl;
+    // std::cout << "Train finished: " << mean_error << ", " << max_error << std::endl;
     if (mean_error > root_error_bound) {
       if (rmi_2nd_stage_model_n == max_model_n) {
         break;
@@ -622,7 +622,7 @@ inline void TwoStageRMI<key_t, root_error_bound>::train_rmi(RandomIt first, Rand
 }
 
 template <class key_t,  size_t root_error_bound>
-size_t TwoStageRMI<key_t, root_error_bound>::pick_next_stage_model(size_t group_i_pred) {
+size_t TwoStageRMI<key_t, root_error_bound>::pick_next_stage_model(size_t group_i_pred) const {
   size_t second_stage_model_i;
   second_stage_model_i = group_i_pred * rmi_2nd_stage_model_n / keys_n;
 
@@ -640,7 +640,7 @@ template<typename RandomIt>
     void train_rmi(RandomIt first, RandomIt last, size_t rmi_2nd_stage_model_n);
 
 template <class key_t,  size_t root_error_bound>
-inline size_t TwoStageRMI<key_t, root_error_bound>::predict(const key_t &key) {
+inline size_t TwoStageRMI<key_t, root_error_bound>::predict(const key_t &key) const {
   size_t pos_pred = rmi_1st_stage->predict(key);
   size_t next_stage_model_i = pick_next_stage_model(pos_pred);
   return std::min(rmi_2nd_stage[next_stage_model_i].predict(key), keys_n - 1);

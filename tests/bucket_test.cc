@@ -169,7 +169,7 @@ void Learn_Group_test()
     CLevel::MemControl mem(COMMON_PMEM_FILE, 100 * ONE_MIB);
     NVM::data_init();
     Random rnd(0, UINT64_MAX - 1);
-    right_kv.emplace(0, UINT64_MAX);
+    // right_kv.emplace(0, UINT64_MAX);
     for (uint64_t i = 0; i < TEST_SIZE; ++i) {
         uint64_t key = rnd.Next();
         if (right_kv.count(key)) {

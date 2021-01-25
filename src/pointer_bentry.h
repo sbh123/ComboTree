@@ -220,7 +220,7 @@ public:
         bool find = false;
         int pos = Find(key, find);
         if(!find && this->value(pos) == 0) {
-            Show();
+            // Show();
             return status::NoExist;
         }
         SetValue(total_indexs[pos], value);
@@ -232,7 +232,7 @@ public:
         bool find = false;
         int pos = Find(key, find);
         if(!find || this->value(pos)== 0) {
-            Show();
+            // Show();
             return status::NoExist;
         }
         value = this->value(pos);
@@ -451,9 +451,13 @@ struct  PointerBEntry {
         // std::cout << "Entry key: " << key << std::endl;
     }
 
+    void AdjustEntryKey(CLevel::MemControl* mem) {
+        entry_key = Pointer(0, mem)->key(0);
+    }
+
     int Find_pos(uint64_t key) const {
         int pos = 0;
-        while(pos < entry_count && entrys[pos].IsValid() && entrys[pos].entry_key <= key) pos ++;
+        while(pos < buf.entries && entrys[pos].IsValid() && entrys[pos].entry_key <= key) pos ++;
         pos = pos == 0 ? pos : pos -1;
         return pos;
     }
@@ -515,7 +519,7 @@ struct  PointerBEntry {
     }
 
     void Show(CLevel::MemControl* mem) {
-        for(int i = 0; i < entry_count && entrys[i].IsValid(); i ++) {
+        for(int i = 0; i < buf.entries && entrys[i].IsValid(); i ++) {
             std::cout << "Entry key: "  << entrys[i].entry_key << std::endl;
             (entrys[i].pointer.pointer(mem->BaseAddr()))->Show();
         }
@@ -634,5 +638,39 @@ struct  PointerBEntry {
       int cur_idx;
     };
 };
+
+static inline status MergePointerBEntry(PointerBEntry *left, PointerBEntry *right,
+        CLevel::MemControl* mem, uint64_t key, uint64_t value)
+{
+    if(left->buf.entries == PointerBEntry::entry_count) {
+        // simple move one to left
+        int right_entries = right->buf.entries;
+        std::copy(&right->entrys[0], &right->entrys[right_entries], &right->entrys[1]);
+        // memmove(&right->entrys[1], &right->entrys[0], sizeof(PointerBEntry::entry) * (right->buf.entries));
+        right->entrys[0] = left->entrys[left->buf.entries - 1];
+        right->buf.entries = right->entrys[1].buf.entries + 1;
+        NVM::Mem_persist(right, sizeof(PointerBEntry));
+        right->entrys[left->buf.entries - 1].SetInvalid();
+        left->buf.entries -= 1;
+        NVM::Mem_persist(left, sizeof(PointerBEntry)); 
+    } else {
+        left->entrys[left->buf.entries] = right->entrys[0];
+        left->buf.entries += 1;
+        NVM::Mem_persist(left, sizeof(PointerBEntry)); 
+
+        int right_entries = right->buf.entries;
+        std::copy(&right->entrys[1], &right->entrys[right_entries], &right->entrys[0]);
+        // memmove(&right->entrys[0], &right->entrys[1], sizeof(PointerBEntry::entry) * (right_entries - 1));
+        right->entrys[right_entries - 1].SetInvalid();
+        right->buf.entries = right_entries - 1;
+        NVM::Mem_persist(right, sizeof(PointerBEntry));
+    }
+    if(key < right->entry_key) {
+        return left->Put(mem, key, value);
+    } 
+    else {
+        return right->Put(mem, key, value);
+    }
+}
 
 } // namespace combotree

@@ -57,7 +57,7 @@ public:
     template<typename RandomIt>
     void init(RandomIt first, RandomIt last);
 
-    size_t predict(const key_t &key);;
+    size_t predict(const key_t &key) const;
     size_t rmi_model_n() { return rmi_2nd_stage_model_n;}
 
     linear_model_t get_1st_stage_model() {
@@ -82,7 +82,7 @@ private:
     template<typename RandomIt>
     void train_rmi(RandomIt first, RandomIt last, size_t rmi_2nd_stage_model_n);
 
-    size_t pick_next_stage_model(size_t pos_pred);
+    size_t pick_next_stage_model(size_t pos_pred) const;
 
     linear_model_t *rmi_1st_stage = nullptr;
     linear_model_t *rmi_2nd_stage = nullptr;

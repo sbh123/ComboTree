@@ -33,13 +33,12 @@ struct __attribute__((aligned(64))) LearnGroup {
     class Iter;
     class EntryIter;
 
-    int entry_count;
-    uint64_t entries_offset_;                     // pmem file offset
-    segment_t segment_;
-    bentry_t* __attribute__((aligned(64))) entries_; // current mmaped address
     size_t nr_entries_;  
-    size_t max_nr_entries_;                        // logical entries count
-    std::atomic<size_t> size_;
+    size_t max_nr_entries_;
+    uint64_t min_key;                         // pmem file offset
+    uint64_t max_key;
+    segment_t segment_;
+    bentry_t* __attribute__((aligned(64))) entries_; // current mmaped address                        // logical entries count
     CLevel::MemControl *clevel_mem_;
 
 LearnGroup(size_t max_size, CLevel::MemControl *clevel_mem) 
@@ -66,13 +65,11 @@ int find_near_pos(uint64_t key) const
 uint64_t Find_(uint64_t key) const {
     int pos = find_near_pos(key);
     pos = std::min(pos, (int)(nr_entries_ - 1));
-    int left = 0;
-    int right = nr_entries_ - 1;
     if(entries_[pos].entry_key == key) {
         return pos;
     } else if (entries_[pos].entry_key < key) {
       pos ++;
-      for(; pos <= right && entries_[pos].entry_key <= key; pos ++);
+      for(; pos < nr_entries_ && entries_[pos].entry_key <= key; pos ++);
       return pos - 1;
     } else {
       pos --;
@@ -84,7 +81,16 @@ uint64_t Find_(uint64_t key) const {
 status Put(uint64_t key, uint64_t value)
 {
     uint64_t pos = Find_(key);
-    return entries_[pos].Put(clevel_mem_, key, value);
+    auto ret = entries_[pos].Put(clevel_mem_, key, value);
+    if(ret == status::Full) {
+        if(pos > 0 && (entries_[pos - 1].buf.entries <= (PointerBEntry::entry_count / 2))) {
+            return MergePointerBEntry(&entries_[pos - 1], &entries_[pos], clevel_mem_, key, value);
+        }  
+        if(pos + 1 < nr_entries_ && (entries_[pos + 1].buf.entries <= (PointerBEntry::entry_count / 2))) {
+            return MergePointerBEntry(&entries_[pos], &entries_[pos + 1], clevel_mem_, key, value);
+        }
+    }
+    return ret;
 }
 
 bool Update(uint64_t key, uint64_t value)
@@ -188,6 +194,8 @@ static inline void ExpandGroup(LearnGroup* old_group, std::vector<LearnGroup*> &
             it.next(); 
             entry_pos ++;
         } while(!it.end());
+        new_group->min_key = new_group->start_key();
+        new_group->max_key = it.end() ? old_group->max_key : (*it).entry_key;
         new_group->Persist();
         new_groups.push_back(new_group);
     }
@@ -225,12 +233,16 @@ public:
             LearnGroup *new_group = new (NVM::data_alloc->alloc(sizeof(LearnGroup))) LearnGroup(LearnGroup::max_entry_counts, clevel_mem_);
             new_group->Expansion(data, start_pos, expand_keys);
             start_pos += expand_keys;
+            new_group->min_key = new_group->start_key();
+            new_group->max_key = start_pos < size ? data[start_pos].first : UINT64_MAX;
+            new_group->Persist();
             groups_[nr_groups_ ++] = new_group;
             train_keys.push_back(new_group->start_key());
         }
         LOG(Debug::INFO, "Group count: %d...", nr_groups_);
         assert(nr_groups_ <=  max_groups_);
-        model.prepare_model(train_keys, 0, nr_groups_);
+        // model.prepare_model(train_keys, 0, nr_groups_);
+        model.init(train_keys.begin(), train_keys.end());
     }
 
     void ExpandEntrys(std::vector<LearnGroup *> &expand_groups, size_t group_id)
@@ -264,24 +276,24 @@ public:
         for(int i = 0; i < nr_groups_; i ++) {
             train_keys.push_back(groups_[i]->start_key());
         }
-        model.prepare_model(train_keys, 0, nr_groups_);
+        // model.prepare_model(train_keys, 0, nr_groups_);
+        model.init(train_keys.begin(), train_keys.end());
         NVM::Mem_persist(this, sizeof(*this));
     }
 
     int FindGroup(uint64_t key) const {
-        int pos = model.predict(key);
+        int pos = model.predict(RMI::Key_64(key));
         pos = std::min(pos, (int)nr_groups_ - 1);
-        int left = 0;
-        int right = nr_groups_ - 1;
-        if(groups_[pos]->start_key() == key) {
+        if(groups_[pos]->min_key <= key && key < groups_[pos]->max_key) {
             return pos;
-        } else if (groups_[pos]->start_key() < key) {
+        }  
+        if (groups_[pos]->min_key < key) {
             pos ++;
-            for(; pos <= right && groups_[pos]->start_key() <= key; pos ++);
+            for(; pos < nr_groups_ && groups_[pos]->min_key <= key; pos ++);
             pos --;
         } else {
             pos --;
-            for(; pos > 0 && groups_[pos]->start_key() > key; pos --);
+            for(; pos > 0 && groups_[pos]->min_key > key; pos --);
         }
         return std::max(pos, 0);
     }
@@ -295,6 +307,10 @@ public:
             // std::cout << "Full group. need expand." << std::endl;
             LearnGroup *old_group = groups_[group_id];
             std::vector<LearnGroup *> expand_groups;
+            if(group_id == 0) {
+                // Adjust min key
+                groups_[group_id]->entries_[0].AdjustEntryKey(clevel_mem_);
+            }
             ExpandGroup(old_group, expand_groups, clevel_mem_);
             if(expand_groups.size() == 1) {
                 groups_[group_id] = expand_groups[0];
@@ -337,7 +353,8 @@ public:
 private:
     uint64_t nr_groups_;
     uint64_t max_groups_;
-    RMI::LinearModel<RMI::Key_64> model;
+    // RMI::LinearModel<RMI::Key_64> model;
+    RMI::TwoStageRMI<RMI::Key_64, 4> model;
     LearnGroup **groups_;
     CLevel::MemControl *clevel_mem_;
 };
