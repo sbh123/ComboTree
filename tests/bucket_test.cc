@@ -192,7 +192,15 @@ void Learn_Group_test()
             assert(value == exist_kv[i].second);
         }
     }
-    for(int i = 0; i < TEST_SIZE * 128; i ++) {
+    {
+        combotree::RootModel::Iter it(root);
+        int idx  =0;
+        while(!it.end()) {
+            std::cout << "pair[" << idx ++ << "] Key: " << it.key() << ", value: " << it.value() << std::endl;
+            it.next();
+        }
+    }
+    for(int i = 0; i < 1000000; i ++) {
         uint64_t key = rnd.Next();
         if (right_kv.count(key)) {
             i--;
@@ -201,14 +209,15 @@ void Learn_Group_test()
         uint64_t value = rnd.Next();
         exist_kv.push_back({key, value});
         root->Put(key, value);
-        uint64_t new_value;
-        root->Get(key, new_value);
-        if(value != new_value) {
-            root->Put(key, value);
-            root->Get(key, new_value);
-            std::cout << "Failed num: " << i << std::endl;
-            assert(value == new_value);
-        }
+        right_kv.emplace(key, value);
+        // uint64_t new_value;
+        // root->Get(key, new_value);
+        // if(value != new_value) {
+        //     root->Put(key, value);
+        //     root->Get(key, new_value);
+        //     std::cout << "Failed num: " << i << std::endl;
+        //     assert(value == new_value);
+        // }
     }
 
     for(int i = 0; i < exist_kv.size(); i ++) {
@@ -220,5 +229,44 @@ void Learn_Group_test()
             assert(value == exist_kv[i].second);
         }
     }
+    {
+        for(int i = 1; i < exist_kv.size() / 100; i ++) {
+            uint64_t start_key = rnd.Next();
+            combotree::RootModel::Iter iter(root, start_key);
+            auto right_iter = right_kv.lower_bound(start_key);
+            if(right_iter == right_kv.end()) continue;
+
+            if (right_iter->first != iter.key()) {
+                std::cout << i << "key: " << start_key << ", find " << iter.key() << ", expect " << right_iter->first << std::endl;
+                combotree::RootModel::Iter iter(root, start_key);
+                assert(right_iter->first == iter.key());
+            }
+            for (int j = 0; j < 100 && right_iter != right_kv.cend(); ++j) {
+                assert(!iter.end());
+                if(right_iter->first != iter.key()) {
+                    combotree::RootModel::Iter it(root, start_key);
+                    auto map_it = right_kv.lower_bound(start_key);
+                    for (int z = 0; z < 100 ; ++z) {
+                        std::cout << "Iter[" << z << "]: Key: " << it.key() << ", value: " << it.value() << std::endl;
+                        std::cout << "Map Iter[" << z << "]: Key: " << map_it->first << ", value: " << map_it->second << std::endl;
+                        it.next();
+                        map_it ++;   
+                    }
+                    std::cout << "Unexpected." << std::endl;
+                }
+                assert(right_iter->first == iter.key());
+                assert(right_iter->second == iter.value());
+                right_iter++;
+                iter.next();
+            }
+        }
+        // combotree::RootModel::Iter it(root);
+        // int idx  =0;
+        // while(!it.end()) {
+        //     std::cout << "pair[" << idx ++ << "] Key: " << it.key() << ", value: " << it.value() << std::endl;
+        //     it.next();
+        // }
+    }
+    mem.Usage();
     delete root;
 }

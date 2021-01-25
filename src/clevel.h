@@ -164,6 +164,9 @@ class __attribute__((packed)) CLevel {
     }
 
     uint64_t Usage() const {
+      size_t kb = ((uint64_t)cur_addr_.load() - base_addr_) / 1024;
+      size_t mb = kb / 1024;
+      std::cout << pmem_file_ << " used:" <<  mb  << " Mib, " << kb % 1024 << "kib." << std::endl;
       return (uint64_t)cur_addr_.load() - base_addr_;
     }
 

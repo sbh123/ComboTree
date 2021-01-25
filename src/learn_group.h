@@ -30,6 +30,7 @@ struct __attribute__((aligned(64))) LearnGroup {
     static const size_t max_entry_counts = 256;
     typedef PGM_NVM::PGMIndex<uint64_t, epsilon>::Segment segment_t;
     typedef combotree::PointerBEntry bentry_t;
+    class Iter;
     class EntryIter;
 
     int entry_count;
@@ -48,7 +49,7 @@ LearnGroup(size_t max_size, CLevel::MemControl *clevel_mem)
 
 ~LearnGroup()
 {
-    NVM::data_alloc->Free(entries_);
+    NVM::data_alloc->Free(entries_, max_nr_entries_ * sizeof(bentry_t));
 }
 
 uint64_t start_key()
@@ -86,13 +87,21 @@ status Put(uint64_t key, uint64_t value)
     return entries_[pos].Put(clevel_mem_, key, value);
 }
 
-bool Update(uint64_t key, uint64_t value, uint64_t begin, uint64_t end);
+bool Update(uint64_t key, uint64_t value)
+{
+    uint64_t pos = Find_(key);
+    return entries_[pos].Update(clevel_mem_, key, value);
+}
 
 bool Get(uint64_t key, uint64_t& value) const {
     uint64_t pos = Find_(key);
     return entries_[pos].Get(clevel_mem_, key, value);
 }
-bool Delete(uint64_t key, uint64_t* value, uint64_t begin, uint64_t end);
+bool Delete(uint64_t key, uint64_t* value)
+{
+    uint64_t pos = Find_(key);
+    return entries_[pos].Delete(clevel_mem_, key, value);
+}
 
 void ExpandPut_(const PointerBEntry::entry *entry) {
     new (&entries_[nr_entries_ ++]) bentry_t(entry);
@@ -179,6 +188,7 @@ static inline void ExpandGroup(LearnGroup* old_group, std::vector<LearnGroup*> &
             it.next(); 
             entry_pos ++;
         } while(!it.end());
+        new_group->Persist();
         new_groups.push_back(new_group);
     }
     // std::cout << "Expand segmets to: " << new_groups.size() << std::endl;
@@ -186,6 +196,7 @@ static inline void ExpandGroup(LearnGroup* old_group, std::vector<LearnGroup*> &
 
 class RootModel {
 public:
+    class Iter;
     class IndexIter;
     RootModel(size_t max_groups, CLevel::MemControl *clevel_mem) 
         : nr_groups_(0), max_groups_(max_groups), clevel_mem_(clevel_mem)
@@ -194,7 +205,11 @@ public:
 
     }
     ~RootModel() {
-       NVM::data_alloc->Free(groups_, max_groups_ * sizeof(LearnGroup *));
+        for(size_t i = 0; i < nr_groups_; i++) {
+            groups_[i]->~LearnGroup();
+            NVM::data_alloc->Free(groups_[i], sizeof(LearnGroup)); 
+        }
+        NVM::data_alloc->Free(groups_, max_groups_ * sizeof(LearnGroup *));
     }
 
     void Load(std::vector<std::pair<uint64_t,uint64_t>>& data) {
@@ -225,8 +240,9 @@ public:
             }
             nr_groups_ += expand_groups.size() - 1;
             std::copy(expand_groups.begin(), expand_groups.end(), &groups_[group_id]);
+            NVM::Mem_persist(&groups_[group_id], sizeof(LearnGroup *) * (nr_groups_ - group_id));
         } else {
-            std::cout << "New entrys" << std::endl;
+            // std::cout << "New entrys" << std::endl;
             LearnGroup **old_groups = groups_;
             size_t old_cap = max_groups_;
             size_t new_cap = (nr_groups_ + expand_groups.size()) * 2;
@@ -234,7 +250,7 @@ public:
             std::copy(&groups_[0], &groups_[group_id], &new_groups_[0]);
             std::copy(expand_groups.begin(), expand_groups.end(), &new_groups_[group_id]);
             std::copy(&groups_[group_id + 1], &groups_[nr_groups_], &new_groups_[group_id + expand_groups.size()]);
-
+            NVM::Mem_persist(&groups_[0], sizeof(LearnGroup *) * (nr_groups_));
             max_groups_ = new_cap;
             nr_groups_ += expand_groups.size() - 1;
             groups_ = new_groups_;
@@ -245,6 +261,7 @@ public:
             train_keys.push_back(groups_[i]->start_key());
         }
         model.prepare_model(train_keys, 0, nr_groups_);
+        NVM::Mem_persist(this, sizeof(*this));
     }
 
     int FindGroup(uint64_t key) const {
@@ -278,22 +295,35 @@ public:
             if(expand_groups.size() == 1) {
                 groups_[group_id] = expand_groups[0];
                 clflush(&groups_[group_id]);
+                old_group->~LearnGroup();
+                NVM::data_alloc->Free(old_group, sizeof(LearnGroup));
                 goto retry1;
             } else {
-                std::cout << "Need expand group entrys." << std::endl;
+                // std::cout << "Need expand group entrys." << std::endl;
                 ExpandEntrys(expand_groups, group_id);
+                old_group->~LearnGroup();
+                NVM::data_alloc->Free(old_group, sizeof(LearnGroup));
                 goto retry0;
             }
         }
         return ret;
     }
-    bool Update(uint64_t key, uint64_t value);
+    bool Update(uint64_t key, uint64_t value) {
+        int group_id = FindGroup(key);
+        auto ret = groups_[group_id]->Update(key, value);
+        return ret;
+    }
 
     bool Get(uint64_t key, uint64_t& value) const {
         int group_id = FindGroup(key);
         return groups_[group_id]->Get(key, value);
     }
-    bool Delete(uint64_t key);
+
+    bool Delete(uint64_t key) {
+        int group_id = FindGroup(key);
+        auto ret = groups_[group_id]->Delete(key, nullptr);
+        return ret;
+    }
 
 
 private:
@@ -358,5 +388,100 @@ private:
     RootModel *root_;
     uint64_t idx_;
 };
+
+class LearnGroup::Iter {
+public:
+    Iter() {}
+    Iter(LearnGroup *group) : group_(group), idx_(0), 
+        biter_(&group->entries_[0], group->clevel_mem_) { }
+    Iter(LearnGroup *group, uint64_t start_key) : group_(group) {
+        idx_ = group_->Find_(start_key);
+        new (&biter_) bentry_t::Iter(&group_->entries_[idx_], group_->clevel_mem_, start_key);
+        if(biter_.end()) {
+            next();
+        }
+    }
+    ~Iter() {
+
+    }
+    
+    uint64_t key() {
+        return biter_.key();
+    }
+
+    uint64_t value() {
+        return biter_.value();
+    }
+
+    bool next() {
+        if(idx_ < group_->nr_entries_ && biter_.next()) {
+            return true;
+        }
+        idx_ ++;
+        if(idx_ < group_->nr_entries_) {
+            new (&biter_) bentry_t::Iter(&group_->entries_[idx_], group_->clevel_mem_);
+            return true;
+        }
+        return false;
+    }
+
+    bool end() {
+        return idx_ >= group_->nr_entries_;
+    }
+
+private:
+    LearnGroup *group_;
+    bentry_t::Iter biter_;
+    uint64_t idx_;
+};
+
+class RootModel::Iter
+{
+public:
+
+    Iter(RootModel *root) : root_(root), giter_(root->groups_[0]), idx_(0) { }
+    Iter(RootModel *root, uint64_t start_key) : root_(root) {
+        idx_ = root_->FindGroup(start_key);
+        new (&giter_) LearnGroup::Iter(root->groups_[idx_], start_key);
+        if(giter_.end()) {
+            next();
+        }
+    }
+    ~Iter() {
+        
+    }
+    
+    uint64_t key() {
+        return giter_.key();
+    }
+
+    uint64_t value() {
+        return giter_.value();
+    }
+
+    bool next() {
+        if(idx_ < root_->nr_groups_ && giter_.next()) {
+            return true;
+        }
+        idx_ ++;
+        if(idx_ < root_->nr_groups_) {
+            new (&giter_) LearnGroup::Iter(root_->groups_[idx_]);
+            return true;
+        }
+        return false;
+    }
+
+    bool end() {
+        return idx_ >= root_->nr_groups_;
+    }
+
+private:
+    RootModel *root_;
+    LearnGroup::Iter giter_;
+    uint64_t idx_;
+};
+
+
+
 
 } // namespace combotree

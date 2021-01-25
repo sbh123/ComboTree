@@ -16,7 +16,7 @@ using combotree::Random;
 
 int main(void) {
 #ifdef SERVER
-  ComboTree* tree = new ComboTree("/pmem0/combotree/", (1024*1024*1024*100UL), true);
+  ComboTree* tree = new ComboTree("/pmem0/", (1024*1024*1024*100UL), true);
 #else
   ComboTree* tree = new ComboTree("/mnt/pmem0/", (1024*1024*512UL), true);
 #endif
