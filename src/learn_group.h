@@ -35,16 +35,16 @@ struct __attribute__((aligned(64))) LearnGroup {
     class Iter;
     class EntryIter;
 
-    size_t nr_entries_;  
-    size_t max_nr_entries_;
+    size_t nr_entries_ : 32;  
+    size_t max_nr_entries_ : 32;
     uint64_t min_key;                         // pmem file offset
     uint64_t max_key;
     segment_t segment_;
-    bentry_t* __attribute__((aligned(64))) entries_; // current mmaped address                        // logical entries count
-    CLevel::MemControl *clevel_mem_;
+    bentry_t* entries_; // current mmaped address                        // logical entries count
+    // CLevel::MemControl *clevel_mem_;
 
-LearnGroup(size_t max_size, CLevel::MemControl *clevel_mem) 
-    : nr_entries_(0), max_nr_entries_(max_size), clevel_mem_(clevel_mem) {
+LearnGroup(size_t max_size) 
+    : nr_entries_(0), max_nr_entries_(max_size) {
     entries_ = (bentry_t *)NVM::data_alloc->alloc(max_size * sizeof(bentry_t));
 }
 
@@ -80,35 +80,35 @@ uint64_t Find_(uint64_t key) const {
     }
 }
 
-status Put(uint64_t key, uint64_t value)
+status Put(uint64_t key, uint64_t value, CLevel::MemControl *mem)
 {
     uint64_t pos = Find_(key);
-    auto ret = entries_[pos].Put(clevel_mem_, key, value);
+    auto ret = entries_[pos].Put(mem, key, value);
     if(ret == status::Full) {
         if(pos > 0 && (entries_[pos - 1].buf.entries <= (PointerBEntry::entry_count / 2))) {
-            return MergePointerBEntry(&entries_[pos - 1], &entries_[pos], clevel_mem_, key, value);
+            return MergePointerBEntry(&entries_[pos - 1], &entries_[pos], mem, key, value);
         }  
         if(pos + 1 < nr_entries_ && (entries_[pos + 1].buf.entries <= (PointerBEntry::entry_count / 2))) {
-            return MergePointerBEntry(&entries_[pos], &entries_[pos + 1], clevel_mem_, key, value);
+            return MergePointerBEntry(&entries_[pos], &entries_[pos + 1], mem, key, value);
         }
     }
     return ret;
 }
 
-bool Update(uint64_t key, uint64_t value)
+bool Update(uint64_t key, uint64_t value, CLevel::MemControl *mem)
 {
     uint64_t pos = Find_(key);
-    return entries_[pos].Update(clevel_mem_, key, value);
+    return entries_[pos].Update(mem, key, value);
 }
 
-bool Get(uint64_t key, uint64_t& value) const {
+bool Get(uint64_t key, uint64_t& value, CLevel::MemControl *mem) const {
     uint64_t pos = Find_(key);
-    return entries_[pos].Get(clevel_mem_, key, value);
+    return entries_[pos].Get(mem, key, value);
 }
-bool Delete(uint64_t key, uint64_t* value)
+bool Delete(uint64_t key, uint64_t* value, CLevel::MemControl *mem)
 {
     uint64_t pos = Find_(key);
-    return entries_[pos].Delete(clevel_mem_, key, value);
+    return entries_[pos].Delete(mem, key, value);
 }
 
 void ExpandPut_(const PointerBEntry::entry *entry) {
@@ -121,7 +121,7 @@ void Persist()
     NVM::Mem_persist(this, sizeof(LearnGroup));
 }
 
-void Expansion(std::vector<std::pair<uint64_t,uint64_t>>& data, size_t start_pos, int &expand_keys)
+void Expansion(std::vector<std::pair<uint64_t,uint64_t>>& data, size_t start_pos, int &expand_keys, CLevel::MemControl *mem)
 {
     pgm::internal::OptimalPiecewiseLinearModel<uint64_t, uint64_t> opt(epsilon);
     size_t c = 0;
@@ -133,7 +133,7 @@ void Expansion(std::vector<std::pair<uint64_t,uint64_t>>& data, size_t start_pos
             segment_ = segment_t(opt.get_segment());
             break;
         }
-        new (&entries_[i - start_pos]) bentry_t(data[i].first, data[i].second, prefix_len, clevel_mem_);
+        new (&entries_[i - start_pos]) bentry_t(data[i].first, data[i].second, prefix_len, mem);
         expand_keys ++;
     }
     nr_entries_ = expand_keys;
@@ -185,7 +185,7 @@ static inline void ExpandGroup(LearnGroup* old_group, std::vector<LearnGroup*> &
     while(!it.end()) {
         pgm::internal::OptimalPiecewiseLinearModel<uint64_t, uint64_t> opt(LearnGroup::epsilon);
         size_t entry_pos = 0;
-        LearnGroup *new_group = new (NVM::data_alloc->alloc(sizeof(LearnGroup))) LearnGroup(LearnGroup::max_entry_counts, clevel_mem);
+        LearnGroup *new_group = new (NVM::data_alloc->alloc(sizeof(LearnGroup))) LearnGroup(LearnGroup::max_entry_counts);
         do {
             const PointerBEntry::entry *entry = &(*it);
             if ((!opt.add_point(entry->entry_key, entry_pos)) || entry_pos >= LearnGroup::max_entry_counts) {
@@ -204,19 +204,62 @@ static inline void ExpandGroup(LearnGroup* old_group, std::vector<LearnGroup*> &
     // std::cout << "Expand segmets to: " << new_groups.size() << std::endl;
 }
 
+struct ExpandMeta {
+    LearnGroup **group_pointers_;
+    LearnGroup *groups_;
+    size_t max_nr_group_;
+    size_t nr_group_;
+    std::vector<uint64_t> &train_keys_;
+    ExpandMeta(LearnGroup **group_pointers, LearnGroup *groups, size_t max_nr_group, std::vector<uint64_t> &train_keys)
+        : group_pointers_(group_pointers), groups_(groups), max_nr_group_(max_nr_group), nr_group_(0), train_keys_(train_keys)
+        {}
+    
+    void ExpandGroup(LearnGroup* old_group, CLevel::MemControl *clevel_mem)
+    {
+        LearnGroup::EntryIter it(old_group);
+        // for(size_t i = 0; i < old_group->nr_entries_; i ++) {
+        //     std::cout << "Entry[" << i << "] pointesr :" << old_group->entries_[i].buf.entries << std::endl;
+        // }
+        while(!it.end()) {
+            pgm::internal::OptimalPiecewiseLinearModel<uint64_t, uint64_t> opt(LearnGroup::epsilon);
+            size_t entry_pos = 0;
+            LearnGroup *new_group = new (&groups_[nr_group_]) LearnGroup(LearnGroup::max_entry_counts);
+            do {
+                const PointerBEntry::entry *entry = &(*it);
+                if ((!opt.add_point(entry->entry_key, entry_pos)) || entry_pos >= LearnGroup::max_entry_counts) {
+                    new_group->segment_ = LearnGroup::segment_t(opt.get_segment());
+                    break;
+                }
+                new_group->ExpandPut_(entry);
+                it.next(); 
+                entry_pos ++;
+            } while(!it.end());
+            new_group->min_key = new_group->start_key();
+            new_group->max_key = it.end() ? old_group->max_key : (*it).entry_key;
+            new_group->Persist();
+            group_pointers_[nr_group_] = new_group;
+            train_keys_.push_back(new_group->min_key);
+            nr_group_ ++;
+        }
+    }
+};
+
 class RootModel {
 public:
     class Iter;
     class IndexIter;
-    RootModel() : nr_groups_(0), max_groups_(64) {
+    RootModel(size_t max_groups = 64) : nr_groups_(0), max_groups_(max_groups) {
         clevel_mem_ = new CLevel::MemControl(CLEVEL_PMEM_FILE, CLEVEL_PMEM_FILE_SIZE);
-        groups_ = (LearnGroup **)NVM::data_alloc->alloc(64 * sizeof(LearnGroup *));
+        groups_ = (LearnGroup **)NVM::data_alloc->alloc(max_groups * sizeof(LearnGroup *));
+        group_entrys_ = (LearnGroup *)NVM::data_alloc->alloc(max_groups * sizeof(LearnGroup));
+        
     }
 
     RootModel(size_t max_groups, CLevel::MemControl *clevel_mem) 
         : nr_groups_(0), max_groups_(max_groups), clevel_mem_(clevel_mem)
     {
         groups_ = (LearnGroup **)NVM::data_alloc->alloc(max_groups * sizeof(LearnGroup *));
+        group_entrys_ = (LearnGroup *)NVM::data_alloc->alloc(max_groups * sizeof(LearnGroup));
     }
     ~RootModel() {
         for(size_t i = 0; i < nr_groups_; i++) {
@@ -231,9 +274,15 @@ public:
         size_t start_pos = 0;
         int expand_keys;
         std::vector<uint64_t> train_keys;
+        
         while(start_pos < size ) {
+#ifdef EXPAND_ALL
+            LearnGroup *new_group = new (&group_entrys_[nr_groups_]) LearnGroup(LearnGroup::max_entry_counts);
+
+#else
             LearnGroup *new_group = new (NVM::data_alloc->alloc(sizeof(LearnGroup))) LearnGroup(LearnGroup::max_entry_counts, clevel_mem_);
-            new_group->Expansion(data, start_pos, expand_keys);
+#endif
+            new_group->Expansion(data, start_pos, expand_keys, clevel_mem_);
             start_pos += expand_keys;
             new_group->min_key = new_group->start_key();
             new_group->max_key = start_pos < size ? data[start_pos].first : UINT64_MAX;
@@ -284,36 +333,40 @@ public:
     }
 
     void ExpandAllGroup() {
-        size_t new_nr_group = 0, new_cap = nr_groups_ * 3;
+        size_t  new_cap = nr_groups_ * 3;
         std::vector<uint64_t> train_keys;
         Timer timer;
         timer.Start();
+        // static_assert(sizeof(LearnGroup) == 64);
         LearnGroup **new_groups_ = (LearnGroup **)NVM::data_alloc->alloc(new_cap * sizeof(LearnGroup *));
+        LearnGroup *new_group_entrys_ = (LearnGroup *)NVM::data_alloc->alloc(new_cap * sizeof(LearnGroup));
         groups_[0]->entries_[0].AdjustEntryKey(clevel_mem_);
+        ExpandMeta meta(new_groups_, new_group_entrys_, new_cap, train_keys);
         for(size_t i = 0; i < nr_groups_; i ++) {
-            std::vector<LearnGroup *> expand_groups;
-            ExpandGroup(groups_[i], expand_groups, clevel_mem_);
-            for(size_t j = 0; j < expand_groups.size(); j ++) {
-                new_groups_[new_nr_group ++] = expand_groups[j];
-                train_keys.push_back(expand_groups[j]->start_key());
-            }
+            // std::vector<LearnGroup *> expand_groups;
+            // ExpandGroup(groups_[i], expand_groups, clevel_mem_);
+            // for(size_t j = 0; j < expand_groups.size(); j ++) {
+            //     new_groups_[new_nr_group ++] = expand_groups[j];
+            //     train_keys.push_back(expand_groups[j]->start_key());
+            // }
+            meta.ExpandGroup(groups_[i], clevel_mem_);
         }
-        if(new_nr_group >= new_cap) {
-            std::cout << "Unexpact new_group: " << new_nr_group << ",cap " << new_cap <<std::endl;
+        if(meta.nr_group_ >= new_cap) {
+            std::cout << "Unexpact new_group: " << meta.nr_group_ << ",cap " << new_cap <<std::endl;
         }
-        assert(new_nr_group <= new_cap);
+        NVM::Mem_persist(new_groups_, new_cap * sizeof(LearnGroup *));
+
+        assert(meta.nr_group_ <= new_cap);
         LearnGroup ** old_groups = groups_;
+        LearnGroup *old_group_entrys = group_entrys_;
         size_t old_nr_groups = nr_groups_, old_cap = max_groups_;
         max_groups_ = new_cap;
-        nr_groups_ = new_nr_group;
+        nr_groups_ = meta.nr_group_;
         groups_ = new_groups_;
-        {
-            for(size_t i = 0; i < old_nr_groups; i ++) {
-                std::vector<LearnGroup *> expand_groups;
-                old_groups[i]->~LearnGroup();
-            }
-        }
+        group_entrys_ = new_group_entrys_;
+       
         NVM::data_alloc->Free(old_groups, old_cap * sizeof(LearnGroup *));
+        NVM::data_alloc->Free(old_group_entrys, old_cap * sizeof(LearnGroup));
 
         model.init(train_keys.begin(), train_keys.end());
         NVM::Mem_persist(this, sizeof(*this));
@@ -344,7 +397,7 @@ public:
     retry0:
         int group_id = FindGroup(key);
     retry1:
-        auto ret = groups_[group_id]->Put(key, value);
+        auto ret = groups_[group_id]->Put(key, value, clevel_mem_);
         if(ret == status::Full ) {
 #ifdef EXPAND_ALL
             ExpandAllGroup();
@@ -378,23 +431,24 @@ public:
     }
     bool Update(uint64_t key, uint64_t value) {
         int group_id = FindGroup(key);
-        auto ret = groups_[group_id]->Update(key, value);
+        auto ret = groups_[group_id]->Update(key, value, clevel_mem_);
         return ret;
     }
 
     bool Get(uint64_t key, uint64_t& value) const {
         int group_id = FindGroup(key);
-        return groups_[group_id]->Get(key, value);
+        return groups_[group_id]->Get(key, value, clevel_mem_);
     }
 
     bool Delete(uint64_t key) {
         int group_id = FindGroup(key);
-        auto ret = groups_[group_id]->Delete(key, nullptr);
+        auto ret = groups_[group_id]->Delete(key, nullptr, clevel_mem_);
         return ret;
     }
 
     void Info() {
         std::cout << "nr_groups: " << nr_groups_ << std::endl;
+        std::cout << "Group size:" << sizeof(LearnGroup) << std::endl;
         clevel_mem_->Usage();
     }
 
@@ -404,6 +458,7 @@ private:
     // RMI::LinearModel<RMI::Key_64> model;
     RMI::TwoStageRMI<RMI::Key_64, 3, 2> model;
     LearnGroup **groups_;
+    LearnGroup *group_entrys_;
     CLevel::MemControl *clevel_mem_;
 };
 
@@ -465,11 +520,11 @@ private:
 class LearnGroup::Iter {
 public:
     Iter() {}
-    Iter(LearnGroup *group) : group_(group), idx_(0), 
-        biter_(&group->entries_[0], group->clevel_mem_) { }
-    Iter(LearnGroup *group, uint64_t start_key) : group_(group) {
+    Iter(LearnGroup *group, CLevel::MemControl *mem) : group_(group), idx_(0), 
+        biter_(&group->entries_[0], mem), mem_(mem) { }
+    Iter(LearnGroup *group, uint64_t start_key, CLevel::MemControl *mem) : group_(group), mem_(mem) {
         idx_ = group_->Find_(start_key);
-        new (&biter_) bentry_t::Iter(&group_->entries_[idx_], group_->clevel_mem_, start_key);
+        new (&biter_) bentry_t::Iter(&group_->entries_[idx_], mem, start_key);
         if(biter_.end()) {
             next();
         }
@@ -492,7 +547,7 @@ public:
         }
         idx_ ++;
         if(idx_ < group_->nr_entries_) {
-            new (&biter_) bentry_t::Iter(&group_->entries_[idx_], group_->clevel_mem_);
+            new (&biter_) bentry_t::Iter(&group_->entries_[idx_], mem_);
             return true;
         }
         return false;
@@ -504,6 +559,7 @@ public:
 
 private:
     LearnGroup *group_;
+    CLevel::MemControl *mem_;
     bentry_t::Iter biter_;
     uint64_t idx_;
 };
@@ -512,10 +568,10 @@ class RootModel::Iter
 {
 public:
 
-    Iter(RootModel *root) : root_(root), giter_(root->groups_[0]), idx_(0) { }
+    Iter(RootModel *root) : root_(root), giter_(root->groups_[0], root->clevel_mem_), idx_(0) { }
     Iter(RootModel *root, uint64_t start_key) : root_(root) {
         idx_ = root_->FindGroup(start_key);
-        new (&giter_) LearnGroup::Iter(root->groups_[idx_], start_key);
+        new (&giter_) LearnGroup::Iter(root->groups_[idx_], start_key, root->clevel_mem_);
         if(giter_.end()) {
             next();
         }
@@ -538,7 +594,7 @@ public:
         }
         idx_ ++;
         if(idx_ < root_->nr_groups_) {
-            new (&giter_) LearnGroup::Iter(root_->groups_[idx_]);
+            new (&giter_) LearnGroup::Iter(root_->groups_[idx_], root_->clevel_mem_);
             return true;
         }
         return false;

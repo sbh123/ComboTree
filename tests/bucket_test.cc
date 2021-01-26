@@ -267,6 +267,7 @@ void Learn_Group_test()
         //     it.next();
         // }
     }
+    root->Info();
     mem.Usage();
     delete root;
 }
