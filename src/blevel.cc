@@ -176,7 +176,7 @@ BLevel::~BLevel() {
     delete (uint8_t*)entries_;
   }
 
-#ifndef POINTER_BENTRY
+#ifndef REUSE_MEMCTR
   if(clevel_mem_) {
     delete clevel_mem_;
   }
@@ -411,19 +411,10 @@ void BLevel::ExpandRange_(BLevel* old_blevel, int thread_id) {
 
 #ifdef POINTER_BENTRY
       {
-        // expand_meta.clevel_count++;
-        // bentry_t::Iter biter(old_entry, old_mem);
-        // uint64_t total_cnt = 0;
-        // do {
-        //   total_cnt++;
-        //   ExpandPut_(expand_meta, biter.key(), biter.value());
-        // } while(biter.next());
-        // expand_meta.clevel_data_count += total_cnt - old_entry->buf.entries;
-        // expand_meta.bentry_max_count =  std::max(expand_meta.bentry_max_count, total_cnt);
-
         expand_meta.clevel_count++;
-        bentry_t::EntryIter biter(old_entry);
         uint64_t total_cnt = 0;
+#ifdef REUSE_MEMCTR
+        bentry_t::EntryIter biter(old_entry);
         while (!biter.end())
         {
           /* code */
@@ -433,11 +424,17 @@ void BLevel::ExpandRange_(BLevel* old_blevel, int thread_id) {
           expand_meta.expanded_entries->fetch_add(1, std::memory_order_release);
           expand_meta.new_addr++;
           expand_meta.size += data_count;
-
           total_cnt += data_count;
           assert(expand_meta.new_addr <= expand_meta.max_addr);
           biter.next();
         } 
+#else
+        bentry_t::Iter biter(old_entry, old_mem);
+        do {
+          total_cnt++;
+          ExpandPut_(expand_meta, biter.key(), biter.value());
+        } while(biter.next());
+#endif
         expand_meta.clevel_data_count += total_cnt - old_entry->buf.entries;
         expand_meta.bentry_max_count =  std::max(expand_meta.bentry_max_count, total_cnt);
       }

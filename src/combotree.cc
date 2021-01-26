@@ -200,7 +200,7 @@ void ComboTree::ExpandComboTree_() {
 
   // old_blevel_ is set when last expanding finish.
   blevel_ = new BLevel(old_blevel_->Size()
-#ifdef POINTER_BENTRY
+#ifdef REUSE_MEMCTR
   , old_blevel_->MemControl()
 #endif
   );
@@ -247,7 +247,7 @@ void ComboTree::ExpandComboTree_() {
   BLevel* old_blevel = blevel_;
 
   blevel_ = new BLevel(old_blevel->Size()
-#ifdef POINTER_BENTRY
+#ifdef REUSE_MEMCTR
   , old_blevel_->MemControl()
 #endif
   );

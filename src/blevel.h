@@ -531,16 +531,16 @@ public:
     interval_size->fetch_add(1, std::memory_order_relaxed);
 #endif
 
-// #ifdef POINTER_BENTRY
-//     if(ret == status::Full) {
-//         if(HasPrevPhyIdx(physical_idx) && (entries_[physical_idx - 1].buf.entries <= (PointerBEntry::entry_count / 2))) {
-//             return MergePointerBEntry(&entries_[physical_idx - 1], &entries_[physical_idx], clevel_mem_, key, value);
-//         }  
-//         if(HasNextPhyIdx(physical_idx) && (entries_[physical_idx + 1].buf.entries <= (PointerBEntry::entry_count / 2))) {
-//             return MergePointerBEntry(&entries_[physical_idx], &entries_[physical_idx + 1], clevel_mem_, key, value);
-//         }
-//     }
-// #endif
+#ifdef POINTER_BENTRY
+    if(ret == status::Full) {
+        if(HasPrevPhyIdx(physical_idx) && (entries_[physical_idx - 1].buf.entries <= (PointerBEntry::entry_count / 2))) {
+            return MergePointerBEntry(&entries_[physical_idx - 1], &entries_[physical_idx], clevel_mem_, key, value);
+        }  
+        if(HasNextPhyIdx(physical_idx) && (entries_[physical_idx + 1].buf.entries <= (PointerBEntry::entry_count / 2))) {
+            return MergePointerBEntry(&entries_[physical_idx], &entries_[physical_idx + 1], clevel_mem_, key, value);
+        }
+    }
+#endif
     // Common::timers["Clevel_times"].end();
     return ret;
   }
