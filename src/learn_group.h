@@ -18,6 +18,8 @@
 
 namespace combotree {
 
+#define EXPAND_ALL
+
 static inline int CommonPrefixBytes(uint64_t a, uint64_t b) {
   // the result of clz is undefined if arg is 0
   int leading_zero_cnt = (a ^ b) == 0 ? 64 : __builtin_clzll(a ^ b);
@@ -281,6 +283,46 @@ public:
         NVM::Mem_persist(this, sizeof(*this));
     }
 
+    void ExpandAllGroup() {
+        size_t new_nr_group = 0, new_cap = nr_groups_ * 3;
+        std::vector<uint64_t> train_keys;
+        Timer timer;
+        timer.Start();
+        LearnGroup **new_groups_ = (LearnGroup **)NVM::data_alloc->alloc(new_cap * sizeof(LearnGroup *));
+        groups_[0]->entries_[0].AdjustEntryKey(clevel_mem_);
+        for(size_t i = 0; i < nr_groups_; i ++) {
+            std::vector<LearnGroup *> expand_groups;
+            ExpandGroup(groups_[i], expand_groups, clevel_mem_);
+            for(size_t j = 0; j < expand_groups.size(); j ++) {
+                new_groups_[new_nr_group ++] = expand_groups[j];
+                train_keys.push_back(expand_groups[j]->start_key());
+            }
+        }
+        if(new_nr_group >= new_cap) {
+            std::cout << "Unexpact new_group: " << new_nr_group << ",cap " << new_cap <<std::endl;
+        }
+        assert(new_nr_group <= new_cap);
+        LearnGroup ** old_groups = groups_;
+        size_t old_nr_groups = nr_groups_, old_cap = max_groups_;
+        max_groups_ = new_cap;
+        nr_groups_ = new_nr_group;
+        groups_ = new_groups_;
+        {
+            for(size_t i = 0; i < old_nr_groups; i ++) {
+                std::vector<LearnGroup *> expand_groups;
+                old_groups[i]->~LearnGroup();
+            }
+        }
+        NVM::data_alloc->Free(old_groups, old_cap * sizeof(LearnGroup *));
+
+        model.init(train_keys.begin(), train_keys.end());
+        NVM::Mem_persist(this, sizeof(*this));
+        uint64_t expand_time = timer.End();
+
+        LOG(Debug::INFO, "Finish expanding root model, new groups %ld,  expansion time is %lfs", 
+                nr_groups_, (double)expand_time/1000000.0);
+    }
+
     int FindGroup(uint64_t key) const {
         int pos = model.predict(RMI::Key_64(key));
         pos = std::min(pos, (int)nr_groups_ - 1);
@@ -304,6 +346,11 @@ public:
     retry1:
         auto ret = groups_[group_id]->Put(key, value);
         if(ret == status::Full ) {
+#ifdef EXPAND_ALL
+            ExpandAllGroup();
+            goto retry0;
+
+#else
             // std::cout << "Full group. need expand." << std::endl;
             LearnGroup *old_group = groups_[group_id];
             std::vector<LearnGroup *> expand_groups;
@@ -325,6 +372,7 @@ public:
                 NVM::data_alloc->Free(old_group, sizeof(LearnGroup));
                 goto retry0;
             }
+#endif
         }
         return ret;
     }
