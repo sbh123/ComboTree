@@ -199,7 +199,11 @@ void ComboTree::ExpandComboTree_() {
   timer.Start();
 
   // old_blevel_ is set when last expanding finish.
-  blevel_ = new BLevel(old_blevel_->Size());
+  blevel_ = new BLevel(old_blevel_->Size()
+#ifdef POINTER_BENTRY
+  , old_blevel_->MemControl()
+#endif
+  );
   blevel_->PrepareExpansion(old_blevel_);
 
   s = State::PREPARE_EXPANDING;
@@ -242,7 +246,11 @@ void ComboTree::ExpandComboTree_() {
   learn_index_t *old_rmi_index = learn_index_;
   BLevel* old_blevel = blevel_;
 
-  blevel_ = new BLevel(old_blevel->Size());
+  blevel_ = new BLevel(old_blevel->Size()
+#ifdef POINTER_BENTRY
+  , old_blevel_->MemControl()
+#endif
+  );
   blevel_->Expansion(old_blevel);
   learn_index_ = new learn_index_t(blevel_);
 

@@ -354,7 +354,7 @@ private:
     uint64_t nr_groups_;
     uint64_t max_groups_;
     // RMI::LinearModel<RMI::Key_64> model;
-    RMI::TwoStageRMI<RMI::Key_64, 4> model;
+    RMI::TwoStageRMI<RMI::Key_64, 3, 2> model;
     LearnGroup **groups_;
     CLevel::MemControl *clevel_mem_;
 };

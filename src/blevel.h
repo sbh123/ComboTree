@@ -35,7 +35,7 @@ public:
 private:
 
 public:
-  BLevel(size_t entries);
+  BLevel(size_t entries, CLevel::MemControl *mem = nullptr);
   ~BLevel();
 
   status Put(uint64_t key, uint64_t value, uint64_t begin, uint64_t end);
@@ -74,6 +74,7 @@ public:
   uint64_t Usage() const;
 
   ALWAYS_INLINE size_t Size() const { return size_; }
+  ALWAYS_INLINE CLevel::MemControl *MemControl() const { return clevel_mem_; }
   ALWAYS_INLINE size_t Entries() const { return nr_entries_; }
   ALWAYS_INLINE uint64_t EntryKey(int logical_idx) const {
 #ifdef BRANGE
@@ -94,14 +95,14 @@ public:
       locked_ = true;
       uint64_t last_idx = entry_idx_;
 #endif
-      new (&iter_) bentry_t::Iter(&blevel_->entries_[entry_idx_], &blevel_->clevel_mem_);
+      new (&iter_) bentry_t::Iter(&blevel_->entries_[entry_idx_], blevel_->clevel_mem_);
       while (iter_.end() && NextIndex_()) {
 #ifndef NO_LOCK
         blevel_->lock_[last_idx].unlock_shared();
         blevel_->lock_[entry_idx_].lock_shared();
         last_idx = entry_idx_;
 #endif
-        new (&iter_) bentry_t::Iter(&blevel_->entries_[entry_idx_], &blevel_->clevel_mem_);
+        new (&iter_) bentry_t::Iter(&blevel_->entries_[entry_idx_], blevel_->clevel_mem_);
       }
       if (end()) {
 #ifndef NO_LOCK
@@ -132,14 +133,14 @@ public:
       locked_ = true;
       uint64_t last_idx = entry_idx_;
 #endif
-      new (&iter_) bentry_t::Iter(&blevel_->entries_[entry_idx_], &blevel_->clevel_mem_, start_key);
+      new (&iter_) bentry_t::Iter(&blevel_->entries_[entry_idx_], blevel_->clevel_mem_, start_key);
       while (iter_.end() && NextIndex_()) {
 #ifndef NO_LOCK
         blevel_->lock_[last_idx].unlock_shared();
         blevel_->lock_[entry_idx_].lock_shared();
         last_idx = entry_idx_;
 #endif
-        new (&iter_) bentry_t::Iter(&blevel_->entries_[entry_idx_], &blevel_->clevel_mem_, start_key);
+        new (&iter_) bentry_t::Iter(&blevel_->entries_[entry_idx_], blevel_->clevel_mem_, start_key);
       }
       if (this->end()) {
 #ifndef NO_LOCK
@@ -176,7 +177,7 @@ public:
           blevel_->lock_[entry_idx_].lock_shared();
           last_idx = entry_idx_;
 #endif
-          new (&iter_) bentry_t::Iter(&blevel_->entries_[entry_idx_], &blevel_->clevel_mem_);
+          new (&iter_) bentry_t::Iter(&blevel_->entries_[entry_idx_], blevel_->clevel_mem_);
         }
         if (end()) {
 #ifndef NO_LOCK
@@ -236,14 +237,14 @@ public:
       locked_ = true;
       uint64_t last_idx = entry_idx_;
 #endif
-      new (&iter_) bentry_t::NoSortIter(&blevel_->entries_[entry_idx_], &blevel_->clevel_mem_);
+      new (&iter_) bentry_t::NoSortIter(&blevel_->entries_[entry_idx_], blevel_->clevel_mem_);
       while (iter_.end() && NextIndex_()) {
 #ifndef NO_LOCK
         blevel_->lock_[last_idx].unlock_shared();
         blevel_->lock_[entry_idx_].lock_shared();
         last_idx = entry_idx_;
 #endif
-        new (&iter_) bentry_t::NoSortIter(&blevel_->entries_[entry_idx_], &blevel_->clevel_mem_);
+        new (&iter_) bentry_t::NoSortIter(&blevel_->entries_[entry_idx_], blevel_->clevel_mem_);
       }
       if (end()) {
 #ifndef NO_LOCK
@@ -274,14 +275,14 @@ public:
       locked_ = true;
       uint64_t last_idx = entry_idx_;
 #endif
-      new (&iter_) bentry_t::NoSortIter(&blevel_->entries_[entry_idx_], &blevel_->clevel_mem_, start_key);
+      new (&iter_) bentry_t::NoSortIter(&blevel_->entries_[entry_idx_], blevel_->clevel_mem_, start_key);
       while (iter_.end() && NextIndex_()) {
 #ifndef NO_LOCK
         blevel_->lock_[last_idx].unlock_shared();
         blevel_->lock_[entry_idx_].lock_shared();
         last_idx = entry_idx_;
 #endif
-        new (&iter_) bentry_t::NoSortIter(&blevel_->entries_[entry_idx_], &blevel_->clevel_mem_, start_key);
+        new (&iter_) bentry_t::NoSortIter(&blevel_->entries_[entry_idx_], blevel_->clevel_mem_, start_key);
       }
       if (this->end()) {
 #ifndef NO_LOCK
@@ -317,7 +318,7 @@ public:
           blevel_->lock_[entry_idx_].lock_shared();
           last_idx = entry_idx_;
 #endif
-          new (&iter_) bentry_t::NoSortIter(&blevel_->entries_[entry_idx_], &blevel_->clevel_mem_);
+          new (&iter_) bentry_t::NoSortIter(&blevel_->entries_[entry_idx_], blevel_->clevel_mem_);
         }
         if (end()) {
 #ifndef NO_LOCK
@@ -421,7 +422,7 @@ public:
   size_t nr_entries_;                           // logical entries count
   size_t physical_nr_entries_;                  // physical entries count
   std::atomic<size_t> size_;
-  CLevel::MemControl clevel_mem_;
+  CLevel::MemControl *clevel_mem_;
 
 #ifndef NO_LOCK
   std::shared_mutex* lock_;
@@ -454,6 +455,21 @@ public:
         return i;
     assert(0);
     return -1;
+  }
+
+  ALWAYS_INLINE bool HasPrevPhyIdx(uint64_t phy_idx) const {
+    int idx = EXPAND_THREADS - 1;
+    for(; idx >= 0; -- idx) {
+      if(phy_idx >= ranges_[idx].physical_entry_start) break;
+    }
+    return !(phy_idx == ranges_[idx].physical_entry_start);
+  }
+
+  ALWAYS_INLINE bool HasNextPhyIdx(uint64_t phy_idx) const {
+    int idx = 0;
+    for(; idx < EXPAND_THREADS && phy_idx <= ranges_[idx].physical_entry_start ; idx ++) ;
+    idx --;
+    return !((phy_idx - ranges_[idx].physical_entry_start)  == ranges_[idx].entries);
   }
 
   ALWAYS_INLINE int FindBRangeByKey_(uint64_t key) const {
@@ -509,11 +525,22 @@ public:
     if (!entries_[physical_idx].IsValid())
       return status::Failed;
 
-    auto ret = entries_[physical_idx].Put(&clevel_mem_, key, value);
+    auto ret = entries_[physical_idx].Put(clevel_mem_, key, value);
     size_.fetch_add(1, std::memory_order_relaxed);
 #ifdef BRANGE
     interval_size->fetch_add(1, std::memory_order_relaxed);
 #endif
+
+// #ifdef POINTER_BENTRY
+//     if(ret == status::Full) {
+//         if(HasPrevPhyIdx(physical_idx) && (entries_[physical_idx - 1].buf.entries <= (PointerBEntry::entry_count / 2))) {
+//             return MergePointerBEntry(&entries_[physical_idx - 1], &entries_[physical_idx], clevel_mem_, key, value);
+//         }  
+//         if(HasNextPhyIdx(physical_idx) && (entries_[physical_idx + 1].buf.entries <= (PointerBEntry::entry_count / 2))) {
+//             return MergePointerBEntry(&entries_[physical_idx], &entries_[physical_idx + 1], clevel_mem_, key, value);
+//         }
+//     }
+// #endif
     // Common::timers["Clevel_times"].end();
     return ret;
   }
@@ -524,7 +551,7 @@ public:
 #endif
     if (!entries_[physical_idx].IsValid())
       return false;
-    return entries_[physical_idx].Update((CLevel::MemControl*)&clevel_mem_, key, value);
+    return entries_[physical_idx].Update((CLevel::MemControl*)clevel_mem_, key, value);
   }
 
   ALWAYS_INLINE bool Get_(uint64_t key, uint64_t& value, uint64_t physical_idx) const {
@@ -534,7 +561,7 @@ public:
     // Common::timers["Clevel_times"].start();
     if (!entries_[physical_idx].IsValid())
       return false;
-    bool ret =  entries_[physical_idx].Get((CLevel::MemControl*)&clevel_mem_, key, value);
+    bool ret =  entries_[physical_idx].Get((CLevel::MemControl*)clevel_mem_, key, value);
     // Common::timers["Clevel_times"].end();
     return ret;
   }
@@ -549,7 +576,7 @@ public:
 #endif
     if (!entries_[physical_idx].IsValid())
       return false;
-    entries_[physical_idx].Delete(&clevel_mem_, key, value);
+    entries_[physical_idx].Delete(clevel_mem_, key, value);
     size_.fetch_sub(1, std::memory_order_relaxed);
 #ifdef BRANGE
     interval_size->fetch_sub(1, std::memory_order_relaxed);

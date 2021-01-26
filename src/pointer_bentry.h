@@ -275,6 +275,10 @@ public:
         }
     }
 
+    uint64_t EntryCount() const {
+        return entries;
+    }
+
     void SetInvalid() {  }
     bool IsValid()    { return false; }
 
@@ -392,6 +396,9 @@ struct  PointerBEntry {
                 uint16_t max_entries  : 4;  // MSB
             };
         } buf;
+        uint64_t DataCount(const CLevel::MemControl *mem)  const {
+            return pointer.pointer(mem->BaseAddr())->EntryCount();
+        }
         void SetInvalid() { buf.meta = 0; }
         bool IsValid()    const { return buf.meta != 0; }
     };

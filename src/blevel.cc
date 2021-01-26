@@ -122,13 +122,14 @@ void BLevel::ExpandData::FlushToEntry(bentry_t* entry, int prefix_len, CLevel::M
 }
 
 /****************************** BLevel ******************************/
-BLevel::BLevel(size_t data_size)
-  : nr_entries_(0), size_(0),
-    clevel_mem_(CLEVEL_PMEM_FILE, CLEVEL_PMEM_FILE_SIZE)
+BLevel::BLevel(size_t data_size, CLevel::MemControl *mem)
+  : nr_entries_(0), size_(0), clevel_mem_(mem)
 #ifndef NO_LOCK
     , lock_(nullptr)
 #endif
 {
+  if(clevel_mem_ == nullptr)
+    clevel_mem_ = new CLevel::MemControl(CLEVEL_PMEM_FILE, CLEVEL_PMEM_FILE_SIZE);
   physical_nr_entries_ = ((data_size+1+BLEVEL_EXPAND_BUF_KEY-1)/BLEVEL_EXPAND_BUF_KEY) * ENTRY_SIZE_FACTOR;
   size_t file_size = sizeof(bentry_t) * physical_nr_entries_;
   std::cout << "Blevel entry size: " << sizeof(bentry_t) << std::endl;
@@ -174,6 +175,13 @@ BLevel::~BLevel() {
   } else {
     delete (uint8_t*)entries_;
   }
+
+#ifndef POINTER_BENTRY
+  if(clevel_mem_) {
+    delete clevel_mem_;
+  }
+#endif
+
 #ifndef NO_LOCK
   if (lock_) delete lock_;
 #endif
@@ -184,8 +192,8 @@ void BLevel::ExpandPut_(ExpandData& data, uint64_t key, uint64_t value) {
     // buf full, add a new entry
     if (data.new_addr < data.max_addr) {
       int prefix_len = CommonPrefixBytes(data.entry_key, (data.new_addr == data.max_addr - 1) ? data.last_entry_key : key);
-      bentry_t* new_entry = new (data.new_addr) bentry_t(data.entry_key, prefix_len, &clevel_mem_);
-      data.FlushToEntry(new_entry, prefix_len, &clevel_mem_);
+      bentry_t* new_entry = new (data.new_addr) bentry_t(data.entry_key, prefix_len, clevel_mem_);
+      data.FlushToEntry(new_entry, prefix_len, clevel_mem_);
       data.expanded_entries->fetch_add(1, std::memory_order_release);
       data.new_addr++;
       // assert(data.entry_key < key);
@@ -196,7 +204,7 @@ void BLevel::ExpandPut_(ExpandData& data, uint64_t key, uint64_t value) {
       uint64_t entry_idx = ranges_[data.target_range].physical_entry_start+ranges_[data.target_range].entries-1;
       std::lock_guard<std::shared_mutex> lock(lock_[entry_idx]);
       for (int i = 0; i < data.buf_count; ++i)
-        entry->Put(&clevel_mem_, data.key_buf[i], data.value_buf[BLEVEL_EXPAND_BUF_KEY-i-1]);
+        entry->Put(clevel_mem_, data.key_buf[i], data.value_buf[BLEVEL_EXPAND_BUF_KEY-i-1]);
       data.buf_count = 0;
     }
     data.max_key->store(key, std::memory_order_release);
@@ -211,8 +219,8 @@ void BLevel::ExpandFinish_(ExpandData& data) {
   if (data.buf_count != 0) {
     if (data.new_addr < data.max_addr) {
       int prefix_len = CommonPrefixBytes(data.entry_key, data.last_entry_key);
-      bentry_t* new_entry = new (data.new_addr) bentry_t(data.entry_key, prefix_len, &clevel_mem_);
-      data.FlushToEntry(new_entry, prefix_len, &clevel_mem_);
+      bentry_t* new_entry = new (data.new_addr) bentry_t(data.entry_key, prefix_len, clevel_mem_);
+      data.FlushToEntry(new_entry, prefix_len, clevel_mem_);
       data.new_addr++;
       // inc expanded_entries before change max_key
       data.expanded_entries->fetch_add(1, std::memory_order_release);
@@ -221,7 +229,7 @@ void BLevel::ExpandFinish_(ExpandData& data) {
       uint64_t entry_idx = ranges_[data.target_range].physical_entry_start+ranges_[data.target_range].entries-1;
       std::lock_guard<std::shared_mutex> lock(lock_[entry_idx]);
       for (int i = 0; i < data.buf_count; ++i)
-        entry->Put(&clevel_mem_, data.key_buf[i], data.value_buf[BLEVEL_EXPAND_BUF_KEY-i-1]);
+        entry->Put(clevel_mem_, data.key_buf[i], data.value_buf[BLEVEL_EXPAND_BUF_KEY-i-1]);
       data.buf_count = 0;
     }
     data.max_key->store(data.last_entry_key, std::memory_order_release);
@@ -377,7 +385,7 @@ void BLevel::ExpandRange_(BLevel* old_blevel, int thread_id) {
 
   int target_range = expand_meta.target_range;
   bentry_t* old_entry;
-  CLevel::MemControl* old_mem = &old_blevel->clevel_mem_;
+  CLevel::MemControl* old_mem = old_blevel->clevel_mem_;
 
 #ifdef STREAMING_LOAD
   bentry_t in_mem_entry(0,0);
@@ -403,13 +411,33 @@ void BLevel::ExpandRange_(BLevel* old_blevel, int thread_id) {
 
 #ifdef POINTER_BENTRY
       {
+        // expand_meta.clevel_count++;
+        // bentry_t::Iter biter(old_entry, old_mem);
+        // uint64_t total_cnt = 0;
+        // do {
+        //   total_cnt++;
+        //   ExpandPut_(expand_meta, biter.key(), biter.value());
+        // } while(biter.next());
+        // expand_meta.clevel_data_count += total_cnt - old_entry->buf.entries;
+        // expand_meta.bentry_max_count =  std::max(expand_meta.bentry_max_count, total_cnt);
+
         expand_meta.clevel_count++;
-        bentry_t::Iter biter(old_entry, old_mem);
+        bentry_t::EntryIter biter(old_entry);
         uint64_t total_cnt = 0;
-        do {
-          total_cnt++;
-          ExpandPut_(expand_meta, biter.key(), biter.value());
-        } while(biter.next());
+        while (!biter.end())
+        {
+          /* code */
+          const PointerBEntry::entry *entry = &(*biter);
+          uint64_t data_count = entry->DataCount(clevel_mem_);
+          new (expand_meta.new_addr) bentry_t(entry);
+          expand_meta.expanded_entries->fetch_add(1, std::memory_order_release);
+          expand_meta.new_addr++;
+          expand_meta.size += data_count;
+
+          total_cnt += data_count;
+          assert(expand_meta.new_addr <= expand_meta.max_addr);
+          biter.next();
+        } 
         expand_meta.clevel_data_count += total_cnt - old_entry->buf.entries;
         expand_meta.bentry_max_count =  std::max(expand_meta.bentry_max_count, total_cnt);
       }
@@ -497,7 +525,7 @@ void BLevel::Expansion(BLevel* old_blevel) {
 
   uint64_t old_index = 0;
   bentry_t* old_entry;
-  CLevel::MemControl* old_mem = &old_blevel->clevel_mem_;
+  CLevel::MemControl* old_mem = old_blevel->clevel_mem_;
 
 #ifdef STREAMING_LOAD
   bentry_t in_mem_entry(0,0);
@@ -913,7 +941,7 @@ int64_t BLevel::CLevelTime() const {
 }
 
 uint64_t BLevel::Usage() const {
-  return clevel_mem_.Usage() + physical_nr_entries_ * sizeof(bentry_t);
+  return clevel_mem_->Usage() + physical_nr_entries_ * sizeof(bentry_t);
 }
 
 }

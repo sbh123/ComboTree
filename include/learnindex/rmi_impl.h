@@ -313,8 +313,8 @@ size_t LinearModel<key_t>::get_error_bound(
  * Two stage RMI implile. 
  * ***/
 
-template <class key_t,  size_t root_error_bound>
-TwoStageRMI<key_t, root_error_bound>::~TwoStageRMI() {
+template <class key_t, size_t root_error_bound, size_t train_times>
+TwoStageRMI<key_t, root_error_bound, train_times>::~TwoStageRMI() {
     if(rmi_2nd_stage) {
        // delete[] rmi_2nd_stage;
       NVM::common_alloc->Free(rmi_2nd_stage, sizeof(linear_model_t) * this->rmi_2nd_stage_model_n);
@@ -325,22 +325,22 @@ TwoStageRMI<key_t, root_error_bound>::~TwoStageRMI() {
     }
 }
 
-template <class key_t,  size_t root_error_bound>
-void TwoStageRMI<key_t, root_error_bound>::init(const std::vector<key_t> &train_keys) {
+template <class key_t, size_t root_error_bound, size_t train_times>
+void TwoStageRMI<key_t, root_error_bound, train_times>::init(const std::vector<key_t> &train_keys) {
     keys_n = train_keys.size();
     adjust_rmi(train_keys.begin(), train_keys.end());
 }
 
 
-template <class key_t,  size_t root_error_bound>
+template <class key_t, size_t root_error_bound, size_t train_times>
 template<typename RandomIt>
-void TwoStageRMI<key_t, root_error_bound>::init(RandomIt first, RandomIt last) {
+void TwoStageRMI<key_t, root_error_bound, train_times>::init(RandomIt first, RandomIt last) {
     keys_n = iter_distance(first, last);
     adjust_rmi(first, last);
 }
 
-template <class key_t,  size_t root_error_bound>
-void TwoStageRMI<key_t, root_error_bound>::recover(const linear_model_t *rmi_models, 
+template <class key_t, size_t root_error_bound, size_t train_times>
+void TwoStageRMI<key_t, root_error_bound, train_times>::recover(const linear_model_t *rmi_models, 
       const size_t rmi_model_n, const size_t nr_elements) {
       if(rmi_2nd_stage) {
         NVM::common_alloc->Free(rmi_2nd_stage, sizeof(linear_model_t) * this->rmi_2nd_stage_model_n);
@@ -357,14 +357,14 @@ void TwoStageRMI<key_t, root_error_bound>::recover(const linear_model_t *rmi_mod
       keys_n = nr_elements;
     }
 
-template <class key_t,  size_t root_error_bound>
-void TwoStageRMI<key_t, root_error_bound>::adjust_rmi(const std::vector<key_t> &train_keys) {
+template <class key_t, size_t root_error_bound, size_t train_times>
+void TwoStageRMI<key_t, root_error_bound, train_times>::adjust_rmi(const std::vector<key_t> &train_keys) {
   size_t max_model_n = root_memory_constraint / sizeof(linear_model_t);
-  size_t max_trial_n = 10;
+  size_t max_trial_n = train_times;
 
   size_t model_n_trial = rmi_2nd_stage_model_n;
   if (model_n_trial == 0) {
-    max_trial_n = 100;
+    // max_trial_n = 100;
     const size_t group_n_per_model_per_rmi_error_experience_factor = 4;
     model_n_trial = std::min(
         max_model_n,         // do not exceed memory constraint
@@ -436,16 +436,16 @@ void TwoStageRMI<key_t, root_error_bound>::adjust_rmi(const std::vector<key_t> &
              << trial_i << " trial(s)");
 }
 
-template <class key_t,  size_t root_error_bound>
+template <class key_t, size_t root_error_bound, size_t train_times>
 template <typename RandomIt>
-void TwoStageRMI<key_t, root_error_bound>::adjust_rmi(RandomIt first, RandomIt last) {
+void TwoStageRMI<key_t, root_error_bound, train_times>::adjust_rmi(RandomIt first, RandomIt last) {
   size_t max_model_n = std::max((size_t) 1, std::min(root_memory_constraint / sizeof(linear_model_t), 
                                 (size_t)(keys_n / root_error_bound)));
-  size_t max_trial_n = 10;
+  size_t max_trial_n = train_times;
 
   size_t model_n_trial = rmi_2nd_stage_model_n;
   if (model_n_trial == 0) {
-    max_trial_n = 100;
+    // max_trial_n = 100;
     const size_t group_n_per_model_per_rmi_error_experience_factor = 4;
     model_n_trial = std::min(
         max_model_n,         // do not exceed memory constraint
@@ -518,8 +518,8 @@ void TwoStageRMI<key_t, root_error_bound>::adjust_rmi(RandomIt first, RandomIt l
 }
 
 
-template <class key_t,  size_t root_error_bound>
-inline void TwoStageRMI<key_t, root_error_bound>::train_rmi(const std::vector<key_t> &train_keys, 
+template <class key_t, size_t root_error_bound, size_t train_times>
+inline void TwoStageRMI<key_t, root_error_bound, train_times>::train_rmi(const std::vector<key_t> &train_keys, 
         size_t rmi_2nd_stage_model_n) {
 
   // delete[] rmi_2nd_stage;
@@ -557,9 +557,9 @@ inline void TwoStageRMI<key_t, root_error_bound>::train_rmi(const std::vector<ke
   }
 }
 
-template <class key_t,  size_t root_error_bound>
+template <class key_t, size_t root_error_bound, size_t train_times>
 template <typename RandomIt>
-inline void TwoStageRMI<key_t, root_error_bound>::train_rmi(RandomIt first, RandomIt last, 
+inline void TwoStageRMI<key_t, root_error_bound, train_times>::train_rmi(RandomIt first, RandomIt last, 
         size_t rmi_2nd_stage_model_n) {
   // delete[] rmi_2nd_stage;
   // rmi_2nd_stage = new linear_model_t[rmi_2nd_stage_model_n]();
@@ -621,8 +621,8 @@ inline void TwoStageRMI<key_t, root_error_bound>::train_rmi(RandomIt first, Rand
   }
 }
 
-template <class key_t,  size_t root_error_bound>
-size_t TwoStageRMI<key_t, root_error_bound>::pick_next_stage_model(size_t group_i_pred) const {
+template <class key_t, size_t root_error_bound, size_t train_times>
+size_t TwoStageRMI<key_t, root_error_bound, train_times>::pick_next_stage_model(size_t group_i_pred) const {
   size_t second_stage_model_i;
   second_stage_model_i = group_i_pred * rmi_2nd_stage_model_n / keys_n;
 
@@ -639,8 +639,8 @@ template<typename RandomIt>
     template<typename RandomIt>
     void train_rmi(RandomIt first, RandomIt last, size_t rmi_2nd_stage_model_n);
 
-template <class key_t,  size_t root_error_bound>
-inline size_t TwoStageRMI<key_t, root_error_bound>::predict(const key_t &key) const {
+template <class key_t, size_t root_error_bound, size_t train_times>
+inline size_t TwoStageRMI<key_t, root_error_bound, train_times>::predict(const key_t &key) const {
   size_t pos_pred = rmi_1st_stage->predict(key);
   size_t next_stage_model_i = pick_next_stage_model(pos_pred);
   return std::min(rmi_2nd_stage[next_stage_model_i].predict(key), keys_n - 1);
