@@ -378,7 +378,7 @@ private:
 };
 
 class LearnGroupDB : public ycsbc::KvDB  {
-  static const size_t init_num = 3000;
+  static const size_t init_num = 1000;
   void Prepare() {
     std::vector<std::pair<uint64_t,uint64_t>> initial_kv;
     combotree::Random rnd(0, UINT64_MAX - 1);

@@ -434,10 +434,10 @@ void TwoStageRMI<key_t, root_error_bound, train_times>::adjust_rmi(const std::ve
              << rmi_2nd_stage_model_n << " (error=" << mean_error << "),"
               << " (max error=" << max_error << "), after"
              << trial_i << " trial(s)");
-  std::cout << "--- final rmi size: "
-             << rmi_2nd_stage_model_n << " (error=" << mean_error << "),"
-              << " (max error=" << max_error << "), after"
-             << trial_i << " trial(s)" << std::endl;
+  // std::cout << "--- final rmi size: "
+  //            << rmi_2nd_stage_model_n << " (error=" << mean_error << "),"
+  //             << " (max error=" << max_error << "), after"
+  //            << trial_i << " trial(s)" << std::endl;
 }
 
 template <class key_t, size_t root_error_bound, size_t train_times>
@@ -519,10 +519,10 @@ void TwoStageRMI<key_t, root_error_bound, train_times>::adjust_rmi(RandomIt firs
              << rmi_2nd_stage_model_n << " (error=" << mean_error << "),"
               << " (max error=" << max_error << "), after"
              << trial_i << " trial(s)");
-  std::cout << "--- final rmi size: "
-             << rmi_2nd_stage_model_n << " (error=" << mean_error << "),"
-              << " (max error=" << max_error << "), after"
-             << trial_i << " trial(s)" << std::endl;
+  // std::cout << "--- final rmi size: "
+  //            << rmi_2nd_stage_model_n << " (error=" << mean_error << "),"
+  //             << " (max error=" << max_error << "), after"
+  //            << trial_i << " trial(s)" << std::endl;
 }
 
 

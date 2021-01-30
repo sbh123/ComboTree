@@ -20,7 +20,7 @@
 
 namespace combotree {
 
-#define EXPAND_ALL
+// #define EXPAND_ALL
 
 static inline int CommonPrefixBytes(uint64_t a, uint64_t b) {
   // the result of clz is undefined if arg is 0
@@ -283,7 +283,9 @@ public:
     RootModel(size_t max_groups = 64) : nr_groups_(0), max_groups_(max_groups) {
         clevel_mem_ = new CLevel::MemControl(CLEVEL_PMEM_FILE, CLEVEL_PMEM_FILE_SIZE);
         groups_ = (LearnGroup **)NVM::data_alloc->alloc(max_groups * sizeof(LearnGroup *));
+#ifdef EXPAND_ALL
         group_entrys_ = (LearnGroup *)NVM::data_alloc->alloc(max_groups * sizeof(LearnGroup));
+#endif
         
     }
 
@@ -291,7 +293,9 @@ public:
         : nr_groups_(0), max_groups_(max_groups), clevel_mem_(clevel_mem)
     {
         groups_ = (LearnGroup **)NVM::data_alloc->alloc(max_groups * sizeof(LearnGroup *));
+#ifdef EXPAND_ALL
         group_entrys_ = (LearnGroup *)NVM::data_alloc->alloc(max_groups * sizeof(LearnGroup));
+#endif
     }
     ~RootModel() {
         for(size_t i = 0; i < nr_groups_; i++) {
@@ -310,9 +314,8 @@ public:
         while(start_pos < size ) {
 #ifdef EXPAND_ALL
             LearnGroup *new_group = new (&group_entrys_[nr_groups_]) LearnGroup(LearnGroup::max_entry_counts);
-
 #else
-            LearnGroup *new_group = new (NVM::data_alloc->alloc(sizeof(LearnGroup))) LearnGroup(LearnGroup::max_entry_counts, clevel_mem_);
+            LearnGroup *new_group = new (NVM::data_alloc->alloc(sizeof(LearnGroup))) LearnGroup(LearnGroup::max_entry_counts);
 #endif
             new_group->Expansion(data, start_pos, expand_keys, clevel_mem_);
             start_pos += expand_keys;
@@ -369,18 +372,13 @@ public:
         std::vector<uint64_t> train_keys;
         Timer timer;
         timer.Start();
+#ifdef EXPAND_ALL
         // static_assert(sizeof(LearnGroup) == 64);
         LearnGroup **new_groups_ = (LearnGroup **)NVM::data_alloc->alloc(new_cap * sizeof(LearnGroup *));
         LearnGroup *new_group_entrys_ = (LearnGroup *)NVM::data_alloc->alloc(new_cap * sizeof(LearnGroup));
         groups_[0]->entries_[0].AdjustEntryKey(clevel_mem_);
         ExpandMeta meta(new_groups_, new_group_entrys_, new_cap, train_keys);
         for(size_t i = 0; i < nr_groups_; i ++) {
-            // std::vector<LearnGroup *> expand_groups;
-            // ExpandGroup(groups_[i], expand_groups, clevel_mem_);
-            // for(size_t j = 0; j < expand_groups.size(); j ++) {
-            //     new_groups_[new_nr_group ++] = expand_groups[j];
-            //     train_keys.push_back(expand_groups[j]->start_key());
-            // }
             meta.ExpandGroup(groups_[i], clevel_mem_);
         }
         if(meta.nr_group_ >= new_cap) {
@@ -402,8 +400,8 @@ public:
 
         model.init(train_keys.begin(), train_keys.end());
         NVM::Mem_persist(this, sizeof(*this));
+#endif
         uint64_t expand_time = timer.End();
-
         LOG(Debug::INFO, "Finish expanding root model, new groups %ld,  expansion time is %lfs", 
                 nr_groups_, (double)expand_time/1000000.0);
     }
@@ -413,6 +411,7 @@ public:
         pos = std::min(pos, (int)nr_groups_ - 1);
         Common::stat.AddCount();
         Common::stat.AddFindGroup();
+#ifdef EXPAND_ALL
         if(group_entrys_[pos].min_key <= key && key < group_entrys_[pos].max_key) {
             return pos;
         }  
@@ -424,6 +423,19 @@ public:
             pos --;
             for(; pos > 0 && group_entrys_[pos].min_key > key; pos --) {Common::stat.AddFindGroup();}
         }
+#else
+        if(groups_[pos]->min_key <= key && key < groups_[pos]->max_key) {
+            return pos;
+        }  
+        if (groups_[pos]->min_key < key) {
+            pos ++;
+            for(; pos < nr_groups_ && groups_[pos]->min_key <= key; pos ++) {Common::stat.AddFindGroup();}
+            pos --;
+        } else {
+            pos --;
+            for(; pos > 0 && groups_[pos]->min_key > key; pos --) {Common::stat.AddFindGroup();}
+        }
+#endif
         return std::max(pos, 0);
     }
 
@@ -497,7 +509,10 @@ private:
     // RMI::LinearModel<RMI::Key_64> model;
     RMI::TwoStageRMI<RMI::Key_64, 3, 2> model;
     LearnGroup **groups_;
+
+#ifdef EXPAND_ALL
     LearnGroup *group_entrys_;
+#endif
     CLevel::MemControl *clevel_mem_;
 };
 
