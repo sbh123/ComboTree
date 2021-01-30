@@ -68,7 +68,7 @@ int find_near_pos(uint64_t key) const
 }
 
 uint64_t Find_(uint64_t key) const {
-    int pos = find_near_pos(key);
+    int pos = segment_(key);
     pos = std::min(pos, (int)(nr_entries_ - 1));
     Common::stat.AddFindPos();
     if(entries_[pos].entry_key == key) {
@@ -105,13 +105,13 @@ void Check() {
 
 status Put(uint64_t key, uint64_t value, CLevel::MemControl *mem)
 {
-    Common::timers["BLevel_times"].start();
+    // Common::timers["BLevel_times"].start();
     uint64_t pos = Find_(key);
-    Common::timers["BLevel_times"].end();
+    // Common::timers["BLevel_times"].end();
 
-    Common::timers["CLevel_times"].start();
+    // Common::timers["CLevel_times"].start();
     auto ret = entries_[pos].Put(mem, key, value);
-    Common::timers["CLevel_times"].end();
+    // Common::timers["CLevel_times"].end();
 
     if(ret == status::Full) {
         if(pos > 0 && (entries_[pos - 1].buf.entries <= (PointerBEntry::entry_count / 2))) {
@@ -429,9 +429,9 @@ public:
 
     status Put(uint64_t key, uint64_t value) {
     retry0:
-        Common::timers["ALevel_times"].start();
+        // Common::timers["ALevel_times"].start();
         int group_id = FindGroup(key);
-        Common::timers["ALevel_times"].end();
+        // Common::timers["ALevel_times"].end();
     retry1:
         auto ret = groups_[group_id]->Put(key, value, clevel_mem_);
         if(ret == status::Full ) {
