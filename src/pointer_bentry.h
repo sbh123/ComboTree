@@ -23,7 +23,9 @@ static inline int Find_first_zero_bit(void *data, size_t bits)
     int pos = _tzcnt_u64(~bitmap);
     return pos > bits ? bits : pos;
 }
+#define USET_PREFIX_COMPRESS
 
+#ifdef USET_PREFIX_COMPRESS
 template<const size_t bucket_size = 256, const size_t value_size = 8>
 class Buncket { // without Buncket main key
     ALWAYS_INLINE size_t maxEntrys(int idx) const {
@@ -355,7 +357,309 @@ public:
     };
 
 };
+
+#else
+
+template<const size_t bucket_size = 256, const size_t value_size = 8, const size_t key_size = 8,
+        const size_t bitmap_size = 6, const size_t max_entry_count = 16>
+class Buncket { // without Buncket main key
+    ALWAYS_INLINE size_t maxEntrys(int idx) const {
+        return max_entries;
+    }
+
+    ALWAYS_INLINE void* pkey(int idx) const {
+      return (void*)&buf[idx*(value_size + key_size)];
+    }
+
+    ALWAYS_INLINE void* pvalue(int idx) const {
+      return (void*)&buf[idx*(value_size + key_size) + key_size];
+    }
+
+    status PutBufKV(uint64_t new_key, uint64_t value, int &data_index) {
+      int target_idx = find_first_zero_bit(bitmap, 40);
+      if(entries >= max_entries) {
+        return status::Full;
+      }
+
+      memcpy(pkey(target_idx), &new_key, key_size);
+      memcpy(pvalue(target_idx), &value, value_size);
+      set_bit(target_idx, bitmap);
+      clflush(pkey(target_idx));
+    //   NVM::Mem_persist(pkey(target_idx), suffix_bytes + value_size);
+      fence();
+      data_index = target_idx;
+      return status::OK;
+    }
+
+    status SetValue(int pos, uint64_t value) {
+      memcpy(pvalue(pos), &value, value_size);
+      clflush(pvalue(pos));
+      fence();
+      return status::OK;
+    }
+
+    status DeletePos(int pos) {
+      clear_bit(pos, &bitmap);
+      return status::OK;
+    }
+
+public:
+    class Iter;
+
+    Buncket(uint64_t key, int prefix_len) : entries(0), next_bucket(nullptr) {
+        next_bucket = nullptr;
+        max_entries = std::min(buf_size / (value_size + key_size), max_entry_count);
+        // std::cout << "Max Entry size is:" <<  max_entries << std::endl;
+        memset(bitmap, 0, bitmap_size);
+    }
+
+    explicit Buncket(uint64_t key, uint64_t value, int prefix_len) : entries(0), next_bucket(nullptr) {
+        next_bucket = nullptr;
+        max_entries = std::min(buf_size / (value_size + key_size), max_entry_count);
+        // std::cout << "Max Entry size is:" <<  max_entries << std::endl;
+        memset(bitmap, 0, bitmap_size);
+        Put(nullptr, key, value);
+    }
+
+    ~Buncket() {
+        
+    }
+
+    status Load(uint64_t *keys, uint64_t *values, int count) {
+        assert(entries == 0 && count < max_entries);
+
+        for(int target_idx = 0; target_idx < count; target_idx ++) {
+            assert(pvalue(target_idx) > pkey(target_idx));
+            memcpy(pkey(target_idx), &keys[target_idx], key_size);
+            memcpy(pvalue(target_idx), &values[count - target_idx - 1], value_size);
+            set_bit(target_idx, bitmap);
+            total_indexs[target_idx] = target_idx;
+            entries ++;
+        }
+        NVM::Mem_persist(this, sizeof(*this));
+        return status::OK;
+    }
+
+    status Expand_(CLevel::MemControl *mem, Buncket *&next, uint64_t &split_key, int &prefix_len) {
+        // int expand_pos = entries / 2;
+        next = new (mem->Allocate<Buncket>()) Buncket(key(entries / 2), prefix_len);
+        // int idx = 0;
+        split_key = key(entries / 2);
+        prefix_len = 0;
+        for(int i = entries / 2; i < entries; i ++) {
+            next->Put(nullptr, key(i), value(i));
+        }
+        next->next_bucket = this->next_bucket;
+        clflush(next);
+
+        this->next_bucket = next;
+        fence();
+        for(int i = entries / 2; i < entries; i ++) {
+            DeletePos(total_indexs[i]);
+        }
+        entries = entries / 2;
+        clflush(&header);
+        fence();
+        return status::OK;
+    }
+
+    Buncket *Next() {
+        return next_bucket;
+    }
+
+    int Find(uint64_t target, bool& find) const {
+        int left = 0;
+        int right = entries - 1;
+        while (left <= right) {
+            int middle = (left + right) / 2;
+            uint64_t mid_key = key(middle);
+            if (mid_key == target) {
+            find = true;
+            return middle;
+            } else if (mid_key > target) {
+            right = middle - 1;
+            } else {
+            left = middle + 1;
+            }
+        }
+        find = false;
+        return left;
+    }
+
+    ALWAYS_INLINE uint64_t value(int idx) const {
+      // the const bit mask will be generated during compile
+      return *(uint64_t*)pvalue(total_indexs[idx]);
+    }
+
+    ALWAYS_INLINE uint64_t key(int idx) const {
+      return *(uint64_t*)pkey(total_indexs[idx]);
+    }
+
+    status Put(CLevel::MemControl* mem, uint64_t key, uint64_t value) {
+        status ret = status::OK;
+        bool find = false;
+        int idx = 0;
+        int pos = Find(key, find);
+        if(find) {
+            return status::Exist;
+        }
+        ret = PutBufKV(key, value, idx);
+        if(ret != status::OK) {
+            return ret;
+        }
+        entries ++;
+        if(pos < entries - 1) {
+            memmove(&total_indexs[pos + 1], &total_indexs[pos], entries - pos - 1);
+        }
+        total_indexs[pos] = idx;
+        clflush(&header); 
+        return status::OK;
+    }
+
+    status Update(CLevel::MemControl* mem, uint64_t key, uint64_t value) {
+        bool find = false;
+        int pos = Find(key, find);
+        if(!find && this->value(pos) == 0) {
+            // Show();
+            return status::NoExist;
+        }
+        SetValue(total_indexs[pos], value);
+        return status::OK;
+    }
+
+    status Get(CLevel::MemControl* mem, uint64_t key, uint64_t& value) const
+    {
+        bool find = false;
+        int pos = Find(key, find);
+        if(!find || this->value(pos)== 0) {
+            // Show();
+            return status::NoExist;
+        }
+        value = this->value(pos);
+        return status::OK;
+    }
+
+    status Delete(CLevel::MemControl* mem, uint64_t key, uint64_t* value)
+    {
+        bool find = false;
+        int pos = Find(key, find);
+        // std::cout << "Find at pos:" << pos << std::endl;
+        // for(int i = 0; i < entries; i++) {
+        // std::cout << "Keys[" << i <<"]: " << this->key(i) << std::endl;
+        // }
+        if(!find || this->value(pos) == 0) {
+            return status::NoExist;
+        }
+        std::cout << "Delete index:" << total_indexs[pos] << std::endl;
+        DeletePos(total_indexs[pos]);
+        if(pos < entries - 1) {
+            memmove(&total_indexs[pos], &total_indexs[pos + 1], entries - pos - 1);
+        }
+        // std::cout << "Find at pos:" << pos << std::endl;
+        // for(int i = 0; i < entries; i++) {
+        //   std::cout << "Keys[" << i <<"]: " << this->key(i) << std::endl;
+        // }
+        entries --;
+        if(value) {
+            *value = this->value(pos);
+        }
+        clflush(&header);
+        fence();
+        return status::OK;
+    }
+
+    void Show() const {
+        std::cout << "This: " << this << std::endl;
+        for(int i = 0; i < entries; i ++) {
+            std::cout << "key: " << key(i) << ", value: " << value(i) << std::endl;
+        }
+    }
+
+    uint64_t EntryCount() const {
+        return entries;
+    }
+
+    void SetInvalid() {  }
+    bool IsValid()    { return false; }
+
+private:
+     // Frist 8 byte head 
+    const static size_t buf_size = bucket_size - (16 + max_entry_count);
+    static_assert(bitmap_size * 8 >=  max_entry_count);
+
+    Buncket *next_bucket;
+    union {
+        uint64_t header;
+        struct {
+            uint16_t entries      : 8;
+            uint16_t max_entries  : 8;  // MSB
+            uint8_t bitmap[bitmap_size];
+        };
+    };
+    uint8_t total_indexs[max_entry_count];
+    char buf[buf_size];
+
+public:
+    class Iter {
+    public:
+        Iter() {}
+
+        Iter(const Buncket* bucket, uint64_t prefix_key, uint64_t start_key)
+            : cur_(bucket), prefix_key(prefix_key)
+        {
+            if(unlikely(start_key <= prefix_key)) {
+                idx_ = 0;
+                return;
+            } else {
+                bool find = false;
+                idx_ = cur_->Find(start_key, find);
+            }
+        }
+
+        Iter(const Buncket* bucket, uint64_t prefix_key)
+            : cur_(bucket), prefix_key(prefix_key)
+        {
+            idx_ = 0;
+        }
+
+        ALWAYS_INLINE uint64_t key() const {
+            return cur_->key(idx_);
+        }
+
+        ALWAYS_INLINE uint64_t value() const {
+            return cur_->value(idx_);
+        }
+
+        // return false if reachs end
+        ALWAYS_INLINE bool next() {
+            idx_++;
+            if (idx_ >= cur_->entries) {
+                return false;
+            } else {
+                return true;
+            }
+        }
+
+        ALWAYS_INLINE bool end() const {
+            return cur_ == nullptr ? true : (idx_ >= cur_->entries ? true : false);
+        }
+
+        bool operator==(const Iter& iter) const { return idx_ == iter.idx_ && cur_ == iter.cur_; }
+        bool operator!=(const Iter& iter) const { return idx_ != iter.idx_ || cur_ != iter.cur_; }
+
+    private:
+        uint64_t prefix_key;
+        const Buncket* cur_;
+        int idx_;   // current index in node
+    };
+};
+
+#endif
+
+
 typedef Buncket<256, 8> buncket_t;
+
+static_assert(sizeof(Buncket<256, 8>) == 256);
 
 class __attribute__((packed)) BuncketPointer {
 

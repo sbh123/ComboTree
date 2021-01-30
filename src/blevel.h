@@ -521,7 +521,7 @@ public:
 #ifndef NO_LOCK
     std::lock_guard<std::shared_mutex> lock(lock_[physical_idx]);
 #endif
-    // Common::timers["CLevel_times"].start();
+    Common::timers["CLevel_times"].start();
     if (!entries_[physical_idx].IsValid())
       return status::Failed;
 
@@ -541,7 +541,7 @@ public:
 //         }
 //     }
 // #endif
-    // Common::timers["CLevel_times"].end();
+    Common::timers["CLevel_times"].end();
     return ret;
   }
 
@@ -558,11 +558,11 @@ public:
 #ifndef NO_LOCK
     std::shared_lock<std::shared_mutex> lock(lock_[physical_idx]);
 #endif
-    // Common::timers["CLevel_times"].start();
+    Common::timers["CLevel_times"].start();
     if (!entries_[physical_idx].IsValid())
       return false;
     bool ret =  entries_[physical_idx].Get((CLevel::MemControl*)clevel_mem_, key, value);
-    // Common::timers["CLevel_times"].end();
+    Common::timers["CLevel_times"].end();
     return ret;
   }
 

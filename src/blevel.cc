@@ -631,7 +631,6 @@ uint64_t BLevel::Find_(uint64_t key, uint64_t begin, uint64_t end
     *interval = &size_per_interval_[target_range][idx];
   }
 #endif
-  // Common::timers["BLevel_times"].end();
   return right;
 }
 
@@ -835,6 +834,7 @@ status BLevel::Put(uint64_t key, uint64_t value, uint64_t begin, uint64_t end) {
 #ifdef BRANGE
   std::atomic<size_t>* interval_size;
   uint64_t idx = Find_(key, begin, end, &interval_size);
+  Common::timers["BLevel_times"].end();
   return Put_(key, value, idx, interval_size);
 #else
   uint64_t idx = Find_(key, begin, end);
@@ -854,6 +854,7 @@ bool BLevel::Update(uint64_t key, uint64_t value, uint64_t begin, uint64_t end) 
 bool BLevel::Get(uint64_t key, uint64_t& value, uint64_t begin, uint64_t end) const {
 #ifdef BRANGE
   uint64_t idx = Find_(key, begin, end, nullptr);
+  Common::timers["BLevel_times"].end();
 #else
   uint64_t idx = Find_(key, begin, end);
 #endif

@@ -20,7 +20,7 @@
 
 namespace combotree {
 
-// #define EXPAND_ALL
+#define EXPAND_ALL
 
 static inline int CommonPrefixBytes(uint64_t a, uint64_t b) {
   // the result of clz is undefined if arg is 0
@@ -130,7 +130,10 @@ bool Update(uint64_t key, uint64_t value, CLevel::MemControl *mem)
 
 bool Get(uint64_t key, uint64_t& value, CLevel::MemControl *mem) const {
     uint64_t pos = Find_(key);
-    return entries_[pos].Get(mem, key, value);
+    Common::timers["CLevel_times"].start();
+    auto ret = entries_[pos].Get(mem, key, value);
+    Common::timers["CLevel_times"].end();
+    return ret;
 }
 bool Delete(uint64_t key, uint64_t* value, CLevel::MemControl *mem)
 {

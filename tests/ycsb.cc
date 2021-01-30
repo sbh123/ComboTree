@@ -35,7 +35,7 @@ const char *workloads[] = {
   // "workloada_insert_20.spec",
   // "workloada_insert_50.spec",
   // "workloada_insert_80.spec",
-  // "workloada_insert_100.spec",
+  "workloada_insert_100.spec",
   // "workload_read.spec",
   // "workload_insert.spec",
 
@@ -126,12 +126,12 @@ public:
     }
 
     void PrintStatic() {
-      // std::cerr << "Alevel average cost: " << Common::timers["ALevel_times"].avg_latency();
-      // std::cerr << ",Blevel average cost: " << Common::timers["BLevel_times"].avg_latency();
-      // std::cerr << ",Clevel average cost: " << Common::timers["CLevel_times"].avg_latency() << std::endl;
-      // Common::timers["Alevel_times"].clear();
-      // Common::timers["Blevel_times"].clear();
-      // Common::timers["CLevel_times"].clear();
+      std::cerr << "Alevel average cost: " << Common::timers["ALevel_times"].avg_latency();
+      std::cerr << ",Blevel average cost: " << Common::timers["BLevel_times"].avg_latency();
+      std::cerr << ",Clevel average cost: " << Common::timers["CLevel_times"].avg_latency() << std::endl;
+      Common::timers["Alevel_times"].clear();
+      Common::timers["Blevel_times"].clear();
+      Common::timers["CLevel_times"].clear();
     }
 private:
     ComboTree *tree_;
