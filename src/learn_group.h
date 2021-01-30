@@ -235,13 +235,13 @@ static inline void ExpandGroup(LearnGroup* old_group, std::vector<LearnGroup*> &
 }
 
 struct ExpandMeta {
-    LearnGroup **group_pointers_;
+    // LearnGroup **group_pointers_;
     LearnGroup *groups_;
     size_t max_nr_group_;
     size_t nr_group_;
     std::vector<uint64_t> &train_keys_;
-    ExpandMeta(LearnGroup **group_pointers, LearnGroup *groups, size_t max_nr_group, std::vector<uint64_t> &train_keys)
-        : group_pointers_(group_pointers), groups_(groups), max_nr_group_(max_nr_group), nr_group_(0), train_keys_(train_keys)
+    ExpandMeta(LearnGroup *groups, size_t max_nr_group, std::vector<uint64_t> &train_keys)
+        : /*group_pointers_(group_pointers), */ groups_(groups), max_nr_group_(max_nr_group), nr_group_(0), train_keys_(train_keys)
         {}
     
     void ExpandGroup(LearnGroup* old_group, CLevel::MemControl *clevel_mem)
@@ -269,7 +269,6 @@ struct ExpandMeta {
             new_group->max_key = it.end() ? old_group->max_key : (*it).entry_key;
             // new_group->Check();
             new_group->Persist();
-            group_pointers_[nr_group_] = new_group;
             train_keys_.push_back(new_group->min_key);
             nr_group_ ++;
         }
@@ -283,9 +282,10 @@ public:
     class IndexIter;
     RootModel(size_t max_groups = 64) : nr_groups_(0), max_groups_(max_groups) {
         clevel_mem_ = new CLevel::MemControl(CLEVEL_PMEM_FILE, CLEVEL_PMEM_FILE_SIZE);
-        groups_ = (LearnGroup **)NVM::data_alloc->alloc(max_groups * sizeof(LearnGroup *));
 #ifdef EXPAND_ALL
         group_entrys_ = (LearnGroup *)NVM::data_alloc->alloc(max_groups * sizeof(LearnGroup));
+#else
+        groups_ = (LearnGroup **)NVM::data_alloc->alloc(max_groups * sizeof(LearnGroup *));
 #endif
         
     }
@@ -293,51 +293,68 @@ public:
     RootModel(size_t max_groups, CLevel::MemControl *clevel_mem) 
         : nr_groups_(0), max_groups_(max_groups), clevel_mem_(clevel_mem)
     {
-        groups_ = (LearnGroup **)NVM::data_alloc->alloc(max_groups * sizeof(LearnGroup *));
 #ifdef EXPAND_ALL
         group_entrys_ = (LearnGroup *)NVM::data_alloc->alloc(max_groups * sizeof(LearnGroup));
+#else
+        groups_ = (LearnGroup **)NVM::data_alloc->alloc(max_groups * sizeof(LearnGroup *));
 #endif
     }
     
     ~RootModel() {
         for(size_t i = 0; i < nr_groups_; i++) {
+#ifdef EXPAND_ALL
+            group_entrys_[i].~LearnGroup();
+#else
             groups_[i]->~LearnGroup();
             NVM::data_alloc->Free(groups_[i], sizeof(LearnGroup)); 
+#endif
         }
+#ifdef EXPAND_ALL
+        NVM::data_alloc->Free(group_entrys_, max_groups_ * sizeof(LearnGroup));
+#else
         NVM::data_alloc->Free(groups_, max_groups_ * sizeof(LearnGroup *));
+#endif
     }
 
+#ifdef EXPAND_ALL
+    void ExpandAllGroup() {
+        size_t  new_cap = nr_groups_ * 3;
+        std::vector<uint64_t> train_keys;
+        Timer timer;
+        timer.Start();
+        // static_assert(sizeof(LearnGroup) == 64);
+        LearnGroup *new_group_entrys_ = (LearnGroup *)NVM::data_alloc->alloc(new_cap * sizeof(LearnGroup));
+        group_entrys_[0].entries_[0].AdjustEntryKey(clevel_mem_);
+        ExpandMeta meta(new_group_entrys_, new_cap, train_keys);
+        for(size_t i = 0; i < nr_groups_; i ++) {
+            meta.ExpandGroup(&group_entrys_[i], clevel_mem_);
+        }
+        if(meta.nr_group_ >= new_cap) {
+            std::cout << "Unexpact new_group: " << meta.nr_group_ << ",cap " << new_cap <<std::endl;
+        }
+
+        assert(meta.nr_group_ <= new_cap);
+        LearnGroup *old_group_entrys = group_entrys_;
+        size_t old_nr_groups = nr_groups_, old_cap = max_groups_;
+        max_groups_ = new_cap;
+        nr_groups_ = meta.nr_group_;
+        group_entrys_ = new_group_entrys_;
+       
+        NVM::data_alloc->Free(old_group_entrys, old_cap * sizeof(LearnGroup));
+
+        model.init(train_keys.begin(), train_keys.end());
+        NVM::Mem_persist(this, sizeof(*this));
+        uint64_t expand_time = timer.End();
+        LOG(Debug::INFO, "Finish expanding root model, new groups %ld,  expansion time is %lfs", 
+                nr_groups_, (double)expand_time/1000000.0);
+    }
+
+#else
     // 找到跟group_id 相同的 group 
     size_t FindSameGroupRange(size_t group_id, size_t &start, size_t &end) {
         for(start = group_id; start > 0 && groups_[start - 1] == groups_[group_id]; start --);
         for(end = group_id + 1; end < nr_groups_ && groups_[end] == groups_[group_id]; end ++);
         return end - start;
-    }
-
-    void Load(std::vector<std::pair<uint64_t,uint64_t>>& data) {
-        size_t size = data.size();
-        size_t start_pos = 0;
-        int expand_keys;
-        std::vector<uint64_t> train_keys;
-        
-        while(start_pos < size ) {
-#ifdef EXPAND_ALL
-            LearnGroup *new_group = new (&group_entrys_[nr_groups_]) LearnGroup(LearnGroup::max_entry_counts);
-#else
-            LearnGroup *new_group = new (NVM::data_alloc->alloc(sizeof(LearnGroup))) LearnGroup(LearnGroup::max_entry_counts);
-#endif
-            new_group->Expansion(data, start_pos, expand_keys, clevel_mem_);
-            start_pos += expand_keys;
-            new_group->min_key = new_group->start_key();
-            new_group->max_key = start_pos < size ? data[start_pos].first : UINT64_MAX;
-            new_group->Persist();
-            groups_[nr_groups_ ++] = new_group;
-            train_keys.push_back(new_group->start_key());
-        }
-        LOG(Debug::INFO, "Group count: %d...", nr_groups_);
-        assert(nr_groups_ <=  max_groups_);
-        // model.prepare_model(train_keys, 0, nr_groups_);
-        model.init(train_keys.begin(), train_keys.end());
     }
 
     void ExpandEntrys(std::vector<LearnGroup *> &expand_groups, size_t group_id)
@@ -387,8 +404,9 @@ public:
         // }
         if(need_move + nr_groups_ < max_groups_) {
             if(end_id != nr_groups_) {
-                memmove(&groups_[start_id + (expand_groups.size() * Repeats)], &groups_[end_id], 
-                        sizeof(LearnGroup *) * (nr_groups_ - end_id));
+                std::move(&groups_[end_id], &groups_[nr_groups_], &groups_[start_id + (expand_groups.size() * Repeats)]);
+                // memmove(&groups_[start_id + (expand_groups.size() * Repeats)], &groups_[end_id], 
+                //         sizeof(LearnGroup *) * (nr_groups_ - end_id));
             }
             size_t pos = start_id;
             for(int i = 0; i < expand_groups.size(); i++) {
@@ -397,6 +415,7 @@ public:
                 }
             }
             nr_groups_ += need_move;
+            NVM::Mem_persist(&groups_[start_id], (nr_groups_ - start_id) * sizeof(LearnGroup *));
         } else {
             LearnGroup **old_groups = groups_;
             size_t old_cap = max_groups_;
@@ -424,11 +443,10 @@ public:
                 }
             }
 
-            NVM::Mem_persist(&groups_[0], sizeof(LearnGroup *) * (nr_groups_));
+            NVM::Mem_persist(&new_groups_[0], sizeof(LearnGroup *) * (new_entrys));
             max_groups_ = new_cap;
             nr_groups_ = new_entrys;
             groups_ = new_groups_;
-
             NVM::data_alloc->Free(old_groups, old_cap * sizeof(LearnGroup *)); 
         }
 
@@ -442,44 +460,43 @@ public:
         model.init(train_keys.begin(), train_keys.end());
         NVM::Mem_persist(this, sizeof(*this));
     }
-
-    void ExpandAllGroup() {
-        size_t  new_cap = nr_groups_ * 3;
-        std::vector<uint64_t> train_keys;
-        Timer timer;
-        timer.Start();
-#ifdef EXPAND_ALL
-        // static_assert(sizeof(LearnGroup) == 64);
-        LearnGroup **new_groups_ = (LearnGroup **)NVM::data_alloc->alloc(new_cap * sizeof(LearnGroup *));
-        LearnGroup *new_group_entrys_ = (LearnGroup *)NVM::data_alloc->alloc(new_cap * sizeof(LearnGroup));
-        groups_[0]->entries_[0].AdjustEntryKey(clevel_mem_);
-        ExpandMeta meta(new_groups_, new_group_entrys_, new_cap, train_keys);
-        for(size_t i = 0; i < nr_groups_; i ++) {
-            meta.ExpandGroup(groups_[i], clevel_mem_);
-        }
-        if(meta.nr_group_ >= new_cap) {
-            std::cout << "Unexpact new_group: " << meta.nr_group_ << ",cap " << new_cap <<std::endl;
-        }
-        NVM::Mem_persist(new_groups_, new_cap * sizeof(LearnGroup *));
-
-        assert(meta.nr_group_ <= new_cap);
-        LearnGroup ** old_groups = groups_;
-        LearnGroup *old_group_entrys = group_entrys_;
-        size_t old_nr_groups = nr_groups_, old_cap = max_groups_;
-        max_groups_ = new_cap;
-        nr_groups_ = meta.nr_group_;
-        groups_ = new_groups_;
-        group_entrys_ = new_group_entrys_;
-       
-        NVM::data_alloc->Free(old_groups, old_cap * sizeof(LearnGroup *));
-        NVM::data_alloc->Free(old_group_entrys, old_cap * sizeof(LearnGroup));
-
-        model.init(train_keys.begin(), train_keys.end());
-        NVM::Mem_persist(this, sizeof(*this));
 #endif
-        uint64_t expand_time = timer.End();
-        LOG(Debug::INFO, "Finish expanding root model, new groups %ld,  expansion time is %lfs", 
-                nr_groups_, (double)expand_time/1000000.0);
+
+    void Load(std::vector<std::pair<uint64_t,uint64_t>>& data) {
+        size_t size = data.size();
+        size_t start_pos = 0;
+        int expand_keys;
+        std::vector<uint64_t> train_keys;
+        
+        while(start_pos < size ) {
+#ifdef EXPAND_ALL
+            LearnGroup *new_group = new (&group_entrys_[nr_groups_]) LearnGroup(LearnGroup::max_entry_counts);
+#else
+            LearnGroup *new_group = new (NVM::data_alloc->alloc(sizeof(LearnGroup))) LearnGroup(LearnGroup::max_entry_counts);
+#endif
+            new_group->Expansion(data, start_pos, expand_keys, clevel_mem_);
+            start_pos += expand_keys;
+            new_group->min_key = new_group->start_key();
+            new_group->max_key = start_pos < size ? data[start_pos].first : UINT64_MAX;
+            new_group->Persist();
+#ifndef EXPAND_ALL
+            groups_[nr_groups_] = new_group;
+#endif
+            nr_groups_ ++;
+            train_keys.push_back(new_group->start_key());
+        }
+        LOG(Debug::INFO, "Group count: %d...", nr_groups_);
+        assert(nr_groups_ <=  max_groups_);
+        // model.prepare_model(train_keys, 0, nr_groups_);
+        model.init(train_keys.begin(), train_keys.end());
+    }
+
+    LearnGroup *Group(size_t id) const{
+#ifdef  EXPAND_ALL
+        return &group_entrys_[id];
+#else 
+         return groups_[id];
+#endif
     }
 
     int FindGroup(uint64_t key) const {
@@ -520,8 +537,7 @@ public:
         // Common::timers["ALevel_times"].start();
         int group_id = FindGroup(key);
         // Common::timers["ALevel_times"].end();
-    retry1:
-        auto ret = groups_[group_id]->Put(key, value, clevel_mem_);
+        auto ret = Group(group_id)->Put(key, value, clevel_mem_);
         if(ret == status::Full ) {
 #ifdef EXPAND_ALL
             ExpandAllGroup();
@@ -584,25 +600,29 @@ public:
     }
 
     size_t NextGroupId(size_t group_id) {
+#ifdef EXPAND_ALL
+        return group_id + 1;
+#else
         size_t pos = group_id;
         while(pos < nr_groups_ && groups_[pos] == groups_[group_id]) pos ++;
         return pos;
+#endif
     }
 
     bool Update(uint64_t key, uint64_t value) {
         int group_id = FindGroup(key);
-        auto ret = groups_[group_id]->Update(key, value, clevel_mem_);
+        auto ret = Group(group_id)->Update(key, value, clevel_mem_);
         return ret;
     }
 
     bool Get(uint64_t key, uint64_t& value) const {
         int group_id = FindGroup(key);
-        return groups_[group_id]->Get(key, value, clevel_mem_);
+        return Group(group_id)->Get(key, value, clevel_mem_);
     }
 
     bool Delete(uint64_t key) {
         int group_id = FindGroup(key);
-        auto ret = groups_[group_id]->Delete(key, nullptr, clevel_mem_);
+        auto ret = Group(group_id)->Delete(key, nullptr, clevel_mem_);
         return ret;
     }
 
@@ -620,10 +640,10 @@ private:
     uint64_t max_groups_;
     // RMI::LinearModel<RMI::Key_64> model;
     RMI::TwoStageRMI<RMI::Key_64, 3, 2> model;
-    LearnGroup **groups_;
-
 #ifdef EXPAND_ALL
     LearnGroup *group_entrys_;
+#else 
+    LearnGroup **groups_; 
 #endif
     CLevel::MemControl *clevel_mem_;
 };
@@ -643,7 +663,7 @@ public:
 
     }
     uint64_t operator*()
-    { return root_->groups_[idx_]->start_key(); }
+    { return root_->Group(idx_)->start_key(); }
 
     IndexIter& operator++()
     { idx_ ++; return *this; }
@@ -661,11 +681,11 @@ public:
     {
         if((i + idx_) > root_->nr_groups_)
         {
-        std::cout << "索引超过最大值" << std::endl; 
-        // 返回第一个元素
-        return root_->groups_[0]->start_key();
+            std::cout << "索引超过最大值" << std::endl; 
+            // 返回第一个元素
+            return root_->Group(0)->start_key();
         }
-        return root_->groups_[i + idx_]->start_key();
+        return root_->Group(i + idx_)->start_key();
     }
     
     bool operator<(const IndexIter& iter) const { return  idx_ < iter.idx_; }
@@ -734,10 +754,10 @@ class RootModel::Iter
 {
 public:
 
-    Iter(RootModel *root) : root_(root), giter_(root->groups_[0], root->clevel_mem_), idx_(0) { }
+    Iter(RootModel *root) : root_(root), giter_(root->Group(0), root->clevel_mem_), idx_(0) { }
     Iter(RootModel *root, uint64_t start_key) : root_(root) {
         idx_ = root_->FindGroup(start_key);
-        new (&giter_) LearnGroup::Iter(root->groups_[idx_], start_key, root->clevel_mem_);
+        new (&giter_) LearnGroup::Iter(root->Group(idx_), start_key, root->clevel_mem_);
         if(giter_.end()) {
             next();
         }
@@ -760,7 +780,7 @@ public:
         }
         idx_ = root_->NextGroupId(idx_);
         if(idx_ < root_->nr_groups_) {
-            new (&giter_) LearnGroup::Iter(root_->groups_[idx_], root_->clevel_mem_);
+            new (&giter_) LearnGroup::Iter(root_->Group(idx_), root_->clevel_mem_);
             return true;
         }
         return false;
