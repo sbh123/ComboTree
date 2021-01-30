@@ -74,14 +74,12 @@ uint64_t Find_(uint64_t key) const {
     if(entries_[pos].entry_key == key) {
         return pos;
     } else if (entries_[pos].entry_key < key) {
-      pos ++;
-      for(; pos < nr_entries_ && entries_[pos].entry_key <= key; pos ++) {Common::stat.AddFindPos();};
-      return pos - 1;
+      for(; (pos + 1) < nr_entries_ && entries_[pos + 1].entry_key <= key; pos ++) {Common::stat.AddFindPos();};
     } else {
       pos --;
       for(; pos > 0 && entries_[pos].entry_key > key; pos --) {Common::stat.AddFindPos();};
-      return pos >= 0 ? pos : 0;
     }
+    return pos >= 0 ? pos : 0;
 }
 
 void Check() {
@@ -105,13 +103,13 @@ void Check() {
 
 status Put(uint64_t key, uint64_t value, CLevel::MemControl *mem)
 {
-    // Common::timers["BLevel_times"].start();
+    Common::timers["BLevel_times"].start();
     uint64_t pos = Find_(key);
-    // Common::timers["BLevel_times"].end();
+    Common::timers["BLevel_times"].end();
 
-    // Common::timers["CLevel_times"].start();
+    Common::timers["CLevel_times"].start();
     auto ret = entries_[pos].Put(mem, key, value);
-    // Common::timers["CLevel_times"].end();
+    Common::timers["CLevel_times"].end();
 
     if(ret == status::Full) {
         if(pos > 0 && (entries_[pos - 1].buf.entries <= (PointerBEntry::entry_count / 2))) {
@@ -456,7 +454,7 @@ public:
         std::vector<uint64_t> train_keys;
         // std::cout << "After expand." << std::endl;
         for(int i = 0; i < nr_groups_; i ++) {
-            train_keys.push_back(groups_[i]->start_key());
+            train_keys.push_back(groups_[i]->min_key);
             // std::cout << "Expand key[ " << i << "]: " << groups_[i]->start_key() << std::endl;
         }
         // model.prepare_model(train_keys, 0, nr_groups_);
@@ -527,12 +525,10 @@ public:
             return pos;
         }  
         if (groups_[pos]->min_key < key) {
-            pos ++;
-            for(; pos < nr_groups_ && groups_[pos]->min_key <= key; pos ++) {Common::stat.AddFindGroup();}
-            pos --;
+            for(; (pos + 1) < nr_groups_ && (groups_[pos + 1] == groups_[pos] || groups_[pos + 1]->min_key <= key); pos ++) {Common::stat.AddFindGroup();}
         } else {
             pos --;
-            for(; pos > 0 && groups_[pos]->min_key > key; pos --) {Common::stat.AddFindGroup();}
+            for(; pos > 0 && (groups_[pos + 1] == groups_[pos] || groups_[pos]->min_key > key); pos --) {Common::stat.AddFindGroup();}
         }
 #endif
         return std::max(pos, 0);
@@ -540,9 +536,9 @@ public:
 
     status Put(uint64_t key, uint64_t value) {
     retry0:
-        // Common::timers["ALevel_times"].start();
+        Common::timers["ALevel_times"].start();
         int group_id = FindGroup(key);
-        // Common::timers["ALevel_times"].end();
+        Common::timers["ALevel_times"].end();
         auto ret = Group(group_id)->Put(key, value, clevel_mem_);
         if(ret == status::Full ) {
 #ifdef EXPAND_ALL
