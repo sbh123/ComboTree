@@ -395,28 +395,31 @@ public:
 
     void ExpandEntrys(std::vector<LearnGroup *> &expand_groups, size_t start_id, size_t end_id)
     {
-        size_t start_pos = 0;
-        int expand_keys;
-        size_t need_move = (expand_groups.size() * Repeats) -  (end_id - start_id);
+        Timer timer;
+        timer.Start();
+        // size_t start_pos = 0;
+        // int expand_keys;
+        // size_t need_move = (expand_groups.size() * Repeats) -  (end_id - start_id);
         // std::cout << "Before expand." << std::endl;
         // for(int i = 0; i < nr_groups_; i ++) {
         //     std::cout << "Expand key[ " << i << "]: " << groups_[i]->start_key() << std::endl;
         // }
-        if(need_move + nr_groups_ < max_groups_) {
-            if(end_id != nr_groups_) {
-                std::move(&groups_[end_id], &groups_[nr_groups_], &groups_[start_id + (expand_groups.size() * Repeats)]);
-                // memmove(&groups_[start_id + (expand_groups.size() * Repeats)], &groups_[end_id], 
-                //         sizeof(LearnGroup *) * (nr_groups_ - end_id));
-            }
-            size_t pos = start_id;
-            for(int i = 0; i < expand_groups.size(); i++) {
-                for(int j = 0; j < Repeats; j ++) {
-                    groups_[pos ++] = expand_groups[i];
-                }
-            }
-            nr_groups_ += need_move;
-            NVM::Mem_persist(&groups_[start_id], (nr_groups_ - start_id) * sizeof(LearnGroup *));
-        } else {
+        // if(need_move + nr_groups_ < max_groups_) {
+        //     if(end_id != nr_groups_) {
+        //         std::move(&groups_[end_id], &groups_[nr_groups_], &groups_[start_id + (expand_groups.size() * Repeats)]);
+        //         // memmove(&groups_[start_id + (expand_groups.size() * Repeats)], &groups_[end_id], 
+        //         //         sizeof(LearnGroup *) * (nr_groups_ - end_id));
+        //     }
+        //     size_t pos = start_id;
+        //     for(int i = 0; i < expand_groups.size(); i++) {
+        //         for(int j = 0; j < Repeats; j ++) {
+        //             groups_[pos ++] = expand_groups[i];
+        //         }
+        //     }
+        //     nr_groups_ += need_move;
+        //     NVM::Mem_persist(&groups_[start_id], (nr_groups_ - start_id) * sizeof(LearnGroup *));
+        // } else 
+        {
             LearnGroup **old_groups = groups_;
             size_t old_cap = max_groups_;
             std::vector<uint64_t> train_keys;
@@ -459,6 +462,9 @@ public:
         // model.prepare_model(train_keys, 0, nr_groups_);
         model.init(train_keys.begin(), train_keys.end());
         NVM::Mem_persist(this, sizeof(*this));
+        uint64_t expand_time = timer.End();
+        LOG(Debug::INFO, "Finish expanding root model, new groups %ld,  expansion time is %lfs", 
+                nr_groups_, (double)expand_time/1000000.0);
     }
 #endif
 
