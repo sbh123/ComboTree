@@ -83,8 +83,8 @@ class Buncket { // without Buncket main key
       memcpy(pkey(target_idx), &new_key, suffix_bytes);
       memcpy(pvalue(target_idx), &value, value_size);
       set_bit(target_idx, bitmap);
-    //   clflush(pvalue(target_idx));
-      NVM::Mem_persist(pkey(target_idx), suffix_bytes + value_size);
+      clflush(pkey(target_idx));
+    //   NVM::Mem_persist(pkey(target_idx), suffix_bytes + value_size);
       fence();
       data_index = target_idx;
       return status::OK;
@@ -656,21 +656,29 @@ static inline status MergePointerBEntry(PointerBEntry *left, PointerBEntry *righ
         // memmove(&right->entrys[1], &right->entrys[0], sizeof(PointerBEntry::entry) * (right->buf.entries));
         right->entrys[0] = left->entrys[left->buf.entries - 1];
         right->buf.entries = right->entrys[1].buf.entries + 1;
-        NVM::Mem_persist(right, sizeof(PointerBEntry));
+        clflush(right);
+        fence();
+        // NVM::Mem_persist(right, sizeof(PointerBEntry));
         right->entrys[left->buf.entries - 1].SetInvalid();
         left->buf.entries -= 1;
-        NVM::Mem_persist(left, sizeof(PointerBEntry)); 
+        clflush(left);
+        fence();
+        // NVM::Mem_persist(left, sizeof(PointerBEntry)); 
     } else {
         left->entrys[left->buf.entries] = right->entrys[0];
         left->buf.entries += 1;
-        NVM::Mem_persist(left, sizeof(PointerBEntry)); 
+        clflush(left);
+        fence();
+        // NVM::Mem_persist(left, sizeof(PointerBEntry)); 
 
         int right_entries = right->buf.entries;
         std::copy(&right->entrys[1], &right->entrys[right_entries], &right->entrys[0]);
         // memmove(&right->entrys[0], &right->entrys[1], sizeof(PointerBEntry::entry) * (right_entries - 1));
         right->entrys[right_entries - 1].SetInvalid();
         right->buf.entries = right_entries - 1;
-        NVM::Mem_persist(right, sizeof(PointerBEntry));
+        clflush(right);
+        fence();
+        // NVM::Mem_persist(right, sizeof(PointerBEntry));
     }
     if(key < right->entry_key) {
         return left->Put(mem, key, value);

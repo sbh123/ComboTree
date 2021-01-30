@@ -438,8 +438,12 @@ public:
     return 1;
   } 
   void PrintStatic() {
-    // std::cerr << "Alevel average cost: " << Common::timers["ABLevel_times"].avg_latency() << std::endl;
-    // std::cerr << "Clevel average cost: " << Common::timers["Clevel_times"].avg_latency() << std::endl;
+      std::cerr << "Alevel average cost: " << Common::timers["ALevel_times"].avg_latency();
+      std::cerr << ",Blevel average cost: " << Common::timers["BLevel_times"].avg_latency();
+      std::cerr << ",Clevel average cost: " << Common::timers["Clevel_times"].avg_latency() << std::endl;
+      Common::timers["Alevel_times"].clear();
+      Common::timers["Blevel_times"].clear();
+      Common::timers["Clevel_times"].clear();
   }
 private:
   combotree::RootModel *root_;
@@ -473,7 +477,7 @@ int YCSB_Run(ycsbc::KvDB *db, ycsbc::CoreWorkload *wl, const int num_ops,
       }
       // std::cout << "average load latency: " << duration << std::endl;
       timer.Start();
-      // db->PrintStatic();
+      db->PrintStatic();
     }
   }
   if(is_loading) {
@@ -566,6 +570,7 @@ int main(int argc, const char *argv[])
       cout << "# Transaction throughput (KTPS)" << endl;
       cout << props["dbname"] << '\t' << workloads[i] << '\t' << num_threads << '\t';
       cout << total_ops / duration / 1000 << endl << endl;
+      db->Info();
     }
     delete db;
     NVM::env_exit();

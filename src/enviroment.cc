@@ -1,9 +1,11 @@
 #include "nvm_alloc.h"
+#include "statistic.h"
 #include "combotree_config.h"
 #include "common_time.h"
 
 namespace Common {
     std::map<std::string, Common::Statistic> timers;
+    Stat stat;
 }
 
 namespace NVM

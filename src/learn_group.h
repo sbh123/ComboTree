@@ -6,6 +6,8 @@
 #include <cstddef>
 #include <vector>
 #include <shared_mutex>
+#include "statistic.h"
+
 #include "combotree_config.h"
 #include "kvbuffer.h"
 #include "clevel.h"
@@ -23,7 +25,8 @@ namespace combotree {
 static inline int CommonPrefixBytes(uint64_t a, uint64_t b) {
   // the result of clz is undefined if arg is 0
   int leading_zero_cnt = (a ^ b) == 0 ? 64 : __builtin_clzll(a ^ b);
-  return leading_zero_cnt / 8;
+//   return leading_zero_cnt / 8;
+    return 0;
 }
 
 struct __attribute__((aligned(64))) LearnGroup {
@@ -67,23 +70,49 @@ int find_near_pos(uint64_t key) const
 uint64_t Find_(uint64_t key) const {
     int pos = find_near_pos(key);
     pos = std::min(pos, (int)(nr_entries_ - 1));
+    Common::stat.AddFindPos();
     if(entries_[pos].entry_key == key) {
         return pos;
     } else if (entries_[pos].entry_key < key) {
       pos ++;
-      for(; pos < nr_entries_ && entries_[pos].entry_key <= key; pos ++);
+      for(; pos < nr_entries_ && entries_[pos].entry_key <= key; pos ++) {Common::stat.AddFindPos();};
       return pos - 1;
     } else {
       pos --;
-      for(; pos > 0 && entries_[pos].entry_key > key; pos --);
+      for(; pos > 0 && entries_[pos].entry_key > key; pos --) {Common::stat.AddFindPos();};
       return pos >= 0 ? pos : 0;
     }
 }
 
+void Check() {
+    size_t max_error = 0;
+    for(size_t i = 0; i < nr_entries_; i ++) {
+        uint64_t FindPos = find_near_pos(entries_[i].entry_key + 1);
+        FindPos = std::min(FindPos, (nr_entries_ - 1));
+        max_error = std::max(max_error, (size_t)abs(int(FindPos) - (int)(i)));
+    }
+    std::cout << "Max error: " << max_error << std::endl;
+    if(max_error > 8) {
+        for(size_t i = 0; i < nr_entries_; i ++) {
+            uint64_t FindPos = find_near_pos(entries_[i].entry_key + 1);
+            FindPos = std::min(FindPos, (nr_entries_ - 1));
+            max_error = std::max(max_error, (size_t)abs(int(FindPos) - (int)(i)));
+            std::cout << "Find pos: " << FindPos << ", " << i << std::endl; 
+        }
+    }
+    assert(max_error < 8);
+}
+
 status Put(uint64_t key, uint64_t value, CLevel::MemControl *mem)
 {
+    Common::timers["BLevel_times"].start();
     uint64_t pos = Find_(key);
+    Common::timers["BLevel_times"].end();
+
+    Common::timers["CLevel_times"].start();
     auto ret = entries_[pos].Put(mem, key, value);
+    Common::timers["CLevel_times"].end();
+
     if(ret == status::Full) {
         if(pos > 0 && (entries_[pos - 1].buf.entries <= (PointerBEntry::entry_count / 2))) {
             return MergePointerBEntry(&entries_[pos - 1], &entries_[pos], mem, key, value);
@@ -189,13 +218,14 @@ static inline void ExpandGroup(LearnGroup* old_group, std::vector<LearnGroup*> &
         do {
             const PointerBEntry::entry *entry = &(*it);
             if ((!opt.add_point(entry->entry_key, entry_pos)) || entry_pos >= LearnGroup::max_entry_counts) {
-                new_group->segment_ = LearnGroup::segment_t(opt.get_segment());
                 break;
             }
             new_group->ExpandPut_(entry);
             it.next(); 
             entry_pos ++;
         } while(!it.end());
+        
+        new_group->segment_ = LearnGroup::segment_t(opt.get_segment());
         new_group->min_key = new_group->start_key();
         new_group->max_key = it.end() ? old_group->max_key : (*it).entry_key;
         new_group->Persist();
@@ -227,15 +257,17 @@ struct ExpandMeta {
             do {
                 const PointerBEntry::entry *entry = &(*it);
                 if ((!opt.add_point(entry->entry_key, entry_pos)) || entry_pos >= LearnGroup::max_entry_counts) {
-                    new_group->segment_ = LearnGroup::segment_t(opt.get_segment());
                     break;
                 }
                 new_group->ExpandPut_(entry);
                 it.next(); 
                 entry_pos ++;
             } while(!it.end());
+
+            new_group->segment_ = LearnGroup::segment_t(opt.get_segment());
             new_group->min_key = new_group->start_key();
             new_group->max_key = it.end() ? old_group->max_key : (*it).entry_key;
+            // new_group->Check();
             new_group->Persist();
             group_pointers_[nr_group_] = new_group;
             train_keys_.push_back(new_group->min_key);
@@ -379,23 +411,27 @@ public:
     int FindGroup(uint64_t key) const {
         int pos = model.predict(RMI::Key_64(key));
         pos = std::min(pos, (int)nr_groups_ - 1);
-        if(groups_[pos]->min_key <= key && key < groups_[pos]->max_key) {
+        Common::stat.AddCount();
+        Common::stat.AddFindGroup();
+        if(group_entrys_[pos].min_key <= key && key < group_entrys_[pos].max_key) {
             return pos;
         }  
-        if (groups_[pos]->min_key < key) {
+        if (group_entrys_[pos].min_key < key) {
             pos ++;
-            for(; pos < nr_groups_ && groups_[pos]->min_key <= key; pos ++);
+            for(; pos < nr_groups_ && group_entrys_[pos].min_key <= key; pos ++) {Common::stat.AddFindGroup();}
             pos --;
         } else {
             pos --;
-            for(; pos > 0 && groups_[pos]->min_key > key; pos --);
+            for(; pos > 0 && group_entrys_[pos].min_key > key; pos --) {Common::stat.AddFindGroup();}
         }
         return std::max(pos, 0);
     }
 
     status Put(uint64_t key, uint64_t value) {
     retry0:
+        Common::timers["ALevel_times"].start();
         int group_id = FindGroup(key);
+        Common::timers["ALevel_times"].end();
     retry1:
         auto ret = groups_[group_id]->Put(key, value, clevel_mem_);
         if(ret == status::Full ) {
@@ -449,6 +485,9 @@ public:
     void Info() {
         std::cout << "nr_groups: " << nr_groups_ << std::endl;
         std::cout << "Group size:" << sizeof(LearnGroup) << std::endl;
+        std::cout << "Find group: " << Common::stat.find_goups << ", " <<  Common::stat.find_pos 
+               << ", " <<  Common::stat.count << std::endl;
+        Common::stat.find_goups = Common::stat.find_pos = Common::stat.count = 0;
         clevel_mem_->Usage();
     }
 
