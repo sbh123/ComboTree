@@ -28,7 +28,7 @@ void Learn_Group_test();
 
 int main() {
     NVM::env_init();
-    Buncket_test();
+    // Buncket_test();
     // PointerBEntry_test();
     // bit_test();
     Learn_Group_test();

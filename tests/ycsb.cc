@@ -129,8 +129,8 @@ public:
       std::cerr << "Alevel average cost: " << Common::timers["ALevel_times"].avg_latency();
       std::cerr << ",Blevel average cost: " << Common::timers["BLevel_times"].avg_latency();
       std::cerr << ",Clevel average cost: " << Common::timers["CLevel_times"].avg_latency() << std::endl;
-      Common::timers["Alevel_times"].clear();
-      Common::timers["Blevel_times"].clear();
+      Common::timers["ALevel_times"].clear();
+      Common::timers["BLevel_times"].clear();
       Common::timers["CLevel_times"].clear();
     }
 private:
@@ -441,8 +441,8 @@ public:
       std::cerr << "Alevel average cost: " << Common::timers["ALevel_times"].avg_latency();
       std::cerr << ",Blevel average cost: " << Common::timers["BLevel_times"].avg_latency();
       std::cerr << ",Clevel average cost: " << Common::timers["CLevel_times"].avg_latency() << std::endl;
-      Common::timers["Alevel_times"].clear();
-      Common::timers["Blevel_times"].clear();
+      Common::timers["ALevel_times"].clear();
+      Common::timers["BLevel_times"].clear();
       Common::timers["CLevel_times"].clear();
   }
 private:
