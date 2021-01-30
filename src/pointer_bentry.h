@@ -227,14 +227,14 @@ public:
         status ret = status::OK;
         bool find = false;
         int idx = 0;
-        // Common::timers["BLevel_times"].start();
+        Common::timers["BLevel_times"].start();
         int pos = Find(key, find);
         if(find) {
             return status::Exist;
         }
-        // Common::timers["BLevel_times"].end();
+        Common::timers["BLevel_times"].end();
 
-        // Common::timers["CLevel_times"].start();
+        Common::timers["CLevel_times"].start();
         ret = PutBufKV(key, value, idx);
         if(ret != status::OK) {
             return ret;
@@ -245,7 +245,7 @@ public:
         }
         total_indexs[pos] = idx;
         clflush(&header); 
-        // Common::timers["CLevel_times"].end();
+        Common::timers["CLevel_times"].end();
         return status::OK;
     }
 
@@ -806,12 +806,12 @@ struct  PointerBEntry {
     
     status Put(CLevel::MemControl* mem, uint64_t key, uint64_t value) {
         retry:
-        // Common::timers["ALevel_times"].start();
+        Common::timers["ALevel_times"].start();
         int pos = Find_pos(key);
         if (unlikely(!entrys[pos].IsValid())) {
             entrys[pos].pointer.Setup(mem, key, entrys[pos].buf.prefix_bytes);
         }
-        // Common::timers["ALevel_times"].end();
+        Common::timers["ALevel_times"].end();
         // std::cout << "Put key: " << key << ", value " << value << std::endl;
         auto ret = (entrys[pos].pointer.pointer(mem->BaseAddr()))->Put(mem, key, value);
         if(ret == status::Full && entrys[0].buf.entries < entry_count) {

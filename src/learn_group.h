@@ -103,13 +103,13 @@ void Check() {
 
 status Put(uint64_t key, uint64_t value, CLevel::MemControl *mem)
 {
-    Common::timers["BLevel_times"].start();
+    // Common::timers["BLevel_times"].start();
     uint64_t pos = Find_(key);
-    Common::timers["BLevel_times"].end();
+    // Common::timers["BLevel_times"].end();
 
-    Common::timers["CLevel_times"].start();
+    // Common::timers["CLevel_times"].start();
     auto ret = entries_[pos].Put(mem, key, value);
-    Common::timers["CLevel_times"].end();
+    // Common::timers["CLevel_times"].end();
 
     if(ret == status::Full) {
         if(pos > 0 && (entries_[pos - 1].buf.entries <= (PointerBEntry::entry_count / 2))) {
@@ -130,9 +130,9 @@ bool Update(uint64_t key, uint64_t value, CLevel::MemControl *mem)
 
 bool Get(uint64_t key, uint64_t& value, CLevel::MemControl *mem) const {
     uint64_t pos = Find_(key);
-    Common::timers["CLevel_times"].start();
+    // Common::timers["CLevel_times"].start();
     auto ret = entries_[pos].Get(mem, key, value);
-    Common::timers["CLevel_times"].end();
+    // Common::timers["CLevel_times"].end();
     return ret;
 }
 bool Delete(uint64_t key, uint64_t* value, CLevel::MemControl *mem)
@@ -539,9 +539,9 @@ public:
 
     status Put(uint64_t key, uint64_t value) {
     retry0:
-        Common::timers["ALevel_times"].start();
+        // Common::timers["ALevel_times"].start();
         int group_id = FindGroup(key);
-        Common::timers["ALevel_times"].end();
+        // Common::timers["ALevel_times"].end();
         auto ret = Group(group_id)->Put(key, value, clevel_mem_);
         if(ret == status::Full ) {
 #ifdef EXPAND_ALL

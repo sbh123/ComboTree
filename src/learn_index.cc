@@ -83,7 +83,7 @@ Learn_Index::~Learn_Index() {
 }
 
 void Learn_Index::GetBLevelRange_(uint64_t key, uint64_t& begin, uint64_t& end, bool debug) const {
-  Common::timers["ALevel_times"].start();
+  // Common::timers["ALevel_times"].start();
   if (unlikely(key < min_key_)) {
     begin = 0;
     end = 0;
@@ -95,8 +95,8 @@ void Learn_Index::GetBLevelRange_(uint64_t key, uint64_t& begin, uint64_t& end, 
     begin = range.lo;
     end = range.hi;
   }
-  Common::timers["ALevel_times"].end();
-  Common::timers["BLevel_times"].start();
+  // Common::timers["ALevel_times"].end();
+  // Common::timers["BLevel_times"].start();
 }
 
 } // namespace combotree
