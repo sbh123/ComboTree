@@ -126,12 +126,12 @@ public:
     }
 
     void PrintStatic() {
-      std::cerr << "Alevel average cost: " << Common::timers["ALevel_times"].avg_latency();
-      std::cerr << ",Blevel average cost: " << Common::timers["BLevel_times"].avg_latency();
-      std::cerr << ",Clevel average cost: " << Common::timers["CLevel_times"].avg_latency() << std::endl;
-      Common::timers["ALevel_times"].clear();
-      Common::timers["BLevel_times"].clear();
-      Common::timers["CLevel_times"].clear();
+      // std::cerr << "Alevel average cost: " << Common::timers["ALevel_times"].avg_latency();
+      // std::cerr << ",Blevel average cost: " << Common::timers["BLevel_times"].avg_latency();
+      // std::cerr << ",Clevel average cost: " << Common::timers["CLevel_times"].avg_latency() << std::endl;
+      // Common::timers["ALevel_times"].clear();
+      // Common::timers["BLevel_times"].clear();
+      // Common::timers["CLevel_times"].clear();
     }
 private:
     ComboTree *tree_;
@@ -438,12 +438,12 @@ public:
     return 1;
   } 
   void PrintStatic() {
-      std::cerr << "Alevel average cost: " << Common::timers["ALevel_times"].avg_latency();
-      std::cerr << ",Blevel average cost: " << Common::timers["BLevel_times"].avg_latency();
-      std::cerr << ",Clevel average cost: " << Common::timers["CLevel_times"].avg_latency() << std::endl;
-      Common::timers["ALevel_times"].clear();
-      Common::timers["BLevel_times"].clear();
-      Common::timers["CLevel_times"].clear();
+      // std::cerr << "Alevel average cost: " << Common::timers["ALevel_times"].avg_latency();
+      // std::cerr << ",Blevel average cost: " << Common::timers["BLevel_times"].avg_latency();
+      // std::cerr << ",Clevel average cost: " << Common::timers["CLevel_times"].avg_latency() << std::endl;
+      // Common::timers["ALevel_times"].clear();
+      // Common::timers["BLevel_times"].clear();
+      // Common::timers["CLevel_times"].clear();
   }
 private:
   combotree::RootModel *root_;

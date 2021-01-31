@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <vector>
 #include <shared_mutex>
+#include <cmath>
 #include "combotree/combotree.h"
 #include "combotree_config.h"
 #include "bitops.h"
@@ -227,14 +228,14 @@ public:
         status ret = status::OK;
         bool find = false;
         int idx = 0;
-        Common::timers["BLevel_times"].start();
+        // Common::timers["BLevel_times"].start();
         int pos = Find(key, find);
         if(find) {
             return status::Exist;
         }
-        Common::timers["BLevel_times"].end();
+        // Common::timers["BLevel_times"].end();
 
-        Common::timers["CLevel_times"].start();
+        // Common::timers["CLevel_times"].start();
         ret = PutBufKV(key, value, idx);
         if(ret != status::OK) {
             return ret;
@@ -245,7 +246,7 @@ public:
         }
         total_indexs[pos] = idx;
         clflush(&header); 
-        Common::timers["CLevel_times"].end();
+        // Common::timers["CLevel_times"].end();
         return status::OK;
     }
 
@@ -758,6 +759,34 @@ class __attribute__((aligned(64))) SortBuncket { // without SortBuncket main key
       return status::OK;
     }
 
+    inline bool remove_key(uint64_t key, uint64_t *value) {
+      bool shift = false;
+      int i;
+      for(i = 0; records[i].ptr != 0; ++i) {
+        if(!shift && records[i].key == key) {
+          if(value) *value = records[i].ptr;
+          if(i != 0) {
+            records[i].ptr = records[i - 1].ptr;
+          }
+          shift = true;
+        }
+
+        if(shift) {
+          records[i].key = records[i + 1].key;
+          records[i].ptr = records[i + 1].ptr;
+          uint64_t records_ptr = (uint64_t)(&records[i]);
+          int remainder = records_ptr % CACHE_LINE_SIZE;
+          bool do_flush = (remainder == 0) || 
+            ((((int)(remainder + sizeof(entry)) / CACHE_LINE_SIZE) == 1) && 
+             ((remainder + sizeof(entry)) % CACHE_LINE_SIZE) != 0);
+          if(do_flush) {
+            clflush((char *)records_ptr);
+          }
+        }
+      }
+      return shift;
+    }
+
     status SetValue(int pos, uint64_t value) {
       memcpy(pvalue(pos), &value, value_size);
       clflush(pvalue(pos));
@@ -804,15 +833,22 @@ public:
         // int idx = 0;
         split_key = key(entries / 2);
         prefix_len = 0;
-        for(int i = entries / 2; i < entries; i ++) {
-            next->Put(nullptr, key(i), value(i));
+        int idx = 0;
+        int m = (int) ceil(entries / 2);
+        for(int i = m; i < entries; i ++) {
+            // next->Put(nullptr, key(i), value(i));
+            next->PutBufKV(key(i), value(i), idx, false);
+            next->entries ++;
         }
         next->next_bucket = this->next_bucket;
-        clflush(next);
+        NVM::Mem_persist(next, sizeof(*next));
+
+        records[m].ptr = 0; 
+        clflush(&records[entries / 2].ptr);
 
         this->next_bucket = next;
         fence();
-        entries = entries / 2;
+        entries = m;
         clflush(&header);
         fence();
         return status::OK;
@@ -843,32 +879,24 @@ public:
 
     ALWAYS_INLINE uint64_t value(int idx) const {
       // the const bit mask will be generated during compile
-      return *(uint64_t*)pvalue(idx);
+      return records[idx].ptr;
     }
 
     ALWAYS_INLINE uint64_t key(int idx) const {
-      return *(uint64_t*)pkey(idx);
+      return records[idx].key;
     }
 
     status Put(CLevel::MemControl* mem, uint64_t key, uint64_t value) {
         status ret = status::OK;
-        // bool find = false;
         int idx = 0;
-        //  Common::timers["BLevel_times"].start();
-        // int pos = Find(key, find);
-        // if(find) {
-        //     return status::Exist;
-        // }
-        // Common::timers["BLevel_times"].end();
-
-        Common::timers["CLevel_times"].start();
+        // Common::timers["CLevel_times"].start();
         ret = PutBufKV(key, value, idx);
         if(ret != status::OK) {
             return ret;
         }
         entries ++;
         clflush(&header); 
-        Common::timers["CLevel_times"].end();
+        // Common::timers["CLevel_times"].end();
         return status::OK;
     }
 
@@ -897,28 +925,12 @@ public:
 
     status Delete(CLevel::MemControl* mem, uint64_t key, uint64_t* value)
     {
-        bool find = false;
-        int pos = Find(key, find);
-        // std::cout << "Find at pos:" << pos << std::endl;
-        // for(int i = 0; i < entries; i++) {
-        // std::cout << "Keys[" << i <<"]: " << this->key(i) << std::endl;
-        // }
-        if(!find || this->value(pos) == 0) {
+        auto ret = remove_key(key, value);
+        if(!ret) {
             return status::NoExist;
         }
-        // std::cout << "Delete index:" << total_indexs[pos] << std::endl;
-        // DeletePos(total_indexs[pos]);
-        // if(pos < entries - 1) {
-        //     memmove(&total_indexs[pos], &total_indexs[pos + 1], entries - pos - 1);
-        // }
-        // // std::cout << "Find at pos:" << pos << std::endl;
-        // // for(int i = 0; i < entries; i++) {
-        // //   std::cout << "Keys[" << i <<"]: " << this->key(i) << std::endl;
-        // // }
+        fence();
         entries --;
-        if(value) {
-            *value = this->value(pos);
-        }
         clflush(&header);
         fence();
         return status::OK;
@@ -1135,12 +1147,12 @@ struct  PointerBEntry {
     
     status Put(CLevel::MemControl* mem, uint64_t key, uint64_t value) {
         retry:
-        Common::timers["ALevel_times"].start();
+        // Common::timers["ALevel_times"].start();
         int pos = Find_pos(key);
         if (unlikely(!entrys[pos].IsValid())) {
             entrys[pos].pointer.Setup(mem, key, entrys[pos].buf.prefix_bytes);
         }
-        Common::timers["ALevel_times"].end();
+        // Common::timers["ALevel_times"].end();
         // std::cout << "Put key: " << key << ", value " << value << std::endl;
         auto ret = (entrys[pos].pointer.pointer(mem->BaseAddr()))->Put(mem, key, value);
         if(ret == status::Full && entrys[0].buf.entries < entry_count) {
