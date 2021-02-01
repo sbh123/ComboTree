@@ -29,6 +29,11 @@ static inline int CommonPrefixBytes(uint64_t a, uint64_t b) {
     return 0;
 }
 
+/**
+ * @brief LearnGroup 根节点的底层 Model的实现
+ * 1. 主要包含一个 PLA 模型的 segment 和 多个B层数组结构
+ * 2. 包含一个最小key和最大key，主要用于root定位到 LearnGroup
+ */
 struct __attribute__((aligned(64))) LearnGroup {
 
     static const size_t epsilon = 4;
@@ -67,6 +72,12 @@ int find_near_pos(uint64_t key) const
     return segment_(key);
 }
 
+/**
+ * @brief 根据key找到B层数组位置， stat 是统计比较次数，可以删掉
+ * 
+ * @param key 
+ * @return uint64_t 
+ */
 uint64_t Find_(uint64_t key) const {
     int pos = segment_(key);
     pos = std::min(pos, (int)(nr_entries_ - 1));
@@ -101,6 +112,14 @@ void Check() {
     assert(max_error < 8);
 }
 
+/**
+ * @brief Put操作，插入KV对，当B层数组满了的时候，尝试合并左右数组
+ * 
+ * @param key 
+ * @param value 
+ * @param mem 
+ * @return status 
+ */
 status Put(uint64_t key, uint64_t value, CLevel::MemControl *mem)
 {
     // Common::timers["BLevel_times"].start();
@@ -205,6 +224,15 @@ private:
     uint64_t cur_idx;
 };
 
+
+/**
+ * @brief 扩展一个节点；
+ * 1. 可以改进的地方，节点扩展可能不太均匀，最后一个节点的数据量可能很少
+ * 
+ * @param old_group 
+ * @param new_groups 
+ * @param clevel_mem 
+ */
 static inline void ExpandGroup(LearnGroup* old_group, std::vector<LearnGroup*> &new_groups, 
         CLevel::MemControl *clevel_mem)
 {
@@ -235,6 +263,10 @@ static inline void ExpandGroup(LearnGroup* old_group, std::vector<LearnGroup*> &
     // std::cout << "Expand segmets to: " << new_groups.size() << std::endl;
 }
 
+/**
+ * @brief 作为扩展的原数据结构，提供一个ExpandGroup函数用于扩展，
+ * 在构造的时候需要提供LearnGroup空间
+ */
 struct ExpandMeta {
     // LearnGroup **group_pointers_;
     LearnGroup *groups_;
@@ -276,6 +308,11 @@ struct ExpandMeta {
     }
 };
 
+/**
+ * @brief 根模型，采用的是两层RMI模型，
+ * 1. 目前实现需要首先 Load一定的数据作为初始化数据；
+ * 2. EXPAND_ALL 宏定义控制采用每次扩展所有LearnGroup，还是采用重复指针一次扩展一个LearnGroup
+ */
 class RootModel {
 public:
     static const size_t Repeats = 4;
@@ -394,6 +431,12 @@ public:
         NVM::Mem_persist(this, sizeof(*this));
     }
 
+    /**
+     * @brief ExpandEntrys 目前采用的是扩展所有指针，扩展单个性能太差了
+     * @param expand_groups 
+     * @param start_id 
+     * @param end_id 
+     */
     void ExpandEntrys(std::vector<LearnGroup *> &expand_groups, size_t start_id, size_t end_id)
     {
         Timer timer;
@@ -469,6 +512,11 @@ public:
     }
 #endif
 
+    /**
+     * @brief Load 初始化加载一些数据，每个C层节点只有一个数据
+     * 
+     * @param data 
+     */
     void Load(std::vector<std::pair<uint64_t,uint64_t>>& data) {
         size_t size = data.size();
         size_t start_pos = 0;
@@ -506,6 +554,11 @@ public:
 #endif
     }
 
+    /**
+     * @brief 找到key对应的LearnGroup位置
+     * @param key 
+     * @return int 
+     */
     int FindGroup(uint64_t key) const {
         int pos = model.predict(RMI::Key_64(key));
         pos = std::min(pos, (int)nr_groups_ - 1);
@@ -537,15 +590,22 @@ public:
         return std::max(pos, 0);
     }
 
+    /**
+     * @brief 插入KV对，
+     * 
+     * @param key 
+     * @param value 
+     * @return status 
+     */
     status Put(uint64_t key, uint64_t value) {
     retry0:
         // Common::timers["ALevel_times"].start();
         int group_id = FindGroup(key);
         // Common::timers["ALevel_times"].end();
         auto ret = Group(group_id)->Put(key, value, clevel_mem_);
-        if(ret == status::Full ) {
+        if(ret == status::Full ) { // LearnGroup数组满了，需要扩展
 #ifdef EXPAND_ALL
-            ExpandAllGroup();
+            ExpandAllGroup();      // 扩展所有节点
             goto retry0;
 
 #else
@@ -557,11 +617,11 @@ public:
                 // Adjust min key
                 groups_[group_id]->entries_[0].AdjustEntryKey(clevel_mem_);
             }
-            ExpandGroup(old_group, expand_groups, clevel_mem_);
+            ExpandGroup(old_group, expand_groups, clevel_mem_);  // 扩展单个节点
 
             group_count = FindSameGroupRange(group_id, start_id, end_id);
 
-            if(group_count >= expand_groups.size()) {
+            if(group_count >= expand_groups.size()) {   // 重复指针可以存放扩展节点
                 int repeat = group_count / expand_groups.size();
                 size_t pos = start_id;
                 for(int i = 0; i < expand_groups.size(); i++) {

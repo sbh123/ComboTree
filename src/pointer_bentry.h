@@ -688,6 +688,14 @@ public:
 
 #endif
 
+/**
+ * @brief 有序的C层节点，
+ * 
+ * @tparam bucket_size 
+ * @tparam value_size 
+ * @tparam key_size 
+ * @tparam max_entry_count 
+ */
 template<const size_t bucket_size = 256, const size_t value_size = 8, const size_t key_size = 8,
     const size_t max_entry_count = 64>
 class __attribute__((aligned(64))) SortBuncket { // without SortBuncket main key
@@ -707,6 +715,15 @@ class __attribute__((aligned(64))) SortBuncket { // without SortBuncket main key
         return (void *)&records[idx].ptr;
     }
 
+    /**
+     * @brief 插入一个KV对，仿照FastFair写的，先移动指针，再移动key
+     * 
+     * @param new_key 
+     * @param value 
+     * @param data_index 
+     * @param flush 
+     * @return status 
+     */
     status PutBufKV(uint64_t new_key, uint64_t value, int &data_index, bool flush = true) {
       if(entries >= max_entries) {
         return status::Full;
@@ -759,6 +776,14 @@ class __attribute__((aligned(64))) SortBuncket { // without SortBuncket main key
       return status::OK;
     }
 
+    /**
+     * @brief 删除一个key，仿照FastFair写的，先移动指针，再移动key
+     * 
+     * @param key 
+     * @param value 
+     * @return true 
+     * @return false 
+     */
     inline bool remove_key(uint64_t key, uint64_t *value) {
       bool shift = false;
       int i;
@@ -827,6 +852,15 @@ public:
         return status::OK;
     }
 
+    /**
+     * @brief 节点分裂
+     * 
+     * @param mem 
+     * @param next 
+     * @param split_key 
+     * @param prefix_len 
+     * @return status 
+     */
     status Expand_(CLevel::MemControl *mem, SortBuncket *&next, uint64_t &split_key, int &prefix_len) {
         // int expand_pos = entries / 2;
         next = new (mem->Allocate<SortBuncket>()) SortBuncket(key(entries / 2), prefix_len);
@@ -1028,8 +1062,11 @@ public:
 };
 
 
+
 // typedef Buncket<256, 8> buncket_t;
-typedef SortBuncket<256, 8> buncket_t;
+typedef SortBuncket<256, 8> buncket_t;  
+// c层节点的定义， C层节点需支持Put，Get，Update，Delete
+// C层节点内部需要实现一个Iter作为迭代器，
 
 static_assert(sizeof(Buncket<256, 8>) == 256);
 
@@ -1058,6 +1095,11 @@ public:
     }
 };
 
+/**
+ * @brief B 层数组，包括4个C层节点，entry_count 可以控制C层节点个数
+ * @ BuncketPointer C层节点指针的封装，仿照Combotree以6bit的偏移代替8字节的指针
+ * 2个字节的buf头部，只有第一个的entries 在用，其他都感觉没有在用，可以改进
+ */
 struct  PointerBEntry {
     static const int entry_count = 4;
     struct entry {
@@ -1134,10 +1176,21 @@ struct  PointerBEntry {
         // std::cout << "Entry key: " << key << std::endl;
     }
 
+    /**
+     * @brief 调整第一个entry的entry_key，用于可能存在插入比当前最小key还要小的情况
+     * 
+     * @param mem 
+     */
     void AdjustEntryKey(CLevel::MemControl* mem) {
         entry_key = Pointer(0, mem)->key(0);
     }
 
+    /**
+     * @brief 根据key找到C层节点位置
+     * 
+     * @param key 
+     * @return int 
+     */
     int Find_pos(uint64_t key) const {
         int pos = 0;
         while(pos < buf.entries && entrys[pos].IsValid() && entrys[pos].entry_key <= key) pos ++;
@@ -1155,7 +1208,7 @@ struct  PointerBEntry {
         // Common::timers["ALevel_times"].end();
         // std::cout << "Put key: " << key << ", value " << value << std::endl;
         auto ret = (entrys[pos].pointer.pointer(mem->BaseAddr()))->Put(mem, key, value);
-        if(ret == status::Full && entrys[0].buf.entries < entry_count) {
+        if(ret == status::Full && entrys[0].buf.entries < entry_count) { // 节点满的时候进行扩展
             buncket_t *next = nullptr;
             uint64_t split_key;
             int prefix_len = 0;
@@ -1324,6 +1377,16 @@ struct  PointerBEntry {
     };
 };
 
+/**
+ * @brief 合并左右节点，并插入KV对
+ * 
+ * @param left 
+ * @param right 
+ * @param mem 
+ * @param key 
+ * @param value 
+ * @return status 
+ */
 static inline status MergePointerBEntry(PointerBEntry *left, PointerBEntry *right,
         CLevel::MemControl* mem, uint64_t key, uint64_t value)
 {
