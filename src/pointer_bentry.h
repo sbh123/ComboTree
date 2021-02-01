@@ -1367,3 +1367,342 @@ static inline status MergePointerBEntry(PointerBEntry *left, PointerBEntry *righ
 }
 
 } // namespace combotree
+
+template<const size_t bucket_size = 256, const size_t value_size = 8, const size_t key_size = 8,
+    const size_t max_entry_count = 64>
+class __attribute__((aligned(64))) UnSortBuncket { 
+    struct entry;
+
+    ALWAYS_INLINE size_t maxEntrys(int idx) const {
+        return max_entries;
+    }
+
+    ALWAYS_INLINE void* pkey(int idx) const {
+    //   return (void*)&buf[idx*(value_size + key_size)];
+        return (void *)&records[idx].key;
+    }
+
+    ALWAYS_INLINE void* pvalue(int idx) const {
+    //   return (void*)&buf[idx*(value_size + key_size) + key_size];
+        return (void *)&records[idx].ptr;
+    }
+
+    status PutBufKV(uint64_t new_key, uint64_t value, int &data_index, bool flush = true) {
+      if(entries >= max_entries) {
+        return status::Full;
+      }
+      if(entries == 0) {  // this page is empty
+          records[0].key = new_key;
+          records[0].ptr = value;
+          records[1].ptr = 0;
+          fence();
+          return status::OK;
+      }
+      {
+        int i = entries, inserted = 0;
+        if(entries < max_entries - 1) {
+            records[i+1].ptr = records[i].ptr; 
+            if((uint64_t)pvalue(i+1) % CACHE_LINE_SIZE == 0) {
+                if(flush) clflush(pvalue(i+1));
+            }
+        }
+
+        for(i = entries - 1; i >= 0; i --) {
+            if(new_key < records[i].key ) {
+                records[i+1].ptr = records[i].ptr;
+                records[i+1].key = records[i].key;
+                if(!flush) continue;
+                uint64_t records_ptr = (uint64_t)(&records[i+1]);
+                int remainder = records_ptr % CACHE_LINE_SIZE;
+                bool do_flush = (remainder == 0) || 
+                    ((((int)(remainder + sizeof(entry)) / CACHE_LINE_SIZE) == 1) 
+                    && ((remainder+sizeof(entry))%CACHE_LINE_SIZE)!=0);
+                if(do_flush) {
+                    clflush((char*)records_ptr);
+                }
+            } else {
+                records[i+1].ptr = records[i].ptr;
+                records[i+1].key = new_key;
+                records[i+1].ptr = value;
+                if(flush) clflush((char*)&records[i+1]);
+                inserted = 1;
+                break;
+            }  
+        }
+        if(inserted == 0) {
+            records[0].key = new_key;
+            records[0].ptr = value;
+            if(flush) clflush((char*) &records[0]); 
+        }
+      }
+      fence();
+      return status::OK;
+    }
+
+    inline bool remove_key(uint64_t key, uint64_t *value) {
+      bool shift = false;
+      int i;
+      for(i = 0; records[i].ptr != 0; ++i) {
+        if(!shift && records[i].key == key) {
+          if(value) *value = records[i].ptr;
+          if(i != 0) {
+            records[i].ptr = records[i - 1].ptr;
+          }
+          shift = true;
+        }
+
+        if(shift) {
+          records[i].key = records[i + 1].key;
+          records[i].ptr = records[i + 1].ptr;
+          uint64_t records_ptr = (uint64_t)(&records[i]);
+          int remainder = records_ptr % CACHE_LINE_SIZE;
+          bool do_flush = (remainder == 0) || 
+            ((((int)(remainder + sizeof(entry)) / CACHE_LINE_SIZE) == 1) && 
+             ((remainder + sizeof(entry)) % CACHE_LINE_SIZE) != 0);
+          if(do_flush) {
+            clflush((char *)records_ptr);
+          }
+        }
+      }
+      return shift;
+    }
+
+    status SetValue(int pos, uint64_t value) {
+      memcpy(pvalue(pos), &value, value_size);
+      clflush(pvalue(pos));
+      fence();
+      return status::OK;
+    }
+
+public:
+    class Iter;
+
+    SortBuncket(uint64_t key, int prefix_len) : entries(0), next_bucket(nullptr) {
+        next_bucket = nullptr;
+        max_entries = std::min(buf_size / (value_size + key_size), max_entry_count);
+        // std::cout << "Max Entry size is:" <<  max_entries << std::endl;
+    }
+
+    explicit SortBuncket(uint64_t key, uint64_t value, int prefix_len) : entries(0), next_bucket(nullptr) {
+        next_bucket = nullptr;
+        max_entries = std::min(buf_size / (value_size + key_size), max_entry_count);
+        // std::cout << "Max Entry size is:" <<  max_entries << std::endl;
+        Put(nullptr, key, value);
+    }
+
+    ~SortBuncket() {
+        
+    }
+
+    status Load(uint64_t *keys, uint64_t *values, int count) {
+        assert(entries == 0 && count < max_entries);
+
+        for(int target_idx = 0; target_idx < count; target_idx ++) {
+            assert(pvalue(target_idx) > pkey(target_idx));
+            memcpy(pkey(target_idx), &keys[target_idx], key_size);
+            memcpy(pvalue(target_idx), &values[count - target_idx - 1], value_size);
+            entries ++;
+        }
+        NVM::Mem_persist(this, sizeof(*this));
+        return status::OK;
+    }
+
+    status Expand_(CLevel::MemControl *mem, SortBuncket *&next, uint64_t &split_key, int &prefix_len) {
+        // int expand_pos = entries / 2;
+        next = new (mem->Allocate<SortBuncket>()) SortBuncket(key(entries / 2), prefix_len);
+        // int idx = 0;
+        split_key = key(entries / 2);
+        prefix_len = 0;
+        int idx = 0;
+        int m = (int) ceil(entries / 2);
+        for(int i = m; i < entries; i ++) {
+            // next->Put(nullptr, key(i), value(i));
+            next->PutBufKV(key(i), value(i), idx, false);
+            next->entries ++;
+        }
+        next->next_bucket = this->next_bucket;
+        NVM::Mem_persist(next, sizeof(*next));
+
+        records[m].ptr = 0; 
+        clflush(&records[entries / 2].ptr);
+
+        this->next_bucket = next;
+        fence();
+        entries = m;
+        clflush(&header);
+        fence();
+        return status::OK;
+    }
+
+    SortBuncket *Next() {
+        return next_bucket;
+    }
+
+    int Find(uint64_t target, bool& find) const {
+        int left = 0;
+        int right = entries - 1;
+        while (left <= right) {
+            int middle = (left + right) / 2;
+            uint64_t mid_key = key(middle);
+            if (mid_key == target) {
+                find = true;
+                return middle;
+            } else if (mid_key > target) {
+                right = middle - 1;
+            } else {
+                left = middle + 1;
+            }
+        }
+        find = false;
+        return left;
+    }
+
+    ALWAYS_INLINE uint64_t value(int idx) const {
+      // the const bit mask will be generated during compile
+      return records[idx].ptr;
+    }
+
+    ALWAYS_INLINE uint64_t key(int idx) const {
+      return records[idx].key;
+    }
+
+    status Put(CLevel::MemControl* mem, uint64_t key, uint64_t value) {
+        status ret = status::OK;
+        int idx = 0;
+        // Common::timers["CLevel_times"].start();
+        ret = PutBufKV(key, value, idx);
+        if(ret != status::OK) {
+            return ret;
+        }
+        entries ++;
+        clflush(&header); 
+        // Common::timers["CLevel_times"].end();
+        return status::OK;
+    }
+
+    status Update(CLevel::MemControl* mem, uint64_t key, uint64_t value) {
+        bool find = false;
+        int pos = Find(key, find);
+        if(!find && this->value(pos) == 0) {
+            // Show();
+            return status::NoExist;
+        }
+        SetValue(pos, value);
+        return status::OK;
+    }
+
+    status Get(CLevel::MemControl* mem, uint64_t key, uint64_t& value) const
+    {
+        bool find = false;
+        int pos = Find(key, find);
+        if(!find || this->value(pos)== 0) {
+            // Show();
+            return status::NoExist;
+        }
+        value = this->value(pos);
+        return status::OK;
+    }
+
+    status Delete(CLevel::MemControl* mem, uint64_t key, uint64_t* value)
+    {
+        auto ret = remove_key(key, value);
+        if(!ret) {
+            return status::NoExist;
+        }
+        fence();
+        entries --;
+        clflush(&header);
+        fence();
+        return status::OK;
+    }
+
+    void Show() const {
+        std::cout << "This: " << this << ", entry count: " << entries << std::endl;
+        for(int i = 0; i < entries; i ++) {
+            std::cout << "key: " << key(i) << ", value: " << value(i) << std::endl;
+        }
+    }
+
+    uint64_t EntryCount() const {
+        return entries;
+    }
+
+    void SetInvalid() {  }
+    bool IsValid()    { return false; }
+
+private:
+     // Frist 8 byte head 
+    struct entry {
+        uint64_t key;
+        uint64_t ptr;
+    };
+
+    const static size_t buf_size = bucket_size - (8 + 2);
+    const static size_t entry_size = (key_size + value_size);
+    const static size_t entry_count = (buf_size / entry_size);
+
+    SortBuncket *next_bucket;
+    union {
+        uint16_t header;
+        struct {
+            uint16_t entries      : 8;
+            uint16_t max_entries  : 8;  // MSB
+        };
+    };
+    // char buf[buf_size];
+    entry records[entry_count];
+
+public:
+    class Iter {
+    public:
+        Iter() {}
+
+        Iter(const SortBuncket* bucket, uint64_t prefix_key, uint64_t start_key)
+            : cur_(bucket), prefix_key(prefix_key)
+        {
+            if(unlikely(start_key <= prefix_key)) {
+                idx_ = 0;
+                return;
+            } else {
+                bool find = false;
+                idx_ = cur_->Find(start_key, find);
+            }
+        }
+
+        Iter(const SortBuncket* bucket, uint64_t prefix_key)
+            : cur_(bucket), prefix_key(prefix_key)
+        {
+            idx_ = 0;
+        }
+
+        ALWAYS_INLINE uint64_t key() const {
+            return cur_->key(idx_);
+        }
+
+        ALWAYS_INLINE uint64_t value() const {
+            return cur_->value(idx_);
+        }
+
+        // return false if reachs end
+        ALWAYS_INLINE bool next() {
+            idx_++;
+            if (idx_ >= cur_->entries) {
+                return false;
+            } else {
+                return true;
+            }
+        }
+
+        ALWAYS_INLINE bool end() const {
+            return cur_ == nullptr ? true : (idx_ >= cur_->entries ? true : false);
+        }
+
+        bool operator==(const Iter& iter) const { return idx_ == iter.idx_ && cur_ == iter.cur_; }
+        bool operator!=(const Iter& iter) const { return idx_ != iter.idx_ || cur_ != iter.cur_; }
+
+    private:
+        uint64_t prefix_key;
+        const SortBuncket* cur_;
+        int idx_;   // current index in node
+    };
+};
