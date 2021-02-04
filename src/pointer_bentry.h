@@ -551,7 +551,7 @@ public:
     status Update(CLevel::MemControl* mem, uint64_t key, uint64_t value) {
         bool find = false;
         int pos = Find(key, find);
-        if(!find && this->value(pos) == 0) {
+        if(!find || this->value(pos) == 0) {
             // Show();
             return status::NoExist;
         }
@@ -937,7 +937,7 @@ public:
     status Update(CLevel::MemControl* mem, uint64_t key, uint64_t value) {
         bool find = false;
         int pos = Find(key, find);
-        if(!find && this->value(pos) == 0) {
+        if(!find || this->value(pos) == 0) {
             // Show();
             return status::NoExist;
         }
@@ -1064,7 +1064,7 @@ public:
 
 
 // typedef Buncket<256, 8> buncket_t;
-typedef SortBuncket<256, 8> buncket_t;  
+typedef UnSortBuncket<256, 8> buncket_t;  
 // c层节点的定义， C层节点需支持Put，Get，Update，Delete
 // C层节点内部需要实现一个Iter作为迭代器，
 
@@ -1228,6 +1228,9 @@ struct  PointerBEntry {
         // if(ret != status::OK) {
         //     std::cout << "Put failed " << ret << std::endl;
         // }
+        if(ret == status::OK && entry_key > key) {
+            entry_key = key;
+        }
         return ret;
     }
     bool Update(CLevel::MemControl* mem, uint64_t key, uint64_t value) {
@@ -1454,80 +1457,26 @@ class __attribute__((aligned(64))) UnSortBuncket {
       if(entries >= max_entries) {
         return status::Full;
       }
-      if(entries == 0) {  // this page is empty
-          records[0].key = new_key;
-          records[0].ptr = value;
-          records[1].ptr = 0;
-          fence();
-          return status::OK;
-      }
-      {
-        int i = entries, inserted = 0;
-        if(entries < max_entries - 1) {
-            records[i+1].ptr = records[i].ptr; 
-            if((uint64_t)pvalue(i+1) % CACHE_LINE_SIZE == 0) {
-                if(flush) clflush(pvalue(i+1));
-            }
-        }
-
-        for(i = entries - 1; i >= 0; i --) {
-            if(new_key < records[i].key ) {
-                records[i+1].ptr = records[i].ptr;
-                records[i+1].key = records[i].key;
-                if(!flush) continue;
-                uint64_t records_ptr = (uint64_t)(&records[i+1]);
-                int remainder = records_ptr % CACHE_LINE_SIZE;
-                bool do_flush = (remainder == 0) || 
-                    ((((int)(remainder + sizeof(entry)) / CACHE_LINE_SIZE) == 1) 
-                    && ((remainder+sizeof(entry))%CACHE_LINE_SIZE)!=0);
-                if(do_flush) {
-                    clflush((char*)records_ptr);
-                }
-            } else {
-                records[i+1].ptr = records[i].ptr;
-                records[i+1].key = new_key;
-                records[i+1].ptr = value;
-                if(flush) clflush((char*)&records[i+1]);
-                inserted = 1;
-                break;
-            }  
-        }
-        if(inserted == 0) {
-            records[0].key = new_key;
-            records[0].ptr = value;
-            if(flush) clflush((char*) &records[0]); 
-        }
-      }
+      records[entries].key = new_key;
+      records[entries].ptr = value;
+      if(flush) clflush((char*)&records[entries]);
       fence();
       return status::OK;
     }
 
     inline bool remove_key(uint64_t key, uint64_t *value) {
-      bool shift = false;
-      int i;
-      for(i = 0; records[i].ptr != 0; ++i) {
-        if(!shift && records[i].key == key) {
-          if(value) *value = records[i].ptr;
-          if(i != 0) {
-            records[i].ptr = records[i - 1].ptr;
-          }
-          shift = true;
-        }
-
-        if(shift) {
-          records[i].key = records[i + 1].key;
-          records[i].ptr = records[i + 1].ptr;
-          uint64_t records_ptr = (uint64_t)(&records[i]);
-          int remainder = records_ptr % CACHE_LINE_SIZE;
-          bool do_flush = (remainder == 0) || 
-            ((((int)(remainder + sizeof(entry)) / CACHE_LINE_SIZE) == 1) && 
-             ((remainder + sizeof(entry)) % CACHE_LINE_SIZE) != 0);
-          if(do_flush) {
-            clflush((char *)records_ptr);
-          }
+      bool find = false;
+      pos = Find(key, find);
+      if(find) {
+        if(pos == entries - 1) return true;
+        else {
+          if(value) *value = records[pos].ptr;
+          records[pos].key = records[entries-1].ptr;
+          records[pos].ptr = records[entries-1].ptr;
+          return true;
         }
       }
-      return shift;
+      return false;
     }
 
     status SetValue(int pos, uint64_t value) {
@@ -1537,16 +1486,27 @@ class __attribute__((aligned(64))) UnSortBuncket {
       return status::OK;
     }
 
+    int getSortedIndex(int sorted_index[entries]) const {
+        uint64_t keys[entries];
+        for (int i = 0; i < entries; ++i) {
+            keys[i] = key(i, 0);  // prefix does not matter
+            sorted_index[i] = i;
+        }
+        std::sort(&sorted_index[0], &sorted_index[entries],
+            [&keys](uint64_t a, uint64_t b) { return keys[a] < keys[b]; });
+        return entries;
+    }
+
 public:
     class Iter;
 
-    SortBuncket(uint64_t key, int prefix_len) : entries(0), next_bucket(nullptr) {
+    UnSortBuncket(uint64_t key, int prefix_len) : entries(0), next_bucket(nullptr) {
         next_bucket = nullptr;
         max_entries = std::min(buf_size / (value_size + key_size), max_entry_count);
         // std::cout << "Max Entry size is:" <<  max_entries << std::endl;
     }
 
-    explicit SortBuncket(uint64_t key, uint64_t value, int prefix_len) : entries(0), next_bucket(nullptr) {
+    explicit UnSortBuncket(uint64_t key, uint64_t value, int prefix_len) : entries(0), next_bucket(nullptr) {
         next_bucket = nullptr;
         max_entries = std::min(buf_size / (value_size + key_size), max_entry_count);
         // std::cout << "Max Entry size is:" <<  max_entries << std::endl;
@@ -1570,18 +1530,23 @@ public:
         return status::OK;
     }
 
-    status Expand_(CLevel::MemControl *mem, SortBuncket *&next, uint64_t &split_key, int &prefix_len) {
+    status Expand_(CLevel::MemControl *mem, UnSortBuncket *&next, uint64_t &split_key, int &prefix_len) {
         // int expand_pos = entries / 2;
-        next = new (mem->Allocate<SortBuncket>()) SortBuncket(key(entries / 2), prefix_len);
+        int sorted_index_[entries];
+        getSortedIndex(sorted_index_);
+        split_key = key(sorted_index_(entries / 2);
+        next = new (mem->Allocate<UnSortBuncket>()) UnSortBuncket(split_key), prefix_len);
         // int idx = 0;
-        split_key = key(entries / 2);
+        
         prefix_len = 0;
         int idx = 0;
         int m = (int) ceil(entries / 2);
         for(int i = m; i < entries; i ++) {
             // next->Put(nullptr, key(i), value(i));
-            next->PutBufKV(key(i), value(i), idx, false);
+            next->PutBufKV(key(sorted_index_(i)), value(sorted_index_(i)), idx, false);
             next->entries ++;
+            uint64_t *value;
+            remove_key(sorted_index_[i], value);
         }
         next->next_bucket = this->next_bucket;
         NVM::Mem_persist(next, sizeof(*next));
@@ -1597,27 +1562,19 @@ public:
         return status::OK;
     }
 
-    SortBuncket *Next() {
+    UnSortBuncket *Next() {
         return next_bucket;
     }
 
     int Find(uint64_t target, bool& find) const {
-        int left = 0;
-        int right = entries - 1;
-        while (left <= right) {
-            int middle = (left + right) / 2;
-            uint64_t mid_key = key(middle);
-            if (mid_key == target) {
+        for(int i = 0; i < entries; i++) {
+            if(key(i) == target) {
                 find = true;
-                return middle;
-            } else if (mid_key > target) {
-                right = middle - 1;
-            } else {
-                left = middle + 1;
+                return i;
             }
         }
         find = false;
-        return left;
+        return entries;
     }
 
     ALWAYS_INLINE uint64_t value(int idx) const {
@@ -1646,7 +1603,7 @@ public:
     status Update(CLevel::MemControl* mem, uint64_t key, uint64_t value) {
         bool find = false;
         int pos = Find(key, find);
-        if(!find && this->value(pos) == 0) {
+        if(!find) {
             // Show();
             return status::NoExist;
         }
@@ -1658,7 +1615,7 @@ public:
     {
         bool find = false;
         int pos = Find(key, find);
-        if(!find || this->value(pos)== 0) {
+        if(!find) {
             // Show();
             return status::NoExist;
         }
@@ -1720,38 +1677,48 @@ public:
     public:
         Iter() {}
 
-        Iter(const SortBuncket* bucket, uint64_t prefix_key, uint64_t start_key)
+        Iter(const UnSortBuncket* bucket, uint64_t prefix_key, uint64_t start_key)
             : cur_(bucket), prefix_key(prefix_key)
         {
             if(unlikely(start_key <= prefix_key)) {
                 idx_ = 0;
                 return;
             } else {
-                bool find = false;
-                idx_ = cur_->Find(start_key, find);
+                for(int i = 0; i < cur_->entries; i++) {
+                    if(cur_->key(sorted_index_[i]) >= start_key) {
+                        idx_ = i;
+                        return;
+                    }
+                }
+                idx_ = entries;
+                return;
             }
         }
 
-        Iter(const SortBuncket* bucket, uint64_t prefix_key)
+        Iter(const UnSortBuncket* bucket, uint64_t prefix_key)
             : cur_(bucket), prefix_key(prefix_key)
         {
             idx_ = 0;
         }
 
         ALWAYS_INLINE uint64_t key() const {
-            return cur_->key(idx_);
+            if (idx_ < cur_->entries)
+                return cur_->key(sorted_index_[idx_]);
+            else return 0;
         }
 
         ALWAYS_INLINE uint64_t value() const {
-            return cur_->value(idx_);
+            if (idx_ < cur_->entries)
+                return cur_->value(sorted_index_[idx_]);
+            else return 0;
         }
 
         // return false if reachs end
         ALWAYS_INLINE bool next() {
-            idx_++;
-            if (idx_ >= cur_->entries) {
+            if (idx_ >= cur_->entries - 1) {
                 return false;
             } else {
+                idx_ ++;
                 return true;
             }
         }
@@ -1765,7 +1732,8 @@ public:
 
     private:
         uint64_t prefix_key;
-        const SortBuncket* cur_;
-        int idx_;   // current index in node
+        const UnSortBuncket* cur_;
+        int idx_;   // current index in sorted_index_
+        int sorted_index_[cur_->entries];
     };
 };
