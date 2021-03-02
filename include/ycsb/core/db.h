@@ -114,6 +114,7 @@ class KvDB {
   virtual int Put(uint64_t key, uint64_t value) = 0;
   virtual int Get(uint64_t key, uint64_t &value) = 0;
   virtual int Update(uint64_t key, uint64_t value) = 0;
+  virtual int Delete(uint64_t key) = 0;
   virtual int Scan(uint64_t start_key, int len, std::vector<std::pair<uint64_t, uint64_t>>& results) = 0;
   virtual void PrintStatic() {}
   // virtual int Delete(const std::string &table, const std::string &key) = 0;

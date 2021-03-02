@@ -77,6 +77,11 @@ public:
         tree_->btree_insert(key, (char *)value);
         return 1;
     }
+
+    int Delete(uint64_t key) {
+        tree_->btree_delete(key);
+        return 1;
+    }
     int Scan(uint64_t start_key, int len, std::vector<std::pair<uint64_t, uint64_t>>& results) 
     {
         tree_->btree_search_range(start_key, UINT64_MAX, results, len);
@@ -119,6 +124,12 @@ public:
         tree_->Update(key, value);
         return 1;
     }
+
+    int Delete(uint64_t key) {
+        tree_->Delete(key);
+        return 1;
+    }
+
     int Scan(uint64_t start_key, int len, std::vector<std::pair<uint64_t, uint64_t>>& results) 
     {
         tree_->Scan(start_key, len, results);
@@ -181,6 +192,11 @@ public:
       pgm_->insert(key, (char *)value);
       return 1;
   }
+
+  int Delete(uint64_t key) {
+      pgm_->erase(key);
+      return 1;
+  }
   int Scan(uint64_t start_key, int len, std::vector<std::pair<uint64_t, uint64_t>>& results) 
   {
     int scan_count = 0;
@@ -231,6 +247,10 @@ public:
   }
   int Update(uint64_t key, uint64_t value) {
       xindex_->put(index_key_t(key), value >> 4, 0);
+      return 1;
+  }
+  int Delete(uint64_t key) {
+      xindex_->remove(key, 0);
       return 1;
   }
   int Scan(uint64_t start_key, int len, std::vector<std::pair<uint64_t, uint64_t>>& results) 
@@ -293,6 +313,10 @@ public:
   }
   int Update(uint64_t key, uint64_t value) {
       btree_->find(key).data() = value;
+      return 1;
+  }
+  int Delete(uint64_t key) {
+      btree_->erase(key);
       return 1;
   }
   int Scan(uint64_t start_key, int len, std::vector<std::pair<uint64_t, uint64_t>>& results) 
@@ -358,6 +382,10 @@ public:
       NVM::Mem_persist(addrs, sizeof(uint64_t));
       return 1;
   }
+  int Delete(uint64_t key) {
+      alex_->erase(key);
+      return 1;
+  }
   int Scan(uint64_t start_key, int len, std::vector<std::pair<uint64_t, uint64_t>>& results) 
   {
     auto it = alex_->lower_bound(start_key);
@@ -420,6 +448,10 @@ public:
   int Get(uint64_t key, uint64_t &value)
   {
       root_->Get(key, value);
+      return 1;
+  }
+  int Delete(uint64_t key) {
+      root_->Delete(key);
       return 1;
   }
   int Update(uint64_t key, uint64_t value) {

@@ -13,6 +13,7 @@
 #include "random.h"
 #include "ycsb/ycsb-c.h"
 #include "../src/combotree_config.h"
+#include "../src/pmem.h"
 
 using namespace NVM;
 
@@ -22,6 +23,9 @@ const size_t opsizes[] = {
 
 #define ArrayLen(arry) (sizeof(arry) / sizeof(arry[0]))
 
+void nvm_flush(const void *addr, size_t len) {
+
+}
 void NVM_DRAM_TEST(size_t size, size_t operations, bool NVM);
 
 int main()
@@ -80,7 +84,9 @@ void NVM_DRAM_TEST(size_t size, size_t operations, bool NVM) {
         for(size_t j = 0; j < operations; j ++) {
             size_t addr = rnd.Next();
             memcpy((char *)base_addr + (opsize * addr), buf, opsize);
-            Mem_persist((char *)base_addr + (opsize * addr), opsize);
+            if(NVM) {
+                _nvm_perisist((char *)base_addr + (opsize * addr), opsize);
+            }
         }
         auto duration = timer.End<std::chrono::nanoseconds>();
         std::cout << "average write " << opsize <<  " bytes latency: " << 1.0 * duration / operations << " ns." <<std::endl;

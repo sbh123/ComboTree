@@ -7,8 +7,10 @@
 #include <getopt.h>
 #include <unistd.h>
 #include "combotree/combotree.h"
-#include "combotree_config.h"
+#include "../src/combotree_config.h"
+#include "db_interface.h"
 #include "random.h"
+#include "nvm_alloc.h"
 #include "timer.h"
 
 size_t LOAD_SIZE   = 10000000;
@@ -25,6 +27,8 @@ std::vector<size_t> sort_scan_size;
 using combotree::ComboTree;
 using combotree::Random;
 using combotree::Timer;
+using ycsbc::KvDB;
+using namespace dbInter;
 
 // return human readable string of size
 std::string human_readable(double size) {
@@ -49,6 +53,24 @@ std::string human_readable(double size) {
   out << std::fixed << size;
   return out.str() + suffix[arr_len - 1];
 }
+
+const uint64_t kFNVOffsetBasis64 = 0xCBF29CE484222325;
+const uint64_t kFNVPrime64 = 1099511628211;
+
+inline uint64_t FNVHash64(uint64_t val) {
+  uint64_t hash = kFNVOffsetBasis64;
+
+  for (int i = 0; i < 8; i++) {
+    uint64_t octet = val & 0x00ff;
+    val = val >> 8;
+
+    hash = hash ^ octet;
+    hash = hash * kFNVPrime64;
+  }
+  return hash;
+}
+
+inline uint64_t Hash(uint64_t val) { return FNVHash64(val); }
 
 void show_help(char* prog) {
   std::cout <<
@@ -78,6 +100,7 @@ int main(int argc, char** argv) {
     {"scan-test-size",  required_argument, NULL, 0},
     {"scan",            required_argument, NULL, 's'},
     {"sort-scan",       required_argument, NULL, 0},
+    {"dbname",       required_argument, NULL, 0},
     {"use-data-file",   no_argument,       NULL, 'd'},
     {"help",            no_argument,       NULL, 'h'},
     {NULL, 0, NULL, 0}
@@ -85,6 +108,7 @@ int main(int argc, char** argv) {
 
   int c;
   int opt_idx;
+  std::string  dbName= "combotree";
   while ((c = getopt_long(argc, argv, "t:s:dh", opts, &opt_idx)) != -1) {
     switch (c) {
       case 0:
@@ -97,8 +121,9 @@ int main(int argc, char** argv) {
           case 5: SCAN_TEST_SIZE = atoi(optarg); break;
           case 6: scan_size.push_back(atoi(optarg)); break;
           case 7: sort_scan_size.push_back(atoi(optarg)); break;
-          case 8: use_data_file = true; break;
-          case 9: show_help(argv[0]); return 0;
+          case 8: dbName = optarg; break;
+          case 9: use_data_file = true; break;
+          case 10: show_help(argv[0]); return 0;
           default: std::cerr << "Parse Argument Error!" << std::endl; abort();
         }
         break;
@@ -149,17 +174,27 @@ int main(int argc, char** argv) {
   } else {
     Random rnd(0, LOAD_SIZE+PUT_SIZE-1);
     for (size_t i = 0; i < LOAD_SIZE+PUT_SIZE; ++i)
-      key.push_back(i);
+      key.push_back(Hash(i));
     for (size_t i = 0; i < LOAD_SIZE+PUT_SIZE; ++i)
       std::swap(key[i],key[rnd.Next()]);
   }
+  NVM::env_init();
+  KvDB* db = nullptr;
+  if(dbName == "fastfair") {
+    db = new FastFairDb();
+  } else if(dbName == "pgm") {
+    db = new PGMDynamicDb();
+  } else if(dbName == "xindex") {
+    db = new XIndexDb();
+  } else if(dbName == "alex") {
+    db = new AlexDB();
+  // } else if(dbName == "learngroup") {
+  //   db = new LearnGroupDB();
+  } else {
+    db = new ComboTreeDb();
+  }
 
-#ifdef SERVER
-  ComboTree* tree = new ComboTree("/pmem0/combotree/", (1024*1024*1024*100UL), true);
-#else
-  ComboTree* tree = new ComboTree("/mnt/pmem0/", (1024*1024*512UL), true);
-#endif
-
+  db->Init();
   Timer timer;
   std::vector<std::thread> threads;
   size_t per_thread_size;
@@ -173,7 +208,6 @@ int main(int argc, char** argv) {
     std::cerr << "command error: " << cmd_buf << std::endl;
     return -1;
   }
-
   // Load
   per_thread_size = LOAD_SIZE / thread_num;
   timer.Record("start");
@@ -182,9 +216,10 @@ int main(int argc, char** argv) {
       size_t start_pos = i*per_thread_size;
       size_t size = (i == thread_num-1) ? LOAD_SIZE-(thread_num-1)*per_thread_size : per_thread_size;
       for (size_t j = 0; j < size; ++j) {
-        bool ret = tree->Put(key[start_pos+j], key[start_pos+j]);
-        if (ret != true) {
-          std::cout << "load error!" << std::endl;
+        auto ret = db->Put(key[start_pos+j], key[start_pos+j]);
+        if (ret != 1) {
+          std::cout << "load error, key: " << key[start_pos+j] << ", size: " << j << std::endl;
+          db->Put(key[start_pos+j], key[start_pos+j]);
           assert(0);
         }
       }
@@ -206,8 +241,8 @@ int main(int argc, char** argv) {
       size_t start_pos = i*per_thread_size+LOAD_SIZE;
       size_t size = (i == thread_num-1) ? PUT_SIZE-(thread_num-1)*per_thread_size : per_thread_size;
       for (size_t j = 0; j < size; ++j) {
-        bool ret = tree->Put(key[start_pos+j], key[start_pos+j]);
-        if (ret != true) {
+        auto ret = db->Put(key[start_pos+j], key[start_pos+j]);
+        if (ret != 1) {
           std::cout << "put error!" << std::endl;
           assert(0);
         }
@@ -222,14 +257,15 @@ int main(int argc, char** argv) {
   std::cout << "put:  " << total_time/1000000.0 << " " << (double)PUT_SIZE/(double)total_time*1000000.0 << std::endl;
 
   // statistic
-  std::cout << "clevel time:    " << tree->CLevelTime()/1000000.0 << std::endl;
-  std::cout << "entries:        " << tree->BLevelEntries() << std::endl;
-  std::cout << "clevels:        " << tree->CLevelCount() << std::endl;
-  std::cout << "clevel percent: " << (double)tree->CLevelCount() / tree->BLevelEntries() * 100.0 << "%" << std::endl;
-  std::cout << "size:           " << tree->Size() << std::endl;
-  std::cout << "usage:          " << human_readable(tree->Usage()) << std::endl;
-  std::cout << "bytes-per-pair: " << (double)tree->Usage() / tree->Size() << std::endl;
-  tree->BLevelCompression();
+  // std::cout << "clevel time:    " << db->CLevelTime()/1000000.0 << std::endl;
+  // std::cout << "entries:        " << db->BLevelEntries() << std::endl;
+  // std::cout << "clevels:        " << db->CLevelCount() << std::endl;
+  // std::cout << "clevel percent: " << (double)db->CLevelCount() / db->BLevelEntries() * 100.0 << "%" << std::endl;
+  // std::cout << "size:           " << db->Size() << std::endl;
+  // std::cout << "usage:          " << human_readable(db->Usage()) << std::endl;
+  // std::cout << "bytes-per-pair: " << (double)db->Usage() / db->Size() << std::endl;
+  // db->BLevelCompression();
+  db->PrintStatic();
 
   sprintf(cmd_buf, "pmap %d > ./usage_after.txt", pid);
   if (system(cmd_buf) != 0) {
@@ -242,6 +278,7 @@ int main(int argc, char** argv) {
   for (size_t i = 0; i < GET_SIZE; ++i)
     std::swap(key[i],key[get_rnd.Next()]);
   per_thread_size = GET_SIZE / thread_num;
+  db->Begin_trans();
   timer.Clear();
   timer.Record("start");
   for (int i = 0; i < thread_num; ++i) {
@@ -250,7 +287,7 @@ int main(int argc, char** argv) {
       size_t size = (i == thread_num-1) ? GET_SIZE-(thread_num-1)*per_thread_size : per_thread_size;
       size_t value;
       for (size_t j = 0; j < size; ++j) {
-        bool ret = tree->Get(key[start_pos+j], value);
+        bool ret = db->Get(key[start_pos+j], value);
         if (ret != true) {
           std::cout << "get error!" << std::endl;
           assert(0);
@@ -277,17 +314,19 @@ int main(int argc, char** argv) {
         size_t size = (i == thread_num-1) ? total_size-(thread_num-1)*per_thread_size : per_thread_size;
         for (size_t j = 0; j < size; ++j) {
           uint64_t start_key = key[start_pos+j];
-          ComboTree::NoSortIter iter(tree, start_key);
-          if (iter.end())
-            continue;
-          for (size_t k = 0; k < scan; ++k) {
-            if (iter.key() != iter.value()) {
-              std::cout << "scan error" << std::endl;
-              assert(0);
-            }
-            if (!iter.next())
-              break;
-          }
+          // ComboTree::NoSortIter iter(db, start_key);
+          // if (iter.end())
+          //   continue;
+          // for (size_t k = 0; k < scan; ++k) {
+          //   if (iter.key() != iter.value()) {
+          //     std::cout << "scan error" << std::endl;
+          //     assert(0);
+          //   }
+          //   if (!iter.next())
+          //     break;
+          // }
+          std::vector<std::pair<uint64_t, uint64_t>> results;
+          db->Scan(start_key, scan, results);
         }
       });
     }
@@ -300,42 +339,42 @@ int main(int argc, char** argv) {
   }
 
   // sort_scan
-  for (auto scan : sort_scan_size) {
-    size_t total_size = std::min(SCAN_TEST_SIZE / scan, LOAD_SIZE+PUT_SIZE);
-    per_thread_size = total_size / thread_num;
-    timer.Clear();
-    timer.Record("start");
-    for (int i = 0; i < thread_num; ++i) {
-      threads.emplace_back([=,&key](){
-        size_t start_pos = i*per_thread_size;
-        size_t size = (i == thread_num-1) ? total_size-(thread_num-1)*per_thread_size : per_thread_size;
-        for (size_t j = 0; j < size; ++j) {
-          uint64_t start_key = key[start_pos+j];
-          ComboTree::Iter iter(tree, start_key);
-          if (iter.end())
-            continue;
-          for (size_t k = 0; k < scan; ++k) {
-            if (iter.key() != start_key + k) {
-              std::cout << "scan error!" << std::endl;
-              assert(0);
-            }
-            if (iter.value() != start_key + k) {
-              std::cout << "scan error!" << std::endl;
-              assert(0);
-            }
-            if (!iter.next())
-              break;
-          }
-        }
-      });
-    }
-    for (auto& t : threads)
-      t.join();
-    timer.Record("stop");
-    threads.clear();
-    total_time = timer.Microsecond("stop", "start");
-    std::cout << "sort scan " << scan << ": " << total_time/1000000.0 << " " << (double)total_size/(double)total_time*1000000.0 << std::endl;
-  }
+  // for (auto scan : sort_scan_size) {
+  //   size_t total_size = std::min(SCAN_TEST_SIZE / scan, LOAD_SIZE+PUT_SIZE);
+  //   per_thread_size = total_size / thread_num;
+  //   timer.Clear();
+  //   timer.Record("start");
+  //   for (int i = 0; i < thread_num; ++i) {
+  //     threads.emplace_back([=,&key](){
+  //       size_t start_pos = i*per_thread_size;
+  //       size_t size = (i == thread_num-1) ? total_size-(thread_num-1)*per_thread_size : per_thread_size;
+  //       for (size_t j = 0; j < size; ++j) {
+  //         uint64_t start_key = key[start_pos+j];
+  //         ComboTree::Iter iter(db, start_key);
+  //         if (iter.end())
+  //           continue;
+  //         for (size_t k = 0; k < scan; ++k) {
+  //           if (iter.key() != start_key + k) {
+  //             std::cout << "scan error!" << std::endl;
+  //             assert(0);
+  //           }
+  //           if (iter.value() != start_key + k) {
+  //             std::cout << "scan error!" << std::endl;
+  //             assert(0);
+  //           }
+  //           if (!iter.next())
+  //             break;
+  //         }
+  //       }
+  //     });
+  //   }
+  //   for (auto& t : threads)
+  //     t.join();
+  //   timer.Record("stop");
+  //   threads.clear();
+  //   total_time = timer.Microsecond("stop", "start");
+  //   std::cout << "sort scan " << scan << ": " << total_time/1000000.0 << " " << (double)total_size/(double)total_time*1000000.0 << std::endl;
+  // }
 
   // Delete
   Random delete_rnd(0, DELETE_SIZE-1);
@@ -349,7 +388,7 @@ int main(int argc, char** argv) {
       size_t start_pos = i*per_thread_size;
       size_t size = (i == thread_num-1) ? DELETE_SIZE-(thread_num-1)*per_thread_size : per_thread_size;
       for (size_t j = 0; j < size; ++j) {
-        if (tree->Delete(key[start_pos+j]) != true) {
+        if (db->Delete(key[start_pos+j]) != true) {
           std::cout << "delete error!" << std::endl;
           assert(0);
         }
@@ -363,7 +402,7 @@ int main(int argc, char** argv) {
   total_time = timer.Microsecond("stop", "start");
   std::cout << "delete: " << total_time/1000000.0 << " " << (double)DELETE_SIZE/(double)total_time*1000000.0 << std::endl;
 
-  delete tree;
-
+  delete db;
+  NVM::env_exit();
   return 0;
 }
