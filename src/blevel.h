@@ -13,12 +13,13 @@
 
 #include "bentry.h"
 #include "common_time.h"
-#include "pointer_bentry.h"
+#include "combotree/combotree.h"
+// #include "pointer_bentry.h"
 
 namespace combotree {
 
 class Test;
-#define POINTER_BENTRY
+// #define POINTER_BENTRY
 class BLevel {
 #ifdef POINTER_BENTRY
     typedef combotree::PointerBEntry bentry_t;

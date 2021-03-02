@@ -5,6 +5,7 @@
 #include <cstring>
 #include <cassert>
 #include <algorithm>
+#include "combotree/combotree.h"
 #include "combotree_config.h"
 #include "pmem.h"
 
@@ -140,7 +141,7 @@ struct KVBuffer {
     fence();
   }
 
-  ALWAYS_INLINE bool Put(int pos, void* new_key, uint64_t value) {
+  ALWAYS_INLINE status Put(int pos, void* new_key, uint64_t value) {
 #ifdef BUF_SORT
     memmove(pkey(pos+1), pkey(pos), suffix_bytes*(entries-pos));
     memmove(pvalue(entries), pvalue(entries-1), value_size*(entries-pos));
@@ -151,7 +152,7 @@ struct KVBuffer {
     clflush(pvalue(pos));
     clflush(&meta);
     fence();
-    return true;
+    return status::OK;
 #else
     // pos == entries
     memcpy(pkey(pos), new_key, suffix_bytes);
@@ -160,7 +161,7 @@ struct KVBuffer {
     clflush(pvalue(pos));
     clflush(&meta);
     fence();
-    return true;
+    return status::OK;
 #endif // BUF_SORT
   }
 
@@ -171,7 +172,7 @@ struct KVBuffer {
     return true;
   }
 
-  ALWAYS_INLINE bool Put(int pos, uint64_t new_key, uint64_t value) {
+  ALWAYS_INLINE status Put(int pos, uint64_t new_key, uint64_t value) {
     return Put(pos, &new_key, value);
   }
 

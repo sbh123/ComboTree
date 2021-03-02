@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <vector>
 #include <shared_mutex>
+#include "combotree/combotree.h"
 #include "combotree_config.h"
 #include "kvbuffer.h"
 #include "clevel.h"
@@ -29,7 +30,7 @@ struct __attribute__((aligned(64))) BEntry {
       return buf.value(idx);
     }
 
-    bool Put(CLevel::MemControl* mem, uint64_t key, uint64_t value);
+    status Put(CLevel::MemControl* mem, uint64_t key, uint64_t value);
     bool Update(CLevel::MemControl* mem, uint64_t key, uint64_t value);
     bool Get(CLevel::MemControl* mem, uint64_t key, uint64_t& value) const;
     bool Delete(CLevel::MemControl* mem, uint64_t key, uint64_t* value);

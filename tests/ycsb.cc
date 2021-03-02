@@ -24,18 +24,18 @@ using xindex::XIndex;
 
 
 const char *workloads[] = {
-  // "workloada.spec",
-  // "workloadb.spec",
-  // "workloadc.spec",
-  // "workloadd.spec",
-  // "workloade.spec",
-  // "workloadf.spec",
-  "workloada_insert_0.spec",
+  "workloada.spec",
+  "workloadb.spec",
+  "workloadc.spec",
+  "workloadd.spec",
+  "workloade.spec",
+  "workloadf.spec",
+  // "workloada_insert_0.spec",
   // "workloada_insert_10.spec",
   // "workloada_insert_20.spec",
   // "workloada_insert_50.spec",
   // "workloada_insert_80.spec",
-  "workloada_insert_100.spec",
+  // "workloada_insert_100.spec",
   // "workload_read.spec",
   // "workload_insert.spec",
 

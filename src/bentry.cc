@@ -24,7 +24,7 @@ BEntry::BEntry(uint64_t key, int prefix_len, CLevel::MemControl* mem)
 }
 
 // return true if not exist before, return false if update.
-bool BEntry::Put(CLevel::MemControl* mem, uint64_t key, uint64_t value) {
+status BEntry::Put(CLevel::MemControl* mem, uint64_t key, uint64_t value) {
 #ifdef BUF_SORT
   bool exist;
   int pos = buf.Find(key, exist);

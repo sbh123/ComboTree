@@ -1141,7 +1141,7 @@ public:
         Put(nullptr, key, value);
     }
 
-    ~SortBuncket() {
+    ~UnSortBuncket() {
         
     }
 
@@ -1297,7 +1297,7 @@ private:
     const static size_t entry_size = (key_size + value_size);
     const static size_t entry_count = (buf_size / entry_size);
 
-    SortBuncket *next_bucket;
+    UnSortBuncket *next_bucket;
     union {
         uint16_t header;
         struct {
