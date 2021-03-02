@@ -15,4 +15,9 @@ function Run() {
 }
 
 # DBName: combotree fastfair pgm xindex alex
-Run combotree 4000000 100000 4000000 1
+dbs="combotree fastfair pgm xindex alex"
+for dbname in $dbs; do
+    echo "Run: " $dbname
+    Run $dbname 4000000 100000 4000000 1
+    # sleep 100
+done
