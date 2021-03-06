@@ -8,6 +8,7 @@
 #include "ycsb/ycsb-c.h"
 #include "combotree/combotree.h"
 #include "fast-fair/btree.h"
+#include "fast-fair/btree_old.h"
 #include "learnindex/pgm_index_dynamic.hpp"
 #include "learnindex/rmi.h"
 #include "xindex/xindex_impl.h"
@@ -363,6 +364,64 @@ public:
   }
 private:
   alex_t *alex_;
+};
+
+class fastfairDB : public ycsbc::KvDB  {
+  typedef uint64_t KEY_TYPE;
+  typedef uint64_t PAYLOAD_TYPE;
+  typedef fastfair::btree btree_t;
+public:
+  fastfairDB(): tree_(nullptr) {}
+  fastfairDB(btree_t *btree): tree_(btree) {}
+  virtual ~fastfairDB() {
+    delete tree_;
+  }
+
+  void Init()
+  {
+    NVM::data_init();
+    tree_ = new btree_t();
+  }
+
+  void Info()
+  {
+    NVM::show_stat();
+  }
+
+  void Close() { 
+
+    }
+    int Put(uint64_t key, uint64_t value) 
+    {
+        tree_->btree_insert(key, (char *)value);
+        return 1;
+    }
+    int Get(uint64_t key, uint64_t &value)
+    {
+        value = (uint64_t)tree_->btree_search(key);
+        return 1;
+    }
+    int Update(uint64_t key, uint64_t value) {
+        tree_->btree_delete(key);
+        tree_->btree_insert(key, (char *)value);
+        return 1;
+    }
+
+    int Delete(uint64_t key) {
+        tree_->btree_delete(key);
+        return 1;
+    }
+
+    int Scan(uint64_t start_key, int len, std::vector<std::pair<uint64_t, uint64_t>>& results) 
+    {
+        // tree_->btree_search_range(start_key, UINT64_MAX, results, len);
+        return 1;
+    }
+    void PrintStatic() {
+        NVM::show_stat();
+    }
+private:
+  btree_t *tree_;
 };
 
 } //namespace dbInter

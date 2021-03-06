@@ -26,9 +26,10 @@ using RMI::LinearModel;
 typedef RMI::Key_64 rmi_key_t;
 
 static const size_t epsilon = 4;
+static const size_t rmi_error = 2;
 typedef PGMIndex<uint64_t, epsilon> pgm_index_t;
 typedef PGMIndex<uint64_t, epsilon>::Segment segment_t;
-typedef TwoStageRMI<rmi_key_t, 3> rmi_index_t;
+typedef TwoStageRMI<rmi_key_t, rmi_error> rmi_index_t;
 typedef LinearModel<rmi_key_t> linear_model_t;
 
 class LearnIndex {

@@ -181,7 +181,8 @@ int main(int argc, char** argv) {
   NVM::env_init();
   KvDB* db = nullptr;
   if(dbName == "fastfair") {
-    db = new FastFairDb();
+    // db = new FastFairDb();
+    db = new fastfairDB();
   } else if(dbName == "pgm") {
     db = new PGMDynamicDb();
   } else if(dbName == "xindex") {

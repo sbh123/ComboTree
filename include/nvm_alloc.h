@@ -8,9 +8,13 @@
 #include <atomic>
 #include <shared_mutex>
 #include <iostream>
+#include <x86intrin.h>
 
 namespace NVM
 {
+
+#define mfence _mm_sfence
+#define FENCE_METHOD  "_mm_sfence"
 
 static inline void *PmemMapFile(const std::string &file_name, const size_t file_size, size_t *len)
 {
@@ -59,7 +63,9 @@ public:
 #else
 
 static inline void Mem_persist(const void *addr, size_t len) {
+    mfence();
     pmem_persist(addr, len);
+    mfence();
 }
 class Alloc {
 
