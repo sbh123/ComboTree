@@ -44,7 +44,7 @@ public:
   bool Get(uint64_t key, uint64_t& value, uint64_t begin, uint64_t end) const;
   bool Delete(uint64_t key, uint64_t* value, uint64_t begin, uint64_t end);
 
-  bool PutNearPos(uint64_t key, uint64_t value, uint64_t pos);
+  status PutNearPos(uint64_t key, uint64_t value, uint64_t pos);
   bool UpdateNearPos(uint64_t key, uint64_t value, uint64_t pos);
   bool GetNearPos(uint64_t key, uint64_t& value, uint64_t pos) const;
   bool DeleteNearPos(uint64_t key, uint64_t* value, uint64_t pos);

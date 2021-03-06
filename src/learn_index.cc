@@ -98,5 +98,15 @@ void Learn_Index::GetBLevelRange_(uint64_t key, uint64_t& begin, uint64_t& end, 
   // Common::timers["ALevel_times"].end();
   // Common::timers["BLevel_times"].start();
 }
+uint64_t Learn_Index::GetNearPos_(uint64_t key, bool debug) const {
+  if (unlikely(key < min_key_)) {
+    return 0;
+  } else if (unlikely(key >= max_key_)) {
+    return nr_blevel_entry_;
+  } else {
+    auto range = learn_index_->search(key, debug);
+    return range.pos;
+  }
+}
 
 } // namespace combotree

@@ -31,7 +31,7 @@
 namespace xindex {
 
 template <class key_t, class val_t, bool seq, size_t max_model_n = 4>
-class alignas(CACHELINE_SIZE) Group : public NVM::NvmStructBase {
+class alignas(CACHELINE_SIZE) Group {
 
   struct ModelInfo;
 
@@ -41,7 +41,7 @@ class alignas(CACHELINE_SIZE) Group : public NVM::NvmStructBase {
   typedef atomic_val_t wrapped_val_t;
   typedef AltBtreeBuffer<key_t, val_t> buffer_t;
   typedef uint64_t version_t;
-  struct record : public NVM::NvmStructBase, std::pair<key_t, wrapped_val_t>
+  struct record : std::pair<key_t, wrapped_val_t>
   {
     
   };

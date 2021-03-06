@@ -26,19 +26,24 @@ void pgm_dynamic_test();
 int main() {
     Random rnd(0, UINT64_MAX - 1);
     NVM::env_init();
-    NVM::data_init();
     {
-        // int size = 10;
-        // uint64_t *index_data = (uint64_t *)malloc(size * sizeof(uint64_t));
+        int size = 20;
+        uint64_t *index_data = (uint64_t *)malloc(size * sizeof(uint64_t));
         // index_data[0] = 6; index_data[1] = 9, index_data[2] = 11;
         // index_data[3] = 13; index_data[4] = 14, index_data[5] = 15;
         // index_data[6] = 18; index_data[7] = 27, index_data[8] = 37;
         // index_data[9] = 45; 
-        // // uint64_t key = index_data[size / 2];
-        // const int epsilon = 2; // space-time trade-off parameter
-        // PGMIndex<uint64_t, epsilon> index(index_data, index_data + size);
-        // free(index_data);
+        for(int i = 0; i < size; i++) index_data[i] = rnd.Next() % 50;
+        std::sort(index_data, index_data + size);
+        // uint64_t key = index_data[size / 2];
+        const int epsilon = 1; // space-time trade-off parameter
+        index_data[size-1]=47;
+        PGMIndex<uint64_t, epsilon> index(index_data, index_data + size);
+        for(int i = 0; i < size; i++) std::cout << i << " " << index_data[i] << std::endl;
+        free(index_data);
+        return 0;
     }
+    NVM::data_init();
     {
         int size = 10000;
         uint64_t *index_data = (uint64_t *)malloc(size * sizeof(uint64_t));

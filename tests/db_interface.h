@@ -87,6 +87,9 @@ public:
         tree_->btree_search_range(start_key, UINT64_MAX, results, len);
         return 1;
     }
+    void PrintStatic() {
+        NVM::show_stat();
+    }
 private:
     btree *tree_;
 };
@@ -216,6 +219,9 @@ public:
     }  
     return 1;
   }
+  void PrintStatic() {
+    NVM::show_stat();
+  }
 private:
   DynamicPGM *pgm_;
 };
@@ -267,6 +273,9 @@ public:
     xindex_->scan(index_key_t(start_key), len, tmpresults, 0);
     return 1;
   } 
+  void PrintStatic() {
+        NVM::show_stat();
+    }
 private:
   inline void 
   prepare_xindex(size_t init_size, int fg_n, int bg_n) {
@@ -350,6 +359,7 @@ public:
   void PrintStatic() {
     // std::cerr << "Alevel average cost: " << Common::timers["ABLevel_times"].avg_latency() << std::endl;
     // std::cerr << "Clevel average cost: " << Common::timers["CLevel_times"].avg_latency() << std::endl;
+    NVM::show_stat();  
   }
 private:
   alex_t *alex_;

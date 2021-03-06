@@ -17,9 +17,8 @@ public:
   Learn_Index(BLevel* blevel, int span = DEFAULT_SPAN);
   ~Learn_Index();
   ALWAYS_INLINE status Put(uint64_t key, uint64_t value) {
-    uint64_t begin, end;
-    GetBLevelRange_(key, begin, end);
-    return blevel_->Put(key, value, begin, end);
+    uint64_t pos = GetNearPos_(key);
+    return blevel_->PutNearPos(key, value, pos);
   }
 
   ALWAYS_INLINE bool Update(uint64_t key, uint64_t value) {
@@ -29,9 +28,8 @@ public:
   }
 
   ALWAYS_INLINE bool Get(uint64_t key, uint64_t& value) const {
-    uint64_t begin, end;
-    GetBLevelRange_(key, begin, end);
-    return blevel_->Get(key, value, begin, end);
+    uint64_t pos = GetNearPos_(key);
+    return blevel_->GetNearPos(key, value, pos);
   }
 
   ALWAYS_INLINE bool Delete(uint64_t key, uint64_t* value) {
@@ -49,6 +47,7 @@ public:
   }
   
   void GetBLevelRange_(uint64_t key, uint64_t& begin, uint64_t& end, bool debug = false) const;
+  uint64_t GetNearPos_(uint64_t key, bool debug = false) const;
 
   friend ComboTree;
 

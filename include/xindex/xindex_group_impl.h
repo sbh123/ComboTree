@@ -51,8 +51,10 @@ void Group<key_t, val_t, seq, max_model_n>::init(
   this->array_size = array_size;
   this->capacity = array_size * seq_insert_reserve_factor;
   this->model_n = model_n;
-  data = new record_t[this->capacity + 1]();
-  buffer = new buffer_t();
+  // data = new record_t[this->capacity + 1]();
+  data = (record_t *)(NVM::data_alloc->alloc((this->capacity + 1) * sizeof(record_t)));
+
+  buffer = new (NVM::data_alloc->alloc(sizeof(buffer_t))) buffer_t();
 
   for (size_t rec_i = 0; rec_i < array_size; rec_i++) {
     data[rec_i].first = *(keys_begin + rec_i);
@@ -197,7 +199,7 @@ Group<key_t, val_t, seq, max_model_n>
 
   assert(model_n < max_model_n);
 
-  Group *new_group = new Group();
+  Group *new_group = new (NVM::data_alloc->alloc(sizeof(Group))) Group();
 
   new_group->pivot = pivot;
   new_group->array_size = array_size;
@@ -221,7 +223,7 @@ Group<key_t, val_t, seq, max_model_n>
 
   assert(model_n > 1);
 
-  Group *new_group = new Group();
+  Group *new_group = new (NVM::data_alloc->alloc(sizeof(Group))) Group();
 
   new_group->pivot = pivot;
   new_group->array_size = array_size;
@@ -243,8 +245,8 @@ Group<key_t, val_t, seq, max_model_n>
     disable_seq_insert_opt();
   }
 
-  Group *new_group_1 = new Group();
-  Group *new_group_2 = new Group();
+  Group *new_group_1 = new (NVM::data_alloc->alloc(sizeof(Group))) Group();
+  Group *new_group_2 = new (NVM::data_alloc->alloc(sizeof(Group))) Group();
 
   if(pivot > data[0].first) {
     std::cout << "Unexpect out pivot " << pivot.key << ", with " << data[0].first.key << std::endl;
@@ -273,8 +275,9 @@ Group<key_t, val_t, seq, max_model_n>
   new_group_2->buf_frozen = true;
   new_group_1->buffer = buffer;
   new_group_2->buffer = buffer;
-  new_group_1->buffer_temp = new buffer_t();
-  new_group_2->buffer_temp = new buffer_t();
+  new_group_1->buffer_temp = new (NVM::data_alloc->alloc(sizeof(buffer_t))) buffer_t();
+  new_group_2->buffer_temp = new (NVM::data_alloc->alloc(sizeof(buffer_t))) buffer_t();
+  
   new_group_1->next = new_group_2;
   new_group_2->next = next;
 
@@ -289,8 +292,8 @@ Group<key_t, val_t, seq, max_model_n>
     *Group<key_t, val_t, seq, max_model_n>::split_group_pt2() {
   // note that now this->data, this->buffer point to the old group's
   // and are shared with this->next
-  Group *new_group_1 = new Group();
-  Group *new_group_2 = new Group();
+  Group *new_group_1 = new (NVM::data_alloc->alloc(sizeof(Group))) Group();
+  Group *new_group_2 = new (NVM::data_alloc->alloc(sizeof(Group))) Group();
 
   new_group_1->pivot = pivot;
   new_group_2->pivot = this->next->pivot;
@@ -328,10 +331,10 @@ Group<key_t, val_t, seq, max_model_n>
   next_group.buf_frozen = true;
   memory_fence();
   rcu_barrier();
-  buffer_temp = new buffer_t();
+  buffer_temp = new (NVM::data_alloc->alloc(sizeof(buffer_t))) buffer_t();
   next_group.buffer_temp = buffer_temp;
 
-  Group *new_group = new Group();
+  Group *new_group = new (NVM::data_alloc->alloc(sizeof(Group))) Group();
   new_group->model_n = model_n + next_group.model_n;
   if (new_group->model_n > max_model_n) {
     new_group->model_n = max_model_n;
@@ -362,10 +365,10 @@ Group<key_t, val_t, seq, max_model_n>
   buf_frozen = true;
   memory_fence();
   rcu_barrier();
-  buffer_temp = new buffer_t();
+  buffer_temp = new (NVM::data_alloc->alloc(sizeof(buffer_t))) buffer_t();
 
   // now merge sort into a new array and train models
-  Group *new_group = new Group();
+  Group *new_group = new (NVM::data_alloc->alloc(sizeof(Group))) Group();
 
   new_group->pivot = pivot;
   merge_refs(new_group->data, new_group->array_size, new_group->capacity);
@@ -394,11 +397,13 @@ inline void Group<key_t, val_t, seq, max_model_n>::compact_phase_2() {
 
 template <class key_t, class val_t, bool seq, size_t max_model_n>
 void Group<key_t, val_t, seq, max_model_n>::free_data() {
-  delete[] data;
+  // delete[] data;
+  NVM::data_alloc->Free(data, (capacity + 1) * sizeof(record_t));
 }
 template <class key_t, class val_t, bool seq, size_t max_model_n>
 void Group<key_t, val_t, seq, max_model_n>::free_buffer() {
-  delete buffer;
+  // delete buffer;
+  NVM::data_alloc->Free(buffer, sizeof(buffer_t));
 }
 
 template <class key_t, class val_t, bool seq, size_t max_model_n>
@@ -446,11 +451,13 @@ inline result_t Group<key_t, val_t, seq, max_model_n>::update_to_array(
 
         if ((int32_t)array_size == capacity) {
           record_t *prev_data = nullptr;
+          size_t prev_capacity = capacity;
           capacity = array_size * seq_insert_reserve_factor;
-          record_t *new_data = new record_t[capacity + 1]();
+          // record_t *new_data = new record_t[capacity + 1]();
+          record_t *new_data = (record_t *)(NVM::data_alloc->alloc((capacity + 1) * sizeof(record_t)));
           // memcpy(new_data, data, array_size * sizeof(record_t));
           std::copy(data, data + array_size, new_data);
-          NVM::Mem_persist(data, array_size * sizeof(record_t));
+          NVM::Mem_persist(new_data, array_size * sizeof(record_t));
           prev_data = data;
           data = new_data;
 
@@ -461,7 +468,8 @@ inline result_t Group<key_t, val_t, seq, max_model_n>::update_to_array(
 
           rcu_barrier(worker_id);
           memory_fence();
-          delete[] prev_data;
+          // delete[] prev_data;
+          NVM::data_alloc->Free(prev_data, (prev_capacity + 1) * sizeof(record_t));
           return result_t::ok;
         } else {
           data[pos].first = key;
@@ -711,7 +719,9 @@ inline void Group<key_t, val_t, seq, max_model_n>::merge_refs(
     int32_t &new_capacity) const {
   size_t est_size = array_size + buffer->size();
   new_capacity = est_size * seq_insert_reserve_factor;
-  new_data = new record_t[new_capacity + 1]();
+  // new_data = new record_t[new_capacity + 1]();
+  new_data = (record_t *)(NVM::data_alloc->alloc((new_capacity + 1) * sizeof(record_t)));
+          
   merge_refs_internal(new_data, new_array_size);
   assert((int32_t)new_array_size <= new_capacity);
 }
@@ -728,7 +738,10 @@ inline void Group<key_t, val_t, seq, max_model_n>::merge_refs_n_split(
   new_capacity_1 =
       (int32_t)est_size > new_capacity_1 ? est_size : new_capacity_1;
 
-  record_t *intermediate = new record_t[new_capacity_1 + 1]();
+  // record_t *intermediate = new record_t[new_capacity_1 + 1]();
+  record_t *intermediate = (record_t *)(NVM::data_alloc->alloc((new_capacity_1 + 1) * sizeof(record_t)));
+  
+  
   merge_refs_internal(intermediate, intermediate_size);
 
   uint32_t split_pos = exponential_search_key(intermediate, intermediate_size,
@@ -741,7 +754,10 @@ inline void Group<key_t, val_t, seq, max_model_n>::merge_refs_n_split(
 
   new_array_size_2 = intermediate_size - split_pos;
   new_capacity_2 = new_array_size_2 * seq_insert_reserve_factor;
-  new_data_2 = new record_t[new_capacity_2 + 1]();
+  // new_data_2 = new record_t[new_capacity_2 + 1]();
+  new_data_2 = (record_t *)(NVM::data_alloc->alloc((new_capacity_2 + 1) * sizeof(record_t)));
+  
+  
   // memcpy(new_data_2, intermediate + split_pos,
   //        new_array_size_2 * sizeof(record_t));
   std::copy(intermediate + split_pos, intermediate + split_pos + new_array_size_2, new_data_2);
@@ -758,7 +774,9 @@ inline void Group<key_t, val_t, seq, max_model_n>::merge_refs_with(
   size_t est_size = array_size + buffer->size() + next_group.array_size +
                     next_group.buffer->size();
   new_capacity = est_size * seq_insert_reserve_factor;
-  new_data = new record_t[new_capacity + 1]();
+  // new_data = new record_t[new_capacity + 1]();
+  new_data = (record_t *)(NVM::data_alloc->alloc((new_capacity + 1) * sizeof(record_t)));
+  
 
   uint32_t real_size_1, real_size_2;
   merge_refs_internal(new_data, real_size_1);

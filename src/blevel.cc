@@ -634,6 +634,83 @@ uint64_t BLevel::Find_(uint64_t key, uint64_t begin, uint64_t end
   return right;
 }
 
+// uint64_t BLevel::FindNearPos_(uint64_t key, uint64_t pos
+// #ifdef BRANGE
+//                        , std::atomic<size_t>** interval
+// #endif
+//                        ) const {
+// #ifdef BRANGE
+//   // change logical index [begin, end] to physical index
+//   // after this, begin and end are in the same brange.
+//   int target_range = FindBRangeByKey_(key);
+//   // assert(begin < ranges_[target_range+1].logical_entry_start);
+//   // assert(end >= ranges_[target_range].logical_entry_start);
+//   pos = (pos < ranges_[target_range+1].logical_entry_start) ?
+//             GetPhysical_(ranges_[target_range], pos) :
+//             ranges_[target_range].physical_entry_start+ranges_[target_range].entries-1;
+//   int begin = ranges_[target_range].physical_entry_start;
+//   int end = ranges_[target_range].physical_entry_start+ranges_[target_range].entries-1;
+// #else
+//   int end = nr_entries_;
+// #endif // BRANGE
+
+//   // binary search
+//   int left, right;
+//   // exponential search
+//   if(entries_[pos].entry_key <= key) {
+//     size_t step = 1;
+//     left = pos;
+//     right = pos + step;
+//     while (right < (int)end && entries_[right].entry_key <= key) {
+//       step = step * 2;
+//       left = right;
+//       right = left + step;
+//     }  
+//     if (right > (int)end) {
+//       right = (int)end;
+//     }
+//   } else {
+//     size_t step = 1;
+//     right = pos;
+//     left = right - step;
+//     while (left >= begin && entries_[left].entry_key > key) {
+//       step = step * 2;
+//       right = left;
+//       left = right - step;
+//     } 
+//     if (left < begin) {
+//       left = begin;
+//     }
+//   }
+//   if(left > right) {
+//     left = right - 1;
+//   }
+//   while (left <= right) {
+//     int middle = (left + right) / 2;
+//     uint64_t mid_key = entries_[middle].entry_key;
+//     if (mid_key == key) {
+// #ifdef BRANGE
+//       if (interval) {
+//         int idx = (middle - ranges_[target_range].physical_entry_start) / interval_size_;
+//         *interval = &size_per_interval_[target_range][idx];
+//       }
+// #endif
+//       return middle;
+//     } else if (mid_key < key) {
+//       left = middle + 1;
+//     } else {
+//       right = middle - 1;
+//     }
+//   }
+// #ifdef BRANGE
+//   if (interval) {
+//     int idx = (right - ranges_[target_range].physical_entry_start) / interval_size_;
+//     *interval = &size_per_interval_[target_range][idx];
+//   }
+// #endif
+//   return right;
+// }
+
 uint64_t BLevel::FindNearPos_(uint64_t key, uint64_t pos
 #ifdef BRANGE
                        , std::atomic<size_t>** interval
@@ -654,61 +731,23 @@ uint64_t BLevel::FindNearPos_(uint64_t key, uint64_t pos
   int end = nr_entries_;
 #endif // BRANGE
 
-  // binary search
-  int left, right;
-  // exponential search
   if(entries_[pos].entry_key <= key) {
-    size_t step = 1;
-    left = pos;
-    right = pos + step;
-    while (right < (int)end && entries_[right].entry_key <= key) {
-      step = step * 2;
-      left = right;
-      right = left + step;
+    while (pos < (int)end && entries_[pos + 1].entry_key <= key) {
+      pos ++;
     }  
-    if (right > (int)end) {
-      right = (int)end;
-    }
-  } else {
-    size_t step = 1;
-    right = pos;
-    left = right - step;
-    while (left >= begin && entries_[left].entry_key > key) {
-      step = step * 2;
-      right = left;
-      left = right - step;
+  } else { 
+    pos --;
+    while (pos > begin && entries_[pos].entry_key > key) {
+      pos --;
     } 
-    if (left < begin) {
-      left = begin;
-    }
-  }
-  if(left > right) {
-    left = right - 1;
-  }
-  while (left <= right) {
-    int middle = (left + right) / 2;
-    uint64_t mid_key = entries_[middle].entry_key;
-    if (mid_key == key) {
-#ifdef BRANGE
-      if (interval) {
-        int idx = (middle - ranges_[target_range].physical_entry_start) / interval_size_;
-        *interval = &size_per_interval_[target_range][idx];
-      }
-#endif
-      return middle;
-    } else if (mid_key < key) {
-      left = middle + 1;
-    } else {
-      right = middle - 1;
-    }
   }
 #ifdef BRANGE
   if (interval) {
-    int idx = (right - ranges_[target_range].physical_entry_start) / interval_size_;
+    int idx = (pos - ranges_[target_range].physical_entry_start) / interval_size_;
     *interval = &size_per_interval_[target_range][idx];
   }
 #endif
-  return right;
+  return pos;
 }
 
 uint64_t BLevel::NearPosRange_(uint64_t key, uint64_t pos, uint64_t &range_begin, uint64_t &range_end) {
@@ -872,7 +911,7 @@ bool BLevel::Delete(uint64_t key, uint64_t* value, uint64_t begin, uint64_t end)
 #endif
 }
 
-bool BLevel::PutNearPos(uint64_t key, uint64_t value, uint64_t pos) {
+status BLevel::PutNearPos(uint64_t key, uint64_t value, uint64_t pos) {
 #ifdef BRANGE
   std::atomic<size_t>* interval_size;
   uint64_t idx = FindNearPos_(key, pos, &interval_size);

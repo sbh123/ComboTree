@@ -231,7 +231,7 @@ int main(int argc, char** argv) {
   threads.clear();
   uint64_t total_time = timer.Microsecond("stop", "start");
   std::cout << "load: " << total_time/1000000.0 << " " << (double)LOAD_SIZE/(double)total_time*1000000.0 << std::endl;
-
+  db->PrintStatic();
   // Put
   per_thread_size = PUT_SIZE / thread_num;
   timer.Clear();

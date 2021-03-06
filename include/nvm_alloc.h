@@ -109,13 +109,13 @@ public:
     void Free(void *p, size_t size) {
         if(p == nullptr) return;
         std::unique_lock<std::mutex> lock(lock_);
-        // if((char *)p + size == current_addr) {
-        //     current_addr = p;
-        //     used_ -= size;
-        // } else {
+        if((char *)p + size == current_addr) {
+            current_addr = p;
+            used_ -= size;
+        } else {
             // std::cout << "Free not at pos: " << p << std::endl;
             freed_ += size;
-        // }
+        }
         // free(p);
     }
 

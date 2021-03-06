@@ -15,9 +15,11 @@ function Run() {
 }
 
 # DBName: combotree fastfair pgm xindex alex
-dbs="combotree fastfair pgm xindex alex"
-for dbname in $dbs; do
-    echo "Run: " $dbname
-    Run $dbname 4000000 100000 4000000 1
-    # sleep 100
-done
+dbs="combotree fastfair pgm alex xindex"
+# for dbname in $dbs; do
+#     echo "Run: " $dbname
+#     Run $dbname 4000000 100000 4000000 1
+#     # sleep 100
+# done
+
+Run fastfair 4000000 100000 4000000 1

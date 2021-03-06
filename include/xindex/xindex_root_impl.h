@@ -304,7 +304,8 @@ void *Root<key_t, val_t, seq>::do_adjustment(void *args) {
                   (*group)->enable_seq_insert_opt();
                 }
                 m_split++;
-                delete old_group;
+                // delete old_group;
+                NVM::data_alloc->Free(old_group, sizeof(group_t));
               } else {
                 should_split_group = true;
                 break;
@@ -321,7 +322,8 @@ void *Root<key_t, val_t, seq>::do_adjustment(void *args) {
                   (*group)->enable_seq_insert_opt();
                 }
                 m_merge++;
-                delete old_group;
+                // delete old_group;
+                NVM::data_alloc->Free(old_group, sizeof(group_t));
               } else {
                 might_merge_group = true;
                 break;
@@ -364,9 +366,12 @@ void *Root<key_t, val_t, seq>::do_adjustment(void *args) {
             rcu_barrier();  // make sure no one is accessing the old data
             old_group->free_data();  // intermidiates share the array and buffer
             old_group->free_buffer();  // so no free_xxx is needed
-            delete old_group;
-            delete intermediate->next;  // but deleting the metadata is needed
-            delete intermediate;
+            // delete old_group;
+            // delete intermediate->next;  // but deleting the metadata is needed
+            // delete intermediate;
+            NVM::data_alloc->Free(old_group, sizeof(group_t));
+            NVM::data_alloc->Free(intermediate->next, sizeof(group_t));
+            NVM::data_alloc->Free(intermediate, sizeof(group_t));
             should_update_array = true;
 
             // skip next (the split new one), to avoid ping-pong split / merge
@@ -401,8 +406,10 @@ void *Root<key_t, val_t, seq>::do_adjustment(void *args) {
             old_group->free_buffer();
             old_next->free_data();
             old_next->free_buffer();
-            delete old_group;
-            delete old_next;
+            // delete old_group;
+            // delete old_next;
+            NVM::data_alloc->Free(old_group, sizeof(group_t));
+            NVM::data_alloc->Free(old_next, sizeof(group_t));
             should_update_array = true;
           } else if (buffer_size > config.buffer_compact_threshold) {
             // DEBUG_THIS("------ [compaction], buf_size="
@@ -418,7 +425,8 @@ void *Root<key_t, val_t, seq>::do_adjustment(void *args) {
             rcu_barrier();  // make sure no one is accessing the old data
             old_group->free_data();
             old_group->free_buffer();
-            delete old_group;
+            // delete old_group;
+            NVM::data_alloc->Free(old_group, sizeof(group_t));
           }
 
           // do next (in the chain)

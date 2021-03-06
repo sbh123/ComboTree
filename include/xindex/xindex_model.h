@@ -30,7 +30,7 @@
 namespace xindex {
 
 template <class key_t>
-class LinearModel : public NVM::NvmStructBase  {
+class LinearModel : public NVM::AllocBase  {
   typedef std::array<double, key_t::model_key_size()> model_key_t;
   template <class key_t_, class val_t, bool seq>
   friend class Root;
