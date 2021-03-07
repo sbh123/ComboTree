@@ -1740,7 +1740,7 @@ class AlexDataNode : public AlexNode<T, P> {
       num_left_out_of_bounds_inserts_++;
     }
 
-    NVM::Mem_persist(this, sizeof(AlexDataNode));
+    NVM::Mem_persist(&num_keys_, sizeof(uint64_t));
     return {0, insertion_position};
   }
 
