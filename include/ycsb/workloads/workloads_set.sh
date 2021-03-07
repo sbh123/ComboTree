@@ -2,11 +2,11 @@
 RecordCount=10000000
 OpCount=1000000
 WorkLoads="a b c d e f"
-if [ $# -gt 1 ]; then
+if [ $# -ge 1 ]; then
     RecordCount=$1
 fi
 
-if [ $# -gt 2 ]; then
+if [ $# -ge 2 ]; then
     OpCount=$2
 fi
 

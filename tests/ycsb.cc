@@ -246,7 +246,7 @@ public:
       return 1;
   }
   int Update(uint64_t key, uint64_t value) {
-      xindex_->put(index_key_t(key), value >> 4, 0);
+      xindex_->put(index_key_t(key), value >> 6, 0);
       return 1;
   }
   int Delete(uint64_t key) {
@@ -377,9 +377,10 @@ public:
       return 1;
   }
   int Update(uint64_t key, uint64_t value) {
-      uint64_t *addrs = (alex_->get_payload(key));
-      *addrs = value;
-      NVM::Mem_persist(addrs, sizeof(uint64_t));
+      // uint64_t *addrs = (alex_->get_payload(key));
+      // *addrs = value;
+      // NVM::Mem_persist(addrs, sizeof(uint64_t));
+      alex_->insert(key, value);
       return 1;
   }
   int Delete(uint64_t key) {
