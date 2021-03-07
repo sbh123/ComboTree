@@ -115,6 +115,10 @@ target_link_libraries(benchmark combotree)
 add_executable(multi_benchmark tests/multi_benchmark.cc)
 target_link_libraries(multi_benchmark combotree)
 
+# scalability_test
+add_executable(scalability_test tests/scalability_test.cc)
+target_link_libraries(scalability_test combotree)
+
 # Unit Test
 enable_testing()
 include_directories(src)

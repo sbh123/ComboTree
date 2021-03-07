@@ -380,6 +380,7 @@ public:
       // uint64_t *addrs = (alex_->get_payload(key));
       // *addrs = value;
       // NVM::Mem_persist(addrs, sizeof(uint64_t));
+      alex_->erase(key);
       alex_->insert(key, value);
       return 1;
   }

@@ -63,9 +63,9 @@ public:
 #else
 
 static inline void Mem_persist(const void *addr, size_t len) {
-    mfence();
+    // mfence();
     pmem_persist(addr, len);
-    mfence();
+    // mfence();
 }
 class Alloc {
 
