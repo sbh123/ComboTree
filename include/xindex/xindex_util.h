@@ -230,7 +230,7 @@ struct AtomicVal {
     incr_version();
     memory_fence();
     unlock();
-    Mem_persist(this, sizeof(*this));
+    NVM::Mem_persist(this, sizeof(*this));
     return res;
   }
   bool remove() {
@@ -250,7 +250,7 @@ struct AtomicVal {
     incr_version();
     memory_fence();
     unlock();
-    Mem_persist(this, sizeof(*this));
+    NVM::Mem_persist(this, sizeof(*this));
     return res;
   }
   void replace_pointer() {
@@ -267,7 +267,7 @@ struct AtomicVal {
     incr_version();
     memory_fence();
     unlock();
-    Mem_persist(this, sizeof(*this));
+    NVM::Mem_persist(this, sizeof(*this));
   }
   bool read_ignoring_ptr(val_t &val) {
     while (true) {
@@ -301,7 +301,7 @@ struct AtomicVal {
     incr_version();
     memory_fence();
     unlock();
-    Mem_persist(this, sizeof(*this));
+    NVM::Mem_persist(this, sizeof(*this));
     return res;
   }
   bool remove_ignoring_ptr() {
@@ -318,7 +318,7 @@ struct AtomicVal {
     incr_version();
     memory_fence();
     unlock();
-    Mem_persist(this, sizeof(*this));
+    NVM::Mem_persist(this, sizeof(*this));
     return res;
   }
 };

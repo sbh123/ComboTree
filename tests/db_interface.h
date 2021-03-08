@@ -243,7 +243,7 @@ public:
   void Init()
   {
     NVM::data_init();
-    prepare_xindex(init_num, bg_num, work_num);
+    prepare_xindex(init_num, work_num, bg_num);
   }
   void Info()
   {

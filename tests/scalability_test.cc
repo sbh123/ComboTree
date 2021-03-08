@@ -180,8 +180,8 @@ int main(int argc, char** argv) {
   NVM::env_init();
   KvDB* db = nullptr;
   if(dbName == "fastfair") {
-    // db = new FastFairDb();
-    db = new fastfairDB();
+    db = new FastFairDb();
+    // db = new fastfairDB();
   } else if(dbName == "pgm") {
     db = new PGMDynamicDb();
   } else if(dbName == "xindex") {
@@ -217,7 +217,7 @@ int main(int argc, char** argv) {
   Random get_rnd(0, LOAD_SIZE-1);
   load_timer.Record("start");
   for(size_t i = 0; i < ArrayLen(load_tests); i ++) {
-    load_finished = load_tests[i];
+    load_finished = std::min(load_tests[i], LOAD_SIZE);
     load_timer.Clear();
     load_timer.Record("start");
     prev_pos = load_pos;
@@ -230,14 +230,33 @@ int main(int argc, char** argv) {
         }
 
         if((load_pos + 1)% PUT_SIZE == 0) {
-            load_timer.Record("stop");
-            uint64_t total_time  = load_timer.Microsecond("stop", "start");
-            std::cout << "After Load "<< load_pos + 1 << " put: " 
+          load_timer.Record("stop");
+          uint64_t total_time  = load_timer.Microsecond("stop", "start");
+          std::cout << "[Metic-Write]: After Load "<< prev_pos << " put: " 
+                  << "cost " << total_time/1000000.0 << "s, " 
+                  << "iops " << (double)(load_pos - prev_pos + 1)/(double)total_time*1000000.0 
+                  << std::endl;
+          load_timer.Clear();
+          load_timer.Record("start");
+          prev_pos = load_pos + 1;
+          { // small get only 10%
+            size_t value;
+            get_timer.Clear();
+            get_timer.Record("start");
+            for(int i = 0; i < GET_SIZE / 10; i ++) {
+              bool ret = db->Get(key[get_rnd.Next() % load_pos], value);
+              if (ret != true) {
+                std::cout << "get error!" << std::endl;
+                assert(0);
+              }
+            }
+            get_timer.Record("stop");
+            uint64_t total_time  = get_timer.Microsecond("stop", "start");
+            std::cout << "[Metic-Read]: After Load "<< prev_pos << " get: "
                     << "cost " << total_time/1000000.0 << "s, " 
-                    << "iops " << (double)(load_pos - prev_pos + 1)/(double)total_time*1000000.0 << std::endl;
-            load_timer.Clear();
-            load_timer.Record("start");
-            prev_pos = load_pos + 1;
+                    << "iops " << (double)(GET_SIZE / 10)/(double)total_time*1000000.0 
+                    << std::endl;
+          }
         }
     }
     //Get
@@ -253,9 +272,11 @@ int main(int argc, char** argv) {
     }
     get_timer.Record("stop");
     uint64_t total_time  = get_timer.Microsecond("stop", "start");
-    std::cout << "After Load "<< load_finished << " get: " << 
-            total_time/1000000.0 << "s, " << 
-            (double)GET_SIZE/(double)total_time*1000000.0 << std::endl;
+    std::cout << "[Read]: After Load "<< load_pos << " get: " 
+            << "cost " << total_time/1000000.0 << "s, "
+            << "iops " << (double)(GET_SIZE / 10)/(double)total_time*1000000.0 
+            << std::endl;
+    if(LOAD_SIZE == load_finished) break;
   }
 
   delete db;

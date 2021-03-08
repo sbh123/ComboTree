@@ -48,7 +48,7 @@ else()
   set(BLEVEL_EXPAND_BUF_KEY 6)
 endif(NO_ENTRY_BUF)
 
-set(EXPANSION_FACTOR      4)
+set(EXPANSION_FACTOR      2)
 set(DEFAULT_SPAN          2)
 set(PMEMKV_THRESHOLD      3000)
 set(ENTRY_SIZE_FACTOR     1.2)
