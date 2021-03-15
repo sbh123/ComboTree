@@ -33,7 +33,7 @@ static inline void *PmemMapFile(const std::string &file_name, const size_t file_
     return pmem_addr_;
 }
 
-// #define USE_MEM
+#define USE_MEM
 #ifdef USE_MEM
 
 static inline void Mem_persist(const void *addr, size_t len) {

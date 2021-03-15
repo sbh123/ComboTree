@@ -408,7 +408,9 @@ void CoreWorkload::Reload(const utils::Properties &p) {
       READMODIFYWRITE_PROPORTION_PROPERTY, READMODIFYWRITE_PROPORTION_DEFAULT));
   
   // record_count_ = std::stoi(p.GetProperty(RECORD_COUNT_PROPERTY)); // ? replace with: 
-  record_count_ = insert_key_sequence_.Last();
+  record_count_ = key_generator_->Last();
+  insert_key_sequence_.Set(record_count_);;
+  std::cout << "Record: " << record_count_ << std::endl;
   std::string request_dist = p.GetProperty(REQUEST_DISTRIBUTION_PROPERTY,
                                            REQUEST_DISTRIBUTION_DEFAULT);
   int max_scan_len = std::stoi(p.GetProperty(MAX_SCAN_LENGTH_PROPERTY,

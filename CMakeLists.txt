@@ -183,3 +183,7 @@ add_test(microbench microbench)
 add_executable(ycsb tests/ycsb.cc)
 target_link_libraries(ycsb combotree)
 add_test(ycsb ycsb)
+
+add_executable(ycsb-mem tests/ycsb-mem.cc)
+target_link_libraries(ycsb-mem combotree)
+add_test(ycsb-mem ycsb-mem)
