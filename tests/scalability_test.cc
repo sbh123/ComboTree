@@ -320,7 +320,7 @@ int main(int argc, char** argv) {
                     << std::endl;
             db->PrintStatic();
           }
-          PUT_SIZE = pow10((int)log10(prev_pos));
+          PUT_SIZE = pow(10, (int)std::log10(prev_pos));
           GET_SIZE = PUT_SIZE / 10;
         }
     }

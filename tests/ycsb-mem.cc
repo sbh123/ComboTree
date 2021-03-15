@@ -9,12 +9,18 @@
 #include "../src/combotree_config.h"
 #include "combotree/combotree.h"
 #include "fast-fair/btree.h"
+#ifdef USE_MEM
+#include "mem/pgm/pgm_index_dynamic.hpp"
+#include "mem/xindex/xindex_impl.h"
+#include "mem/alex/alex.h"
+
+#else
 #include "learnindex/pgm_index_dynamic.hpp"
 #include "learnindex/rmi.h"
 #include "xindex/xindex_impl.h"
 #include "alex/alex.h"
+#endif
 #include "stx/btree_map.h"
-#include "../src/learn_group.h"
 #include "random.h"
 
 using combotree::ComboTree;
@@ -24,12 +30,12 @@ using xindex::XIndex;
 
 
 const char *workloads[] = {
-  // "workloada.spec",
-  // "workloadb.spec",
-  // "workloadc.spec",
-  // "workloadd.spec",
-  // "workloade.spec",
-  // "workloadf.spec",
+//   "workloada.spec",
+//   "workloadb.spec",
+//   "workloadc.spec",
+//   "workloadd.spec",
+//   "workloade.spec",
+//   "workloadf.spec",
   "workloada_insert_0.spec",
   "workloada_insert_10.spec",
   "workloada_insert_20.spec",
@@ -42,6 +48,44 @@ const char *workloads[] = {
 };
 
 #define ArrayLen(arry) (sizeof(arry) / sizeof(arry[0]))
+
+class Key_64 {
+  typedef std::array<double, 1> model_key_t;
+
+ public:
+  static constexpr size_t model_key_size() { return 1; }
+  static Key_64 max() {
+    static Key_64 max_key(std::numeric_limits<uint64_t>::max());
+    return max_key;
+  }
+  static Key_64 min() {
+    static Key_64 min_key(std::numeric_limits<uint64_t>::min());
+    return min_key;
+  }
+
+  Key_64() : key(0) {}
+  Key_64(uint64_t key) : key(key) {}
+  Key_64(const Key_64 &other) { key = other.key; }
+  Key_64 &operator=(const Key_64 &other) {
+    key = other.key;
+    return *this;
+  }
+
+  model_key_t to_model_key() const {
+    model_key_t model_key;
+    model_key[0] = key;
+    return model_key;
+  }
+
+  friend bool operator<(const Key_64 &l, const Key_64 &r) { return l.key < r.key; }
+  friend bool operator>(const Key_64 &l, const Key_64 &r) { return l.key > r.key; }
+  friend bool operator>=(const Key_64 &l, const Key_64 &r) { return l.key >= r.key; }
+  friend bool operator<=(const Key_64 &l, const Key_64 &r) { return l.key <= r.key; }
+  friend bool operator==(const Key_64 &l, const Key_64 &r) { return l.key == r.key; }
+  friend bool operator!=(const Key_64 &l, const Key_64 &r) { return l.key != r.key; }
+
+  uint64_t key;
+};
 
 class FastFairDb : public ycsbc::KvDB {
 public:
@@ -216,7 +260,7 @@ class XIndexDb : public ycsbc::KvDB  {
   static const int init_num = 10000;
   static const int bg_num = 1;
   static const int work_num = 1;
-  typedef RMI::Key_64 index_key_t;
+  typedef Key_64 index_key_t;
   typedef xindex::XIndex<index_key_t, uint64_t> xindex_t;
 public:
   XIndexDb(): xindex_(nullptr) {}
@@ -407,83 +451,6 @@ private:
   alex_t *alex_;
 };
 
-class LearnGroupDB : public ycsbc::KvDB  {
-  static const size_t init_num = 1000;
-  void Prepare() {
-    std::vector<std::pair<uint64_t,uint64_t>> initial_kv;
-    combotree::Random rnd(0, UINT64_MAX - 1);
-    initial_kv.push_back({0, UINT64_MAX});
-    for (uint64_t i = 0; i < init_num - 1; ++i) {
-        uint64_t key = rnd.Next();
-        uint64_t value = rnd.Next();
-        initial_kv.push_back({key, value});
-    }
-    sort(initial_kv.begin(), initial_kv.end());
-    root_->Load(initial_kv);
-  }
-public:
-  LearnGroupDB(): root_(nullptr) {}
-  LearnGroupDB(combotree::RootModel *root): root_(root) {}
-  virtual ~LearnGroupDB() {
-    delete root_;
-  }
-
-  void Init()
-  {
-    NVM::data_init();
-    root_ = new combotree::RootModel();
-    Prepare();
-  }
-
-  void Info()
-  {
-    NVM::show_stat();
-    root_->Info();
-  }
-
-  int Put(uint64_t key, uint64_t value) 
-  {
-    // alex_->insert(key, value);
-    root_->Put(key, value);
-    return 1;
-  }
-  int Get(uint64_t key, uint64_t &value)
-  {
-      root_->Get(key, value);
-      return 1;
-  }
-  int Delete(uint64_t key) {
-      root_->Delete(key);
-      return 1;
-  }
-  int Update(uint64_t key, uint64_t value) {
-      root_->Update(key, value);
-      return 1;
-  }
-  int Scan(uint64_t start_key, int len, std::vector<std::pair<uint64_t, uint64_t>>& results) 
-  {
-    combotree::RootModel::Iter it(root_, start_key);
-    int num_entries = 0;
-    while (num_entries < len && !it.end()) {
-      results.push_back({it.key(), it.value()});
-      num_entries ++;
-      it.next();
-    }
-    return 1;
-  } 
-  void PrintStatic() {
-      // std::cerr << "Alevel average cost: " << Common::timers["ALevel_times"].avg_latency();
-      // std::cerr << ",Blevel average cost: " << Common::timers["BLevel_times"].avg_latency();
-      // std::cerr << ",Clevel average cost: " << Common::timers["CLevel_times"].avg_latency() << std::endl;
-      // Common::timers["ALevel_times"].clear();
-      // Common::timers["BLevel_times"].clear();
-      // Common::timers["CLevel_times"].clear();
-  }
-private:
-  combotree::RootModel *root_;
-};
-
-
 void UsageMessage(const char *command);
 bool StrStartWith(const char *str, const char *pre);
 string ParseCommandLine(int argc, const char *argv[], utils::Properties &props);
@@ -546,8 +513,8 @@ int main(int argc, const char *argv[])
       db = new XIndexDb();
     } else if(dbName == "alex") {
       db = new AlexDB();
-    } else if(dbName == "learngroup") {
-      db = new LearnGroupDB();
+    } else if(dbName == "stx") {
+      db = new StxDB();
     } else {
       db = new ComboTreeDb();
     }
