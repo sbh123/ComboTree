@@ -1305,8 +1305,8 @@ void btree::CalculateSapce(uint64_t &space) {
 }
 
 void btree::PrintInfo() {
-    printf("This is a b+ tree.\n");
-    printf("Node size is %lu, M path is %d.\n", sizeof(page), cardinality);
+    // printf("This is a b+ tree.\n");
+    // printf("Node size is %lu, M path is %d.\n", sizeof(page), cardinality);
     printf("Tree height is %d.\n", height);
 
 }

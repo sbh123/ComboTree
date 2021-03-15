@@ -90,6 +90,7 @@ public:
     }
     void PrintStatic() {
         NVM::show_stat();
+        tree_->PrintInfo();
     }
 private:
     btree *tree_;
@@ -147,14 +148,14 @@ public:
       // Common::timers["BLevel_times"].clear();
       // Common::timers["CLevel_times"].clear();
        // statistic
-        std::cout << "clevel time:    " << tree_->CLevelTime()/1000000.0 << std::endl;
-        std::cout << "entries:        " << tree_->BLevelEntries() << std::endl;
-        std::cout << "clevels:        " << tree_->CLevelCount() << std::endl;
-        std::cout << "clevel percent: " << (double)tree_->CLevelCount() / tree_->BLevelEntries() * 100.0 << "%" << std::endl;
-        std::cout << "size:           " << tree_->Size() << std::endl;
+        // std::cout << "clevel time:    " << tree_->CLevelTime()/1000000.0 << std::endl;
+        // std::cout << "entries:        " << tree_->BLevelEntries() << std::endl;
+        // std::cout << "clevels:        " << tree_->CLevelCount() << std::endl;
+        // std::cout << "clevel percent: " << (double)tree_->CLevelCount() / tree_->BLevelEntries() * 100.0 << "%" << std::endl;
+        // std::cout << "size:           " << tree_->Size() << std::endl;
         std::cout << "usage:          " << human_readable(tree_->Usage()) << std::endl;
-        std::cout << "bytes-per-pair: " << (double)tree_->Usage() / tree_->Size() << std::endl;
-        tree_->BLevelCompression();
+        // std::cout << "bytes-per-pair: " << (double)tree_->Usage() / tree_->Size() << std::endl;
+        // tree_->BLevelCompression();
     }
 private:
     ComboTree *tree_;

@@ -1740,7 +1740,7 @@ class AlexDataNode : public AlexNode<T, P> {
       num_left_out_of_bounds_inserts_++;
     }
 
-    NVM::Mem_persist(&num_keys_, sizeof(uint64_t));
+    NVM::Mem_persist(this, CACHE_LINE_SIZE);
     return {0, insertion_position};
   }
 
@@ -2213,8 +2213,8 @@ class AlexDataNode : public AlexNode<T, P> {
       resize(kMaxDensity_);  // contract
       num_resizes_++;
     }
-
-    NVM::Mem_persist(&num_keys_, sizeof(uint64_t));
+    
+    NVM::Mem_persist(this, CACHE_LINE_SIZE);
     return num_erased;
   }
 

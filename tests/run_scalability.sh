@@ -18,7 +18,7 @@ function run_all() {
     for dbname in $dbs; do
         echo "Run: " $dbname
         Run $dbname $1 $2 $3 1
-        sleep 100
+        # sleep 100
     done
 }
 
@@ -50,4 +50,4 @@ function main() {
         Run $dbname $loadnum $opnum $scansize $thread
     fi 
 }
-main alex 4000000 100000 4000000 1
+main fastfair 4000000 100000 4000000 1

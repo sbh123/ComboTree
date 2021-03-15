@@ -13,6 +13,7 @@
 namespace NVM
 {
 
+#define CACHE_LINE_SIZE 64
 #define mfence _mm_sfence
 #define FENCE_METHOD  "_mm_sfence"
 

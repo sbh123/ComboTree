@@ -12,7 +12,7 @@
 
 #include "learnindex/pgm_index_nvm.hpp"
 #include "learnindex/pgm_index_dynamic.hpp"
-
+#include "learnindex/rmi_impl.h"
 #include "../src/combotree_config.h"
 #include "nvm_alloc.h"
 #include "random.h"
@@ -40,6 +40,9 @@ int main() {
         index_data[size-1]=47;
         PGMIndex<uint64_t, epsilon> index(index_data, index_data + size);
         for(int i = 0; i < size; i++) std::cout << i << " " << index_data[i] << std::endl;
+
+        RMI::LinearModel<RMI::Key_64> LM;
+        LM.prepare_model(index_data, 0, 20);
         free(index_data);
         return 0;
     }
