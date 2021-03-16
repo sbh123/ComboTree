@@ -9,7 +9,7 @@ function Run() {
     thread=$5
     ${BUILDDIR}/scalability_test --dbname ${dbname} --load-size ${loadnum} \
         --put-size ${opnum} --get-size ${opnum} --delete-size ${opnum}\
-        -t $thread | tee scalability-${dbname}-${thread}.txt
+        -t $thread --load | tee scalability-${dbname}-${thread}.txt
 }
 
 # DBName: combotree fastfair pgm xindex alex

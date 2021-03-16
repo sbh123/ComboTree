@@ -489,6 +489,15 @@ int YCSB_Run(ycsbc::KvDB *db, ycsbc::CoreWorkload *wl, const int num_ops,
   return oks;
 }
 
+void Bulk_load_test(ycsbc::KvDB *db, const int num_ops) {
+  std::vector<uint64_t> keys;
+  keys.resize(num_ops);
+  for(int i = 0; i < num_ops; i ++) {
+
+  }
+
+}
+
 int main(int argc, const char *argv[])
 {
     NVM::env_init();

@@ -9,6 +9,7 @@
 #include <cmath>
 #include "combotree/combotree.h"
 #include "../src/combotree_config.h"
+#include "distribute.h"
 #include "db_interface.h"
 #include "random.h"
 #include "nvm_alloc.h"
@@ -30,6 +31,7 @@ size_t load_tests[] = {
 
 int thread_num        = 4;
 bool use_data_file    = false;
+bool Load_Only = false;
 std::vector<size_t> scan_size;
 std::vector<size_t> sort_scan_size;
 
@@ -95,6 +97,8 @@ void show_help(char* prog) {
     "    --help[-h]               show help" << std::endl;
 }
 
+void Bulk_load_test(ycsbc::KvDB *db, const int distribute);
+
 int main(int argc, char** argv) {
   static struct option opts[] = {
   /* NAME               HAS_ARG            FLAG  SHORTNAME*/
@@ -105,6 +109,7 @@ int main(int argc, char** argv) {
     {"delete-size",     required_argument, NULL, 0},
     {"dbname",       required_argument, NULL, 0},
     {"use-data-file",   no_argument,       NULL, 'd'},
+    {"load",            no_argument,       NULL, 'L'},
     {"help",            no_argument,       NULL, 'h'},
     {NULL, 0, NULL, 0}
   };
@@ -123,13 +128,15 @@ int main(int argc, char** argv) {
           case 4: DELETE_SIZE = atoi(optarg); break;
           case 5: dbName = optarg; break;
           case 6: use_data_file = true; break;
-          case 7: show_help(argv[0]); return 0;
+          case 7: Load_Only = true; break;
+          case 8: show_help(argv[0]); return 0;
           default: std::cerr << "Parse Argument Error!" << std::endl; abort();
         }
         break;
       case 't': thread_num = atoi(optarg); break;
       case 's': scan_size.push_back(atoi(optarg)); break;
       case 'd': use_data_file = true; break;
+      case 'L': Load_Only = true; break;
       case 'h': show_help(argv[0]); return 0;
       case '?': break;
       default:  std::cout << (char)c << std::endl; abort();
@@ -171,6 +178,8 @@ int main(int argc, char** argv) {
       key.push_back(k);
     }
     std::cout << "finish read data.dat" << std::endl;
+  } else if(Load_Only) {
+
   } else {
     Random rnd(0, LOAD_SIZE+PUT_SIZE-1);
     for (size_t i = 0; i < LOAD_SIZE+PUT_SIZE; ++i)
@@ -217,6 +226,11 @@ int main(int argc, char** argv) {
 
   Random get_rnd(0, LOAD_SIZE-1);
   load_timer.Record("start");
+
+  if(Load_Only) {
+    Bulk_load_test(db, 0);
+    goto finished;
+  }
   // for(size_t i = 0; i < ArrayLen(load_tests); i ++) {
   //   load_finished = std::min(load_tests[i], LOAD_SIZE);
   //   load_timer.Clear();
@@ -325,9 +339,66 @@ int main(int argc, char** argv) {
         }
     }
   }
-
+finished:
   delete db;
   NVM::env_exit();
   
   return 0;
+}
+
+void Bulk_load_test(ycsbc::KvDB *db, const int distribute) {
+  std::vector<uint64_t> keys;
+  keys.reserve(LOAD_SIZE + PUT_SIZE);
+  Distribute::CaussGenerator rnd(0.0, 2, 1e16);
+  std::set<uint64_t> key_set;
+  for(int i = 0; i < LOAD_SIZE + PUT_SIZE; i ++) {
+    uint64_t key = rnd.Next();
+    keys.emplace_back(key);
+    key_set.insert(key);
+  }
+  std::cout << "key total " << keys.size() << ", uniqure " << key_set.size() << std::endl;
+  Timer load_timer;
+  Timer get_timer;
+  uint64_t total_time = 0;
+  load_timer.Record("start");
+  for(int load_pos = 0; load_pos < LOAD_SIZE; load_pos ++) {
+    db->Put(keys[load_pos], keys[load_pos]);
+  }
+  load_timer.Record("stop");
+  total_time  = load_timer.Microsecond("stop", "start");
+
+  std::cout << "[Metic-Load]: Load "<< LOAD_SIZE << ": " 
+                  << "cost " << total_time/1000000.0 << "s, " 
+                  << "iops " << (double)(LOAD_SIZE)/(double)total_time*1000000.0 
+                  << std::endl;
+  size_t value;
+  Random get_rnd(0, LOAD_SIZE-1);
+  get_timer.Record("start");
+  for(int i = 0; i < GET_SIZE; i ++) {
+    bool ret = db->Get(keys[get_rnd.Next()], value);
+    if (ret != true) {
+      std::cout << "get error!" << std::endl;
+      assert(0);
+    }
+  }
+  get_timer.Record("stop");
+  total_time  = get_timer.Microsecond("stop", "start");
+  std::cout << "[Metic-Read]: After Load "<< LOAD_SIZE << " get: "
+          << "cost " << total_time/1000000.0 << "s, " 
+          << "iops " << (double)(GET_SIZE)/(double)total_time*1000000.0 
+          << std::endl;
+
+  load_timer.Clear();
+  load_timer.Record("start");
+  for(int i = 0; i < PUT_SIZE; i ++) {
+    db->Put(keys[LOAD_SIZE + i], keys[LOAD_SIZE + i]);
+  }
+
+  load_timer.Record("stop");
+  total_time  = load_timer.Microsecond("stop", "start");
+  std::cout << "[Metic-Write]: After Load "<< LOAD_SIZE << " put: " 
+          << "cost " << total_time/1000000.0 << "s, " 
+          << "iops " << (double)(PUT_SIZE)/(double)total_time*1000000.0 
+          << std::endl;
+         
 }

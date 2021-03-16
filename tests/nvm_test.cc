@@ -57,6 +57,7 @@ void NVM_DRAM_TEST(size_t size, size_t operations, bool NVM) {
     }   
     // 随机读
     for(size_t i = 0; i < ArrayLen(opsizes); i ++) {
+        pmem_deep_drain(base_addr, map_len);
         size_t opsize = opsizes[i];
         size_t mem_arrys = size / opsize;
         combotree::Random rnd(0, mem_arrys - 1);
@@ -83,9 +84,10 @@ void NVM_DRAM_TEST(size_t size, size_t operations, bool NVM) {
         timer.Start();
         for(size_t j = 0; j < operations; j ++) {
             size_t addr = rnd.Next();
-            memcpy((char *)base_addr + (opsize * addr), buf, opsize);
             if(NVM) {
-                _nvm_perisist((char *)base_addr + (opsize * addr), opsize);
+                pmem_memcpy_persist((char *)base_addr + (opsize * addr), buf, opsize);
+            } else {
+                memcpy((char *)base_addr + (opsize * addr), buf, opsize);
             }
         }
         auto duration = timer.End<std::chrono::nanoseconds>();
