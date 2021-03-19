@@ -25,4 +25,4 @@ function run_all() {
 # DBName: combotree fastfair pgm xindex alex
 # Run pgm 4000000 100000 10000 1
 # for dbname
-Run alex 4000000 100000 10000 1
+Run xindex 4000000 100000 10000 1

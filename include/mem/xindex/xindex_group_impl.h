@@ -51,7 +51,7 @@ void Group<key_t, val_t, seq, max_model_n>::init(
   this->array_size = array_size;
   this->capacity = array_size * seq_insert_reserve_factor;
   this->model_n = model_n;
-  data = new record_t[this->capacity]();
+  data = new record_t[this->capacity + 1]();
   buffer = new buffer_t();
 
   for (size_t rec_i = 0; rec_i < array_size; rec_i++) {
@@ -426,7 +426,7 @@ inline result_t Group<key_t, val_t, seq, max_model_n>::update_to_array(
         if ((int32_t)array_size == capacity) {
           record_t *prev_data = nullptr;
           capacity = array_size * seq_insert_reserve_factor;
-          record_t *new_data = new record_t[capacity]();
+          record_t *new_data = new record_t[capacity + 1]();
           memcpy(new_data, data, array_size * sizeof(record_t));
           prev_data = data;
           data = new_data;
@@ -688,7 +688,7 @@ inline void Group<key_t, val_t, seq, max_model_n>::merge_refs(
     int32_t &new_capacity) const {
   size_t est_size = array_size + buffer->size();
   new_capacity = est_size * seq_insert_reserve_factor;
-  new_data = new record_t[new_capacity]();
+  new_data = new record_t[new_capacity + 1]();
   merge_refs_internal(new_data, new_array_size);
   assert((int32_t)new_array_size <= new_capacity);
 }
@@ -705,7 +705,7 @@ inline void Group<key_t, val_t, seq, max_model_n>::merge_refs_n_split(
   new_capacity_1 =
       (int32_t)est_size > new_capacity_1 ? est_size : new_capacity_1;
 
-  record_t *intermediate = new record_t[new_capacity_1]();
+  record_t *intermediate = new record_t[new_capacity_1 + 1]();
   merge_refs_internal(intermediate, intermediate_size);
 
   uint32_t split_pos = exponential_search_key(intermediate, intermediate_size,
@@ -718,7 +718,7 @@ inline void Group<key_t, val_t, seq, max_model_n>::merge_refs_n_split(
 
   new_array_size_2 = intermediate_size - split_pos;
   new_capacity_2 = new_array_size_2 * seq_insert_reserve_factor;
-  new_data_2 = new record_t[new_capacity_2]();
+  new_data_2 = new record_t[new_capacity_2 + 1]();
   memcpy(new_data_2, intermediate + split_pos,
          new_array_size_2 * sizeof(record_t));
 
@@ -733,7 +733,7 @@ inline void Group<key_t, val_t, seq, max_model_n>::merge_refs_with(
   size_t est_size = array_size + buffer->size() + next_group.array_size +
                     next_group.buffer->size();
   new_capacity = est_size * seq_insert_reserve_factor;
-  new_data = new record_t[new_capacity]();
+  new_data = new record_t[new_capacity + 1]();
 
   uint32_t real_size_1, real_size_2;
   merge_refs_internal(new_data, real_size_1);
