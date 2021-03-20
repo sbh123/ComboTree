@@ -318,6 +318,37 @@ public:
     { __p->~_Up(); }
 };
 
+struct Stat
+{
+  uint64_t search_times;
+  uint64_t compare_times;
+  uint64_t op_nums;
+  Stat() {
+    search_times  = op_nums = compare_times = 0;
+  }
+
+  void AddSearch() {
+    search_times ++;
+  }
+
+  void AddCompare() {
+    compare_times ++;
+  }
+
+  void AddOperation()
+  {
+    op_nums ++;
+  }
+
+  void PrintOperate(uint64_t op_num) {
+      std::cout << "Average comapre times: " << 1.0 * compare_times / op_num << std::endl;
+      compare_times = 0;
+  }
+  /* data */
+};
+
+extern Stat const_stat;
+
 int  env_init();
 int  data_init();
 void env_exit();

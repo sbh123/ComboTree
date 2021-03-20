@@ -199,6 +199,7 @@ class page{
       bool shift = false;
       int i;
       for(i = 0; records[i].ptr != NULL; ++i) {
+        NVM::const_stat.AddCompare();
         if(!shift && records[i].key == key) {
           records[i].ptr = (i == 0) ? 
             (char *)hdr.leftmost_ptr : records[i - 1].ptr; 
@@ -445,6 +446,7 @@ class page{
 
           // FAST
           for(i = *num_entries - 1; i >= 0; i--) {
+            NVM::const_stat.AddCompare();
             if(key < records[i].key ) {
               records[i+1].ptr = records[i].ptr;
               records[i+1].key = records[i].key;
@@ -499,6 +501,7 @@ class page{
         // If this node has a sibling node,
         if(hdr.sibling_ptr && (hdr.sibling_ptr != invalid_sibling)) {
           // Compare this key with the first key of the sibling
+          NVM::const_stat.AddCompare();
           if(key > hdr.sibling_ptr->records[0].key) {
             return hdr.sibling_ptr->store(bt, NULL, key, right, 
                 true, invalid_sibling);
@@ -555,6 +558,7 @@ class page{
           page *ret;
 
           // insert the key
+          NVM::const_stat.AddCompare();
           if(key < split_key) {
             insert_key(key, right, &num_entries);
             ret = this;
@@ -597,6 +601,7 @@ class page{
 
             if(IS_FORWARD(previous_switch_counter)) {
               if((tmp_key = current->records[0].key) > min) {
+                NVM::const_stat.AddCompare();
                 if(tmp_key < max) {
                   if((tmp_ptr = current->records[0].ptr) != NULL) {
                     if(tmp_key == current->records[0].key) {
@@ -612,6 +617,7 @@ class page{
 
               for(i=1; current->records[i].ptr != NULL; ++i) { 
                 if((tmp_key = current->records[i].key) > min) {
+                  NVM::const_stat.AddCompare();
                   if(tmp_key < max) {
                     if((tmp_ptr = current->records[i].ptr) != current->records[i - 1].ptr) {
                       if(tmp_key == current->records[i].key) {
@@ -628,6 +634,7 @@ class page{
             else {
               for(i=count() - 1; i > 0; --i) { 
                 if((tmp_key = current->records[i].key) > min) {
+                  NVM::const_stat.AddCompare();
                   if(tmp_key < max) {
                     if((tmp_ptr = current->records[i].ptr) != current->records[i - 1].ptr) {
                       if(tmp_key == current->records[i].key) {
@@ -642,6 +649,7 @@ class page{
               }
 
               if((tmp_key = current->records[0].key) > min) {
+                NVM::const_stat.AddCompare();
                 if(tmp_key < max) {
                   if((tmp_ptr = current->records[0].ptr) != NULL) {
                     if(tmp_key == current->records[0].key) {
@@ -675,6 +683,7 @@ class page{
 
           // search from left ro right
           if(IS_FORWARD(previous_switch_counter)) { 
+            NVM::const_stat.AddCompare();
             if((k = records[0].key) == key) {
               if((t = records[0].ptr) != NULL) {
                 if(k == records[0].key) {
@@ -685,6 +694,7 @@ class page{
             }
 
             for(i=1; records[i].ptr != NULL; ++i) { 
+              NVM::const_stat.AddCompare();
               if((k = records[i].key) == key) {
                 if(records[i-1].ptr != (t = records[i].ptr)) {
                   if(k == records[i].key) {
@@ -697,6 +707,7 @@ class page{
           }
           else { // search from right to left
             for(i = count() - 1; i > 0; --i) {
+              NVM::const_stat.AddCompare();
               if((k = records[i].key) == key) {
                 if(records[i - 1].ptr != (t = records[i].ptr) && t) {
                   if(k == records[i].key) {
@@ -708,6 +719,7 @@ class page{
             }
 
             if(!ret) {
+              NVM::const_stat.AddCompare();
               if((k = records[0].key) == key) {
                 if(NULL != (t = records[0].ptr) && t) {
                   if(k == records[0].key) {
@@ -723,7 +735,7 @@ class page{
         if(ret) {
           return ret;
         }
-
+        NVM::const_stat.AddCompare();
         if((t = (char *)hdr.sibling_ptr) && key >= ((page *)t)->records[0].key)
           return t;
 
@@ -735,6 +747,7 @@ class page{
           ret = NULL;
 
           if(IS_FORWARD(previous_switch_counter)) {
+            NVM::const_stat.AddCompare();
             if(key < (k = records[0].key)) {
               if((t = (char *)hdr.leftmost_ptr) != records[0].ptr) { 
                 ret = t;
@@ -743,6 +756,7 @@ class page{
             }
 
             for(i = 1; records[i].ptr != NULL; ++i) { 
+              NVM::const_stat.AddCompare();
               if(key < (k = records[i].key)) { 
                 if((t = records[i-1].ptr) != records[i].ptr) {
                   ret = t;
@@ -758,6 +772,7 @@ class page{
           }
           else { // search from right to left
             for(i = count() - 1; i >= 0; --i) {
+              NVM::const_stat.AddCompare();
               if(key >= (k = records[i].key)) {
                 if(i == 0) {
                   if((char *)hdr.leftmost_ptr != (t = records[i].ptr)) {
@@ -777,6 +792,7 @@ class page{
         } while(hdr.switch_counter != previous_switch_counter);
 
         if((t = (char *)hdr.sibling_ptr) != NULL) {
+          NVM::const_stat.AddCompare();
           if(key >= ((page *)t)->records[0].key)
             return t;
         }
@@ -866,6 +882,7 @@ void page::linear_search_range(entry_key_t min, entry_key_t max,
 
             if(IS_FORWARD(previous_switch_counter)) {
                 if((tmp_key = current->records[0].key) > min) {
+                    NVM::const_stat.AddCompare();
                     if(tmp_key < max) {
                         if((tmp_ptr = current->records[0].ptr) != NULL) {
                             if(tmp_key == current->records[0].key) {
@@ -888,6 +905,7 @@ void page::linear_search_range(entry_key_t min, entry_key_t max,
 
                 for(i=1; current->records[i].ptr != NULL; ++i) { 
                     if((tmp_key = current->records[i].key) > min) {
+                        NVM::const_stat.AddCompare();
                         if(tmp_key < max) {
                             if((tmp_ptr = current->records[i].ptr) != current->records[i - 1].ptr) {
                                 if(tmp_key == current->records[i].key) {
@@ -912,6 +930,7 @@ void page::linear_search_range(entry_key_t min, entry_key_t max,
             else {
                 for(i=count() - 1; i > 0; --i) { 
                     if((tmp_key = current->records[i].key) > min) {
+                        NVM::const_stat.AddCompare();
                         if(tmp_key < max) {
                             if((tmp_ptr = current->records[i].ptr) != current->records[i - 1].ptr) {
                                 if(tmp_key == current->records[i].key) {
@@ -934,6 +953,7 @@ void page::linear_search_range(entry_key_t min, entry_key_t max,
                 }
 
                 if((tmp_key = current->records[0].key) > min) {
+                    NVM::const_stat.AddCompare();
                     if(tmp_key < max) {
                         if((tmp_ptr = current->records[0].ptr) != NULL) {
                             if(tmp_key == current->records[0].key) {
@@ -977,6 +997,7 @@ void page::linear_search_range(entry_key_t min, entry_key_t max, void **values, 
 
             if(IS_FORWARD(previous_switch_counter)) {
                 if((tmp_key = current->records[0].key) > min) {
+                    NVM::const_stat.AddCompare();
                     if(tmp_key < max) {
                         if((tmp_ptr = current->records[0].ptr) != NULL) {
                             if(tmp_key == current->records[0].key) {
@@ -999,6 +1020,7 @@ void page::linear_search_range(entry_key_t min, entry_key_t max, void **values, 
 
                 for(i=1; current->records[i].ptr != NULL; ++i) { 
                     if((tmp_key = current->records[i].key) > min) {
+                        NVM::const_stat.AddCompare();
                         if(tmp_key < max) {
                             if((tmp_ptr = current->records[i].ptr) != current->records[i - 1].ptr) {
                                 if(tmp_key == current->records[i].key) {
@@ -1023,6 +1045,7 @@ void page::linear_search_range(entry_key_t min, entry_key_t max, void **values, 
             else {
                 for(i=count() - 1; i > 0; --i) { 
                     if((tmp_key = current->records[i].key) > min) {
+                        NVM::const_stat.AddCompare();
                         if(tmp_key < max) {
                             if((tmp_ptr = current->records[i].ptr) != current->records[i - 1].ptr) {
                                 if(tmp_key == current->records[i].key) {
@@ -1045,6 +1068,7 @@ void page::linear_search_range(entry_key_t min, entry_key_t max, void **values, 
                 }
 
                 if((tmp_key = current->records[0].key) > min) {
+                    NVM::const_stat.AddCompare();
                     if(tmp_key < max) {
                         if((tmp_ptr = current->records[0].ptr) != NULL) {
                             if(tmp_key == current->records[0].key) {

@@ -297,6 +297,7 @@ int main(int argc, char** argv) {
   {
     PUT_SIZE = 100000;
     GET_SIZE = 10000;
+    uint64_t GetMetic = PUT_SIZE;
     for(load_pos = 0; load_pos < LOAD_SIZE; load_pos ++) {
         auto ret = db->Put(key[load_pos], key[load_pos]);
         if (ret != 1) {
@@ -310,12 +311,12 @@ int main(int argc, char** argv) {
           uint64_t total_time  = load_timer.Microsecond("stop", "start");
           std::cout << "[Metic-Write]: After Load "<< prev_pos << " put: " 
                   << "cost " << total_time/1000000.0 << "s, " 
-                  << "iops " << (double)(load_pos - prev_pos + 1)/(double)total_time*1000000.0 
-                  << std::endl;
-          load_timer.Clear();
-          load_timer.Record("start");
+                  << "iops " << (double)(load_pos - prev_pos + 1)/(double)total_time*1000000.0 << " .";
+          NVM::const_stat.PrintOperate(load_pos - prev_pos + 1);
+          std::cout << "[Metic-Write]: "; 
+          db->PrintStatic();
           prev_pos = load_pos + 1;
-          { // small get only 10%
+          if(prev_pos % GetMetic == 0){ // small get only 10%
             size_t value;
             get_timer.Clear();
             get_timer.Record("start");
@@ -330,12 +331,18 @@ int main(int argc, char** argv) {
             uint64_t total_time  = get_timer.Microsecond("stop", "start");
             std::cout << "[Metic-Read]: After Load "<< prev_pos << " get: "
                     << "cost " << total_time/1000000.0 << "s, " 
-                    << "iops " << (double)(GET_SIZE)/(double)total_time*1000000.0 
-                    << std::endl;
+                    << "iops " << (double)(GET_SIZE)/(double)total_time*1000000.0 << " .";
+            NVM::const_stat.PrintOperate(GET_SIZE);
+            std::cout << "[Metic-Read]: ";
             db->PrintStatic();
+            GET_SIZE = pow(10, (int)std::log10(prev_pos) - 1);
+            GET_SIZE = std::min(1000000UL, GET_SIZE);
+            GetMetic = std::min(1000000UL, GET_SIZE * 10);
+            std::cout << "Get size: " << GET_SIZE << ": " << GetMetic << std::endl;
           }
-          PUT_SIZE = pow(10, (int)std::log10(prev_pos));
-          GET_SIZE = PUT_SIZE / 10;
+
+          load_timer.Clear();
+          load_timer.Record("start");
         }
     }
   }
