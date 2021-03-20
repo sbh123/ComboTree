@@ -50,4 +50,4 @@ function main() {
         Run $dbname $loadnum $opnum $scansize $thread
     fi 
 }
-main fastfair 4000000 100000 4000000 1
+main alex 100000000 1000000 4000000 1

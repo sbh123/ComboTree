@@ -9,14 +9,64 @@
 #include "combotree/combotree.h"
 #include "fast-fair/btree.h"
 #include "fast-fair/btree_old.h"
+
+#ifdef USE_MEM
+
+#include "mem/pgm/pgm_index_dynamic.hpp"
+#include "mem/xindex/xindex_impl.h"
+#include "mem/alex/alex.h"
+#else
 #include "learnindex/pgm_index_dynamic.hpp"
 #include "learnindex/rmi.h"
 #include "xindex/xindex_impl.h"
 #include "alex/alex.h"
+#endif
+
+#include "stx/btree_map.h"
 
 using combotree::ComboTree;
 using FastFair::btree;
 using namespace std;
+
+namespace KV {
+  class Key_t {
+  typedef std::array<double, 1> model_key_t;
+
+ public:
+  static constexpr size_t model_key_size() { return 1; }
+  static Key_t max() {
+    static Key_t max_key(std::numeric_limits<uint64_t>::max());
+    return max_key;
+  }
+  static Key_t min() {
+    static Key_t min_key(std::numeric_limits<uint64_t>::min());
+    return min_key;
+  }
+
+  Key_t() : key(0) {}
+  Key_t(uint64_t key) : key(key) {}
+  Key_t(const Key_t &other) { key = other.key; }
+  Key_t &operator=(const Key_t &other) {
+    key = other.key;
+    return *this;
+  }
+
+  model_key_t to_model_key() const {
+    model_key_t model_key;
+    model_key[0] = key;
+    return model_key;
+  }
+
+  friend bool operator<(const Key_t &l, const Key_t &r) { return l.key < r.key; }
+  friend bool operator>(const Key_t &l, const Key_t &r) { return l.key > r.key; }
+  friend bool operator>=(const Key_t &l, const Key_t &r) { return l.key >= r.key; }
+  friend bool operator<=(const Key_t &l, const Key_t &r) { return l.key <= r.key; }
+  friend bool operator==(const Key_t &l, const Key_t &r) { return l.key == r.key; }
+  friend bool operator!=(const Key_t &l, const Key_t &r) { return l.key != r.key; }
+
+  uint64_t key;
+};
+}
 
 namespace dbInter {
 
@@ -232,7 +282,7 @@ class XIndexDb : public ycsbc::KvDB  {
   static const int init_num = 10000;
   static const int bg_num = 1;
   static const int work_num = 1;
-  typedef RMI::Key_64 index_key_t;
+  typedef KV::Key_t index_key_t;
   typedef xindex::XIndex<index_key_t, uint64_t> xindex_t;
 public:
   XIndexDb(): xindex_(nullptr) {}
