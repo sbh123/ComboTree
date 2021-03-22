@@ -175,7 +175,7 @@ target_link_libraries(nvm_test pmem)
 add_test(nvm_test nvm_test)
 
 ## microbench
-add_executable(microbench tests/microbench.cc)
+add_executable(microbench tests/micro_bench.cc)
 target_link_libraries(microbench combotree)
 add_test(microbench microbench)
 

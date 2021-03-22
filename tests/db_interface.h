@@ -349,6 +349,64 @@ private:
   xindex_t *xindex_;
 };
 
+class StxDB : public ycsbc::KvDB  {
+  typedef uint64_t KEY_TYPE;
+  typedef uint64_t PAYLOAD_TYPE;
+  typedef stx::btree_map<KEY_TYPE, PAYLOAD_TYPE> btree_t;
+public:
+  StxDB(): btree_(nullptr) {}
+  StxDB(btree_t *btree): btree_(btree) {}
+  virtual ~StxDB() {
+    delete btree_;
+  }
+
+  void Init()
+  {
+    btree_ = new btree_t();
+  }
+
+  void Info()
+  {
+  }
+
+  int Put(uint64_t key, uint64_t value) 
+  {
+    btree_->insert(key, value);
+    return 1;
+  }
+  int Get(uint64_t key, uint64_t &value)
+  {
+      value = btree_->find(key).data();
+      // assert(value == key);
+      return 1;
+  }
+  int Update(uint64_t key, uint64_t value) {
+      btree_->find(key).data() = value;
+      return 1;
+  }
+  int Delete(uint64_t key) {
+      btree_->erase(key);
+      return 1;
+  }
+  int Scan(uint64_t start_key, int len, std::vector<std::pair<uint64_t, uint64_t>>& results) 
+  {
+    auto it = btree_->lower_bound(start_key);
+    int num_entries = 0;
+    while (num_entries < len && it != btree_->end()) {
+      results.push_back({it.key(), it.data()});
+      num_entries ++;
+      it++;
+    }
+    return 1;
+  } 
+  void PrintStatic() {
+    // std::cerr << "Alevel average cost: " << Common::timers["ABLevel_times"].avg_latency() << std::endl;
+    // std::cerr << "Clevel average cost: " << Common::timers["CLevel_times"].avg_latency() << std::endl;
+  }
+private:
+  btree_t *btree_;
+};
+
 class AlexDB : public ycsbc::KvDB  {
   typedef uint64_t KEY_TYPE;
   typedef uint64_t PAYLOAD_TYPE;
