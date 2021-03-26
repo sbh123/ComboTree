@@ -54,4 +54,4 @@ function main() {
         Run $dbname $loadnum $opnum $scansize $thread
     fi 
 }
-main stx 10000000 100000 4000000 1
+main stx 1000000 100000 4000000 1

@@ -11,9 +11,10 @@
 #include "db_interface.h"
 #include "timer.h"
 #include "util.h"
+#include "random.h"
 
 using combotree::ComboTree;
-// using combotree::Random;
+using combotree::Random;
 using combotree::Timer;
 using ycsbc::KvDB;
 using namespace dbInter;
@@ -26,19 +27,40 @@ struct operation
     uint64_t key_num;
 };
 
-std::vector<uint32_t> generate_random_operation(uint32_t data_size, uint32_t op_num)
+std::vector<uint64_t> generate_random_operation(const std::string load_file, size_t data_size, size_t op_num,
+	const std::string filename = "generate_random_osm_cellid.dat")
 {
-    std::vector<uint32_t> data; 
-    util::FastRandom ranny(42);
-    size_t num_generated = 0;
-    data.resize(op_num);
-    while (num_generated < op_num)
-    {
-        /* code */
-        data[num_generated] = ranny.RandUint32(0, data_size - 1);
-        num_generated ++;
-    }
-    return data;
+    std::vector<uint64_t> data; 
+    uint64_t size;
+    util::FastRandom ranny(2021);
+    const uint64_t ns = util::timing([&] { 
+      std::ifstream in(filename, std::ios::binary);
+      if (!in.is_open()) {
+        std::cerr << "unable to open " << filename << std::endl;
+        data = util::load_data<uint64_t>(load_file, data_size);
+        std::random_shuffle(data.begin(), data.end()); 
+
+        size = data.size();
+        std::ofstream out(filename, std::ios::binary);
+        out.write(reinterpret_cast<char*>(&size), sizeof(uint64_t));
+        out.write(reinterpret_cast<char*>(data.data()), op_num*sizeof(uint64_t));
+        out.close(); 
+        data.resize(op_num);
+      } else {
+        in.read(reinterpret_cast<char*>(&size), sizeof(uint64_t));
+        std::cerr << "Data size: " << size << std::endl;
+        size = std::min(size, op_num);
+        data.resize(op_num);
+        // Read values.
+        in.read(reinterpret_cast<char*>(data.data()), size*sizeof(uint64_t));
+        in.close();
+      }
+  });
+  const uint64_t ms = ns/1e6;
+  std::cout << "generate " << data.size() << " values in "
+            << ms << " ms (" << static_cast<double>(data.size())/1000/ms
+            << " M values/s)" << std::endl;   
+  return data;
 }
 
 void show_help(char* prog) {
@@ -113,10 +135,9 @@ int main(int argc, char *argv[]) {
 
   assert(type == DataType::UINT64);
 
-  const std::vector<uint64_t> data_base = util::load_data<uint64_t>(load_file, 1e6);
+  const std::vector<uint64_t> data_base = generate_random_operation(load_file, 1e7, LOAD_SIZE + PUT_SIZE * 5);
 
   // Load 
-
   NVM::env_init();
   KvDB* db = nullptr;
   if(dbName == "fastfair") {
@@ -133,16 +154,28 @@ int main(int argc, char *argv[]) {
     db = new ComboTreeDb();
   }
   db->Init();
-   // Load
-  const std::vector<uint32_t> op_seqs = generate_random_operation(data_base.size(), LOAD_SIZE + PUT_SIZE);
   Timer timer;
   uint64_t us_times;
   uint64_t load_pos = 0; 
+  std::cout << "Start run ...." << std::endl;
   {
+   std::set<uint64_t> unique_keys;
+   std::set<uint64_t> unique_seqs;
+   for(int i = 0; i < data_base.size(); i ++) {
+     unique_keys.insert(data_base[i]);
+     std::cout << "key: " << data_base[i] << std::endl;
+   }
+   std::cout << "Unique seqs: " << unique_seqs.size() << ", " 
+             << "Unique data: " << unique_keys.size() << std::endl;
+  } 
+  {
+     // Load
     timer.Record("start");
     for(load_pos = 0; load_pos < LOAD_SIZE; load_pos ++) {
-      db->Put(data_base[op_seqs[load_pos]], data_base[op_seqs[load_pos]]);
+      db->Put(data_base[load_pos], data_base[load_pos]);
+      if((load_pos + 1) % 10000 == 0) std::cerr << "Operate: " << load_pos + 1 << '\r';  
     }
+    std::cerr << std::endl;
     timer.Record("stop");
     us_times = timer.Microsecond("stop", "start");
     std::cout << "[Metic-Load]: Load " << LOAD_SIZE << ": " 
@@ -154,25 +187,30 @@ int main(int argc, char *argv[]) {
   // us_times = timer.Microsecond("stop", "start");
   // timer.Record("start");
   // Different insert_ration
+  std::vector<float> insert_ratios = {0, 0.2, 0.5, 0.8, 1.0}; 
   float insert_ratio = 0;
   util::FastRandom ranny(18);
+  for(int i = 0; i < insert_ratios.size(); i++)
   {
     uint64_t value = 0;
+    insert_ratio = insert_ratios[i];
+    db->Begin_trans();
+    timer.Clear();
     timer.Record("start");
     for(uint64_t i = 0; i < GET_SIZE; i ++) {
       if(ranny.ScaleFactor() < insert_ratio) {
-        db->Put(data_base[op_seqs[load_pos]], data_base[op_seqs[load_pos]]);
+        db->Put(data_base[load_pos], data_base[load_pos]);
         load_pos ++;
       } else {
-        uint32_t op_seq = op_seqs[ranny.RandUint32(0, load_pos - 1)];
-        db->Get(data_base[op_seqs[load_pos]], value);
+        uint32_t op_seq = ranny.RandUint32(0, load_pos - 1);
+        db->Get(data_base[op_seq], value);
       }
     }
     timer.Record("stop");
     us_times = timer.Microsecond("stop", "start");
     std::cout << "[Metic-Operate]: Operate " << GET_SIZE << " insert_ratio "<< insert_ratio <<  ": " 
               << "cost " << us_times/1000000.0 << "s, " 
-              << "iops " << (double)(LOAD_SIZE)/(double)us_times*1000000.0 << " ." << std::endl;
+              << "iops " << (double)(GET_SIZE)/(double)us_times*1000000.0 << " ." << std::endl;
   }
 
   delete db;

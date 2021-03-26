@@ -68,6 +68,7 @@ _minted*
 *.synctex.gz
 *.synctex.gz(busy)
 *.pdfsync
+*.dat
 
 show_file.sh
 result/*
