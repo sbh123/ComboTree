@@ -43,6 +43,7 @@ std::vector<uint64_t> read_data_from_map(const std::string load_file,
       {
         /* code */
         std::string tmp;
+        getline(in, tmp); // 去除第一行
         while(getline(in, tmp)) {
           stringstream strin(tmp);
           strin >> id >> lat >> lon;
@@ -51,6 +52,7 @@ std::vector<uint64_t> read_data_from_map(const std::string load_file,
         }
       }
       in.close();
+      std::random_shuffle(data.begin(), data.end()); 
       std::ofstream out(filename, std::ios::binary);
       out.write(reinterpret_cast<char*>(&size), sizeof(uint64_t));
       out.write(reinterpret_cast<char*>(data.data()), data.size() * sizeof(uint64_t));

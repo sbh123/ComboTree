@@ -29,3 +29,9 @@ yum install -y intel-mkl -->
 **YCSB**
 ./ycsb -db combotree -threads 1 -P ../include/ycsb/workloads/
 ./ycsb -db combotree -threads 1 -P ../include/ycsb/insert_ratio/
+
+**OSM**
+osmconvert: wget -O - http://m.m.i24.cc/osmconvert.c | cc -x c - -lz -O3 -o osmconvert
+pbftoosm: osmconvert region.pbf -o=region.osm
+statistics: osmconvert germany.osm.pbf --out-statistics
+osmtocsv: osmconvert shops.osm --all-to-nodes --csv="@id @lon @lat amenity shop name" --csv-headline
