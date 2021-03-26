@@ -1,5 +1,6 @@
 #!/bin/bash
 BUILDDIR=$(dirname "$0")/../build/
+WorkLoad="/home/sbh/bhutan-latest.csv"
 
 function Run() {
     dbname=$1
@@ -8,11 +9,11 @@ function Run() {
     scansize=$4
     thread=$5
     ${BUILDDIR}/microbench --dbname ${dbname} --load-size ${loadnum} \
-        --put-size ${opnum} --get-size ${opnum} --workload /root/osm_cellids_800M_uint64 \
+        --put-size ${opnum} --get-size ${opnum} --workload ${WorkLoad} \
         -t $thread | tee scalability-${dbname}-${thread}.txt
 
-    echo "{BUILDDIR}/microbench --dbname ${dbname} --load-size ${loadnum} \
-        --put-size ${opnum} --get-size ${opnum} --workload /root/osm_cellids_800M_uint64 \
+    echo "${BUILDDIR}/microbench --dbname ${dbname} --load-size ${loadnum} \
+        --put-size ${opnum} --get-size ${opnum} --workload ${WorkLoad} \
         -t $thread"
 }
 

@@ -27,8 +27,46 @@ struct operation
     uint64_t key_num;
 };
 
-std::vector<uint64_t> generate_random_operation(const std::string load_file, size_t data_size, size_t op_num,
-	const std::string filename = "generate_random_osm_cellid.dat")
+std::vector<uint64_t> read_data_from_map(const std::string load_file, 
+    const std::string filename = "generate_random_osm_cellid.dat") {
+    std::vector<uint64_t> data; 
+    const uint64_t ns = util::timing([&] { 
+      std::ifstream in(load_file);
+      if (!in.is_open()) {
+        std::cerr << "unable to open " << load_file << std::endl;
+        exit(EXIT_FAILURE);
+      }
+      uint64_t id, size = 0;
+      double lat, lon;
+      std::cout << "Run hear" << std::endl;
+      while (!in.eof())
+      {
+        /* code */
+        std::string tmp;
+        while(getline(in, tmp)) {
+          stringstream strin(tmp);
+          strin >> id >> lat >> lon;
+          data.push_back(id);
+          size ++;
+        }
+      }
+      in.close();
+      std::ofstream out(filename, std::ios::binary);
+      out.write(reinterpret_cast<char*>(&size), sizeof(uint64_t));
+      out.write(reinterpret_cast<char*>(data.data()), data.size() * sizeof(uint64_t));
+      out.close(); 
+      std::cout << "read size: " << size << std::endl;
+  });
+  const uint64_t ms = ns/1e6;
+  std::cout << "generate " << data.size() << " values in "
+            << ms << " ms (" << static_cast<double>(data.size())/1000/ms
+            << " M values/s)" << std::endl;   
+  return data;
+}
+
+std::vector<uint64_t> generate_random_operation(const std::string load_file, 
+    size_t data_size, size_t op_num,
+	  const std::string filename = "generate_random_osm_cellid.dat")
 {
     std::vector<uint64_t> data; 
     uint64_t size;
@@ -37,6 +75,9 @@ std::vector<uint64_t> generate_random_operation(const std::string load_file, siz
       std::ifstream in(filename, std::ios::binary);
       if (!in.is_open()) {
         std::cerr << "unable to open " << filename << std::endl;
+        const DataType type = util::resolve_type(load_file);
+        assert(type == DataType::UINT64);
+
         data = util::load_data<uint64_t>(load_file, data_size);
         std::random_shuffle(data.begin(), data.end()); 
 
@@ -131,11 +172,10 @@ int main(int argc, char *argv[]) {
   std::cout << "DB  name:              " << dbName << std::endl;
   std::cout << "Workload:              " << load_file << std::endl;
 
-  const DataType type = util::resolve_type(load_file);
 
-  assert(type == DataType::UINT64);
-
-  const std::vector<uint64_t> data_base = generate_random_operation(load_file, 1e7, LOAD_SIZE + PUT_SIZE * 5);
+  // const std::vector<uint64_t> data_base = generate_random_operation(load_file, 1e7, LOAD_SIZE + PUT_SIZE * 5);
+  const std::vector<uint64_t> data_base = read_data_from_map(load_file);
+  return 0;
 
   // Load 
   NVM::env_init();
