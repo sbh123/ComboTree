@@ -28,8 +28,9 @@ struct operation
 };
 
 std::vector<uint64_t> read_data_from_map(const std::string load_file, 
-    const std::string filename = "generate_random_osm_cellid.dat") {
+    const std::string filename = "/home/sbh/generate_random_osm_cellid.dat") {
     std::vector<uint64_t> data; 
+    std::cout << "Use: " << __FUNCTION__ << std::endl;
     const uint64_t ns = util::timing([&] { 
       std::ifstream in(load_file);
       if (!in.is_open()) {
@@ -66,14 +67,51 @@ std::vector<uint64_t> read_data_from_map(const std::string load_file,
   return data;
 }
 
-std::vector<uint64_t> generate_random_operation(const std::string load_file, 
-    size_t data_size, size_t op_num,
-	  const std::string filename = "generate_random_osm_cellid.dat")
+std::vector<uint64_t> generate_random_ycsb(size_t op_num)
 {
-    std::vector<uint64_t> data; 
-    uint64_t size;
-    util::FastRandom ranny(2021);
-    const uint64_t ns = util::timing([&] { 
+  std::vector<uint64_t> data; 
+  data.resize(op_num);
+  std::cout << "Use: " << __FUNCTION__ << std::endl;
+  const uint64_t ns = util::timing([&] { 
+    Random rnd(0, op_num);
+    for (size_t i = 0; i < op_num; ++i)
+      data[i] = utils::Hash(i);
+    for (size_t i = 0; i < op_num; ++i)
+      std::swap(data[i], data[rnd.Next()]);
+  });
+  const uint64_t ms = ns/1e6;
+  std::cout << "generate " << data.size() << " values in "
+            << ms << " ms (" << static_cast<double>(data.size())/1000/ms
+            << " M values/s)" << std::endl;   
+  return data;
+}
+
+std::vector<uint64_t> generate_uniform_random(size_t op_num)
+{
+  std::vector<uint64_t> data; 
+  data.resize(op_num);
+  std::cout << "Use: " << __FUNCTION__ << std::endl;
+  const uint64_t ns = util::timing([&] { 
+    Random rnd(0, UINT64_MAX);
+    for (size_t i = 0; i < op_num; ++i)
+      data[i] = rnd.Next();
+  });
+  const uint64_t ms = ns/1e6;
+  std::cout << "generate " << data.size() << " values in "
+            << ms << " ms (" << static_cast<double>(data.size())/1000/ms
+            << " M values/s)" << std::endl;  
+  return data;
+}
+
+std::vector<uint64_t> load_random_osm(const std::string load_file, 
+    size_t data_size, size_t op_num,
+	  const std::string filename = "/home/sbh/generate_random_osm_cellid.dat")
+{
+  std::vector<uint64_t> data; 
+  uint64_t size;
+  util::FastRandom ranny(2021);
+  std::cout << "Use: " << __FUNCTION__ << std::endl;
+  const uint64_t ns = util::timing([&] { 
       std::ifstream in(filename, std::ios::binary);
       if (!in.is_open()) {
         std::cerr << "unable to open " << filename << std::endl;
@@ -124,7 +162,7 @@ size_t LOAD_SIZE   = 10000000;
 size_t PUT_SIZE    = 6000000;
 size_t GET_SIZE    = 1000000;
 size_t DELETE_SIZE = 1000000;
-bool Load_Only = false;
+int Loads_type = 0;
 
 int main(int argc, char *argv[]) {
     static struct option opts[] = {
@@ -135,7 +173,7 @@ int main(int argc, char *argv[]) {
     {"get-size",        required_argument, NULL, 0},
     {"dbname",          required_argument, NULL, 0},
     {"workload",        required_argument, NULL, 0},
-    {"load",            no_argument,       NULL, 'L'},
+    {"loadstype",       required_argument, NULL, 0},
     {"help",            no_argument,       NULL, 'h'},
     {NULL, 0, NULL, 0}
   };
@@ -154,13 +192,12 @@ int main(int argc, char *argv[]) {
           case 3: GET_SIZE = atoi(optarg); break;
           case 4: dbName = optarg; break;
           case 5: load_file = optarg; break;
-          case 7: Load_Only = true; break;
-          case 8: show_help(argv[0]); return 0;
+          case 6: Loads_type = atoi(optarg); break;
+          case 7: show_help(argv[0]); return 0;
           default: std::cerr << "Parse Argument Error!" << std::endl; abort();
         }
         break;
       case 't': thread_num = atoi(optarg); break;
-      case 'L': Load_Only = true; break;
       case 'h': show_help(argv[0]); return 0;
       case '?': break;
       default:  std::cout << (char)c << std::endl; abort();
@@ -175,9 +212,25 @@ int main(int argc, char *argv[]) {
   std::cout << "Workload:              " << load_file << std::endl;
 
 
-  // const std::vector<uint64_t> data_base = generate_random_operation(load_file, 1e7, LOAD_SIZE + PUT_SIZE * 5);
-  const std::vector<uint64_t> data_base = read_data_from_map(load_file);
-  return 0;
+  std::vector<uint64_t> data_base;
+  switch (Loads_type)
+  {
+  case -1:
+    data_base = read_data_from_map(load_file);
+    break;
+  case 0:
+    data_base = generate_uniform_random(LOAD_SIZE + PUT_SIZE * 5);
+    break;
+  case 1:
+    data_base = generate_random_ycsb(LOAD_SIZE + PUT_SIZE * 5);
+    break;
+  case 2:
+    data_base = load_random_osm(load_file, 5e8, LOAD_SIZE + PUT_SIZE * 5);
+    break;
+  default:
+    data_base = generate_uniform_random(LOAD_SIZE + PUT_SIZE * 5);
+    break;
+  }
 
   // Load 
   NVM::env_init();
@@ -200,7 +253,7 @@ int main(int argc, char *argv[]) {
   uint64_t us_times;
   uint64_t load_pos = 0; 
   std::cout << "Start run ...." << std::endl;
-  {
+  if(false){
    std::set<uint64_t> unique_keys;
    std::set<uint64_t> unique_seqs;
    for(int i = 0; i < data_base.size(); i ++) {

@@ -9,12 +9,11 @@ function Run() {
     scansize=$4
     thread=$5
     ${BUILDDIR}/microbench --dbname ${dbname} --load-size ${loadnum} \
-        --put-size ${opnum} --get-size ${opnum} --workload ${WorkLoad} \
-        -t $thread | tee scalability-${dbname}-${thread}.txt
+    --put-size ${opnum} --get-size ${opnum} --workload ${WorkLoad} \
+    --loadstype 2 -t $thread | tee scalability-${dbname}-${thread}.txt
 
-    echo "${BUILDDIR}/microbench --dbname ${dbname} --load-size ${loadnum} \
-        --put-size ${opnum} --get-size ${opnum} --workload ${WorkLoad} \
-        -t $thread"
+    echo "${BUILDDIR}/microbench --dbname ${dbname} --load-size ${loadnum} "\
+    "--put-size ${opnum} --get-size ${opnum} --workload ${WorkLoad} --loadstype 2 -t $thread"
 }
 
 # DBName: combotree fastfair pgm xindex alex
