@@ -10,7 +10,7 @@ function Run() {
     thread=$5
     ${BUILDDIR}/microbench --dbname ${dbname} --load-size ${loadnum} \
     --put-size ${opnum} --get-size ${opnum} --workload ${WorkLoad} \
-    --loadstype 2 -t $thread | tee scalability-${dbname}-${thread}.txt
+    --loadstype 2 -t $thread | tee microbench-${dbname}-wl${loadstype}.txt
 
     echo "${BUILDDIR}/microbench --dbname ${dbname} --load-size ${loadnum} "\
     "--put-size ${opnum} --get-size ${opnum} --workload ${WorkLoad} --loadstype 2 -t $thread"

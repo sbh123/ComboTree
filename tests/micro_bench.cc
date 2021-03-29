@@ -225,7 +225,7 @@ int main(int argc, char *argv[]) {
     data_base = generate_random_ycsb(LOAD_SIZE + PUT_SIZE * 5);
     break;
   case 2:
-    data_base = load_random_osm(load_file, 5e8, LOAD_SIZE + PUT_SIZE * 5);
+    data_base = load_random_osm(load_file, 10e8, LOAD_SIZE + PUT_SIZE * 5);
     break;
   default:
     data_base = generate_uniform_random(LOAD_SIZE + PUT_SIZE * 5);
@@ -276,7 +276,6 @@ int main(int argc, char *argv[]) {
     std::cout << "[Metic-Load]: Load " << LOAD_SIZE << ": " 
               << "cost " << us_times/1000000.0 << "s, " 
               << "iops " << (double)(LOAD_SIZE)/(double)us_times*1000000.0 << " ." << std::endl;
-
   }
   
   // us_times = timer.Microsecond("stop", "start");
@@ -285,11 +284,11 @@ int main(int argc, char *argv[]) {
   std::vector<float> insert_ratios = {0, 0.2, 0.5, 0.8, 1.0}; 
   float insert_ratio = 0;
   util::FastRandom ranny(18);
+  db->Begin_trans();
   for(int i = 0; i < insert_ratios.size(); i++)
   {
     uint64_t value = 0;
     insert_ratio = insert_ratios[i];
-    db->Begin_trans();
     timer.Clear();
     timer.Record("start");
     for(uint64_t i = 0; i < GET_SIZE; i ++) {
