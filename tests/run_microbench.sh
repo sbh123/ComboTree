@@ -1,6 +1,6 @@
 #!/bin/bash
 BUILDDIR=$(dirname "$0")/../build/
-WorkLoad="/home/sbh/bhutan-latest.csv"
+WorkLoad="/home/sbh/asia-latest.csv"
 
 function Run() {
     dbname=$1
@@ -10,7 +10,7 @@ function Run() {
     thread=$5
     ${BUILDDIR}/microbench --dbname ${dbname} --load-size ${loadnum} \
     --put-size ${opnum} --get-size ${opnum} --workload ${WorkLoad} \
-    --loadstype 2 -t $thread | tee microbench-${dbname}-wl${loadstype}.txt
+    --loadstype 2 -t $thread | tee microbench-${dbname}-wl-3.txt
 
     echo "${BUILDDIR}/microbench --dbname ${dbname} --load-size ${loadnum} "\
     "--put-size ${opnum} --get-size ${opnum} --workload ${WorkLoad} --loadstype 2 -t $thread"
@@ -18,11 +18,11 @@ function Run() {
 
 # DBName: combotree fastfair pgm xindex alex
 function run_all() {
-    dbs="combotree fastfair pgm alex xindex"
+    dbs="fastfair pgm alex"
     for dbname in $dbs; do
         echo "Run: " $dbname
         Run $dbname $1 $2 $3 1
-        # sleep 100
+        sleep 100
     done
 }
 
@@ -54,4 +54,4 @@ function main() {
         Run $dbname $loadnum $opnum $scansize $thread
     fi 
 }
-main stx 1000000 100000 4000000 1
+main all 400000000 1000000 4000000 1

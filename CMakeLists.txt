@@ -50,7 +50,7 @@ endif(NO_ENTRY_BUF)
 
 set(EXPANSION_FACTOR      2)
 set(DEFAULT_SPAN          2)
-set(PMEMKV_THRESHOLD      3000)
+set(PMEMKV_THRESHOLD      10000)
 set(ENTRY_SIZE_FACTOR     1.2)
 
 configure_file(

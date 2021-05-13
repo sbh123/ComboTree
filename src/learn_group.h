@@ -149,9 +149,9 @@ bool Update(uint64_t key, uint64_t value, CLevel::MemControl *mem)
 
 bool Get(uint64_t key, uint64_t& value, CLevel::MemControl *mem) const {
     uint64_t pos = Find_(key);
-    // Common::timers["CLevel_times"].start();
+    Common::g_metic.tracepoint("FindEntry");
     auto ret = entries_[pos].Get(mem, key, value);
-    // Common::timers["CLevel_times"].end();
+    Common::g_metic.tracepoint("EntryGet");
     return ret;
 }
 bool Delete(uint64_t key, uint64_t* value, CLevel::MemControl *mem)
@@ -681,7 +681,9 @@ public:
     }
 
     bool Get(uint64_t key, uint64_t& value) const {
+        Common::g_metic.tracepoint("None");
         int group_id = FindGroup(key);
+        Common::g_metic.tracepoint("FindGoup");
         return Group(group_id)->Get(key, value, clevel_mem_);
     }
 

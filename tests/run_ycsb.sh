@@ -1,6 +1,6 @@
 #!/bin/bash
 BUILDDIR=$(dirname "$0")/../build/
-WORKLOAD="insert_ratio"  #workloads
+WORKLOAD="workloads"  #workloads
 WORKLOADDIR=$(dirname "$0")/../include/ycsb/$WORKLOAD/
 
 function Run() {
@@ -11,11 +11,11 @@ function Run() {
     thread=$5
     # ${WORKLOADDIR}/workloads_set.sh ${loadnum} ${opnum}
 
-    ${BUILDDIR}/ycsb-mem -db ${dbname} -threads ${thread} -P ${WORKLOADDIR} | tee ycsb-${dbname}-${WORKLOAD}.txt
+    ${BUILDDIR}/ycsb -db ${dbname} -threads ${thread} -P ${WORKLOADDIR} | tee ycsb-${dbname}-${WORKLOAD}-tmp.txt
 }
 
 function run_all() {
-    dbs="stx pgm alex xindex"
+    dbs="learngroup fastfair alex pgm xindex"
     for dbname in $dbs; do
         echo "Run: " $dbname
         Run $dbname $1 $2 $3 1
@@ -25,4 +25,7 @@ function run_all() {
 # DBName: combotree fastfair pgm xindex alex
 # Run pgm 4000000 100000 10000 1
 # for dbname
-Run xindex 4000000 100000 10000 1
+Run letree 4000000 100000 10000 1
+sleep 100
+# Run learngroup 4000000 100000 10000 1
+# run_all 4000000 100000 10000

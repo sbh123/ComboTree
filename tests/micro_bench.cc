@@ -28,8 +28,9 @@ struct operation
 };
 
 std::vector<uint64_t> read_data_from_map(const std::string load_file, 
-    const std::string filename = "/home/sbh/generate_random_osm_cellid.dat") {
-    std::vector<uint64_t> data; 
+    const std::string filename = "/home/sbh/generate_random_osm_longlat.dat") {
+    std::vector<uint64_t> data;
+    std::set<uint64_t> unique_keys;
     std::cout << "Use: " << __FUNCTION__ << std::endl;
     const uint64_t ns = util::timing([&] { 
       std::ifstream in(load_file);
@@ -48,17 +49,20 @@ std::vector<uint64_t> read_data_from_map(const std::string load_file,
         while(getline(in, tmp)) {
           stringstream strin(tmp);
           strin >> id >> lat >> lon;
-          data.push_back(id);
+          uint64_t key = (((uint64_t)(lat * 1e6)) << 32) + (uint64_t)(lon * 1e6);
+          // data.push_back(key);
+          unique_keys.insert(key);
           size ++;
         }
       }
       in.close();
+      data.assign(unique_keys.begin(), unique_keys.end());
       std::random_shuffle(data.begin(), data.end()); 
       std::ofstream out(filename, std::ios::binary);
       out.write(reinterpret_cast<char*>(&size), sizeof(uint64_t));
       out.write(reinterpret_cast<char*>(data.data()), data.size() * sizeof(uint64_t));
       out.close(); 
-      std::cout << "read size: " << size << std::endl;
+      std::cout << "read size: " << size << ", unique data: " << unique_keys.size() << std::endl;
   });
   const uint64_t ms = ns/1e6;
   std::cout << "generate " << data.size() << " values in "
@@ -73,7 +77,7 @@ std::vector<uint64_t> generate_random_ycsb(size_t op_num)
   data.resize(op_num);
   std::cout << "Use: " << __FUNCTION__ << std::endl;
   const uint64_t ns = util::timing([&] { 
-    Random rnd(0, op_num);
+    Random rnd(0, op_num - 1);
     for (size_t i = 0; i < op_num; ++i)
       data[i] = utils::Hash(i);
     for (size_t i = 0; i < op_num; ++i)
@@ -105,7 +109,7 @@ std::vector<uint64_t> generate_uniform_random(size_t op_num)
 
 std::vector<uint64_t> load_random_osm(const std::string load_file, 
     size_t data_size, size_t op_num,
-	  const std::string filename = "/home/sbh/generate_random_osm_cellid.dat")
+	  const std::string filename = "/home/sbh/generate_random_osm_longlat.dat")
 {
   std::vector<uint64_t> data; 
   uint64_t size;
@@ -136,6 +140,11 @@ std::vector<uint64_t> load_random_osm(const std::string load_file,
         in.read(reinterpret_cast<char*>(data.data()), size*sizeof(uint64_t));
         in.close();
       }
+      // std::set<uint64_t> unique_sets;
+      // for(size_t i = 0; i < data.size(); i ++) {
+      //  unique_sets.insert(data[i]);
+      // }
+      // std::cout << "Unique data: " << unique_sets.size() << std::endl;
   });
   const uint64_t ms = ns/1e6;
   std::cout << "generate " << data.size() << " values in "

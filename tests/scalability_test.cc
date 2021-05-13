@@ -335,9 +335,10 @@ int main(int argc, char** argv) {
             NVM::const_stat.PrintOperate(GET_SIZE);
             std::cout << "[Metic-Read]: ";
             db->PrintStatic();
-            GET_SIZE = pow(10, (int)std::log10(prev_pos) - 1);
+            // GET_SIZE = pow(10, (int)std::log10(prev_pos) - 1);
+            GET_SIZE = prev_pos / 10;
             GET_SIZE = std::min(1000000UL, GET_SIZE);
-            GetMetic = std::min(1000000UL, GET_SIZE * 10);
+            // GetMetic = std::min(1000000UL, GET_SIZE * 10);
             std::cout << "Get size: " << GET_SIZE << ": " << GetMetic << std::endl;
           }
 

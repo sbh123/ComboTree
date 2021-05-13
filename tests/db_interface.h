@@ -7,6 +7,7 @@
 #include <future>
 #include "ycsb/ycsb-c.h"
 #include "combotree/combotree.h"
+#include "../src/combotree_config.h"
 #include "fast-fair/btree.h"
 #include "fast-fair/btree_old.h"
 

@@ -16,6 +16,7 @@
 #include "stx/btree_map.h"
 #include "../src/learn_group.h"
 #include "random.h"
+#include "../src/letree.h"
 
 using combotree::ComboTree;
 using FastFair::btree;
@@ -24,18 +25,18 @@ using xindex::XIndex;
 
 
 const char *workloads[] = {
-  // "workloada.spec",
-  // "workloadb.spec",
-  // "workloadc.spec",
-  // "workloadd.spec",
-  // "workloade.spec",
-  // "workloadf.spec",
-  "workloada_insert_0.spec",
-  "workloada_insert_10.spec",
-  "workloada_insert_20.spec",
-  "workloada_insert_50.spec",
-  "workloada_insert_80.spec",
-  "workloada_insert_100.spec",
+  "workloada.spec",
+  "workloadb.spec",
+  "workloadc.spec",
+  "workloadd.spec",
+  "workloade.spec",
+  "workloadf.spec",
+  // "workloada_insert_0.spec",
+  // "workloada_insert_10.spec",
+  // "workloada_insert_20.spec",
+  // "workloada_insert_50.spec",
+  // "workloada_insert_80.spec",
+  // "workloada_insert_100.spec",
   // "workload_read.spec",
   // "workload_insert.spec",
 
@@ -400,6 +401,7 @@ public:
     return 1;
   } 
   void PrintStatic() {
+    Common::g_metic.show_metic();
     // std::cerr << "Alevel average cost: " << Common::timers["ABLevel_times"].avg_latency() << std::endl;
     // std::cerr << "Clevel average cost: " << Common::timers["CLevel_times"].avg_latency() << std::endl;
   }
@@ -472,17 +474,82 @@ public:
     return 1;
   } 
   void PrintStatic() {
-      // std::cerr << "Alevel average cost: " << Common::timers["ALevel_times"].avg_latency();
-      // std::cerr << ",Blevel average cost: " << Common::timers["BLevel_times"].avg_latency();
-      // std::cerr << ",Clevel average cost: " << Common::timers["CLevel_times"].avg_latency() << std::endl;
-      // Common::timers["ALevel_times"].clear();
-      // Common::timers["BLevel_times"].clear();
-      // Common::timers["CLevel_times"].clear();
+      Common::g_metic.show_metic();
   }
 private:
   combotree::RootModel *root_;
 };
 
+class LetDB : public ycsbc::KvDB  {
+  static const size_t init_num = 2000;
+  void Prepare() {
+    std::vector<std::pair<uint64_t,uint64_t>> initial_kv;
+    combotree::Random rnd(0, UINT64_MAX - 1);
+    initial_kv.push_back({0, UINT64_MAX});
+    for (uint64_t i = 0; i < init_num - 1; ++i) {
+        uint64_t key = rnd.Next();
+        uint64_t value = rnd.Next();
+        initial_kv.push_back({key, value});
+    }
+    sort(initial_kv.begin(), initial_kv.end());
+    let_->bulk_load(initial_kv);
+  }
+public:
+  LetDB(): let_(nullptr) {}
+  LetDB(combotree::letree *root): let_(root) {}
+  virtual ~LetDB() {
+    delete let_;
+  }
+
+  void Init()
+  {
+    NVM::data_init();
+    let_ = new combotree::letree();
+    Prepare();
+  }
+
+  void Info()
+  {
+    NVM::show_stat();
+    let_->Info();
+  }
+
+  int Put(uint64_t key, uint64_t value) 
+  {
+    // alex_->insert(key, value);
+    let_->Put(key, value);
+    return 1;
+  }
+  int Get(uint64_t key, uint64_t &value)
+  {
+      let_->Get(key, value);
+      return 1;
+  }
+  int Delete(uint64_t key) {
+      let_->Delete(key);
+      return 1;
+  }
+  int Update(uint64_t key, uint64_t value) {
+      let_->Update(key, value);
+      return 1;
+  }
+  int Scan(uint64_t start_key, int len, std::vector<std::pair<uint64_t, uint64_t>>& results) 
+  {
+    combotree::letree::Iter it(let_, start_key);
+    int num_entries = 0;
+    while (num_entries < len && !it.end()) {
+      results.push_back({it.key(), it.value()});
+      num_entries ++;
+      it.next();
+    }
+    return 1;
+  } 
+  void PrintStatic() {
+      Common::g_metic.show_metic();
+  }
+private:
+  combotree::letree *let_;
+};
 
 void UsageMessage(const char *command);
 bool StrStartWith(const char *str, const char *pre);
@@ -495,7 +562,7 @@ int YCSB_Run(ycsbc::KvDB *db, ycsbc::CoreWorkload *wl, const int num_ops,
   utils::ChronoTimer timer;
   int oks = 0;
   if(is_loading) {
-    timer.Start();
+    // timer.Start();
   }
   for (int i = 0; i < num_ops; ++i) {
     if (is_loading) {
@@ -503,15 +570,15 @@ int YCSB_Run(ycsbc::KvDB *db, ycsbc::CoreWorkload *wl, const int num_ops,
     } else {
       oks += client.DoTransaction();
     }
-    if(i%10000 == 0) {
-      // std::cerr << "Trans: " << i << "\r";
-      if(is_loading) {
-        auto duration = timer.End<std::chrono::nanoseconds>();
-        std::cout << "op " << i << " :average load latency: " << 1.0 * duration / 10000 << " ns." <<std::endl;
-      }
-      // std::cout << "average load latency: " << duration << std::endl;
-      timer.Start();
-      db->PrintStatic();
+    if(i%100000 == 0) {
+      std::cerr << "Trans: " << i << "\r";
+      // if(is_loading) {
+      //   auto duration = timer.End<std::chrono::nanoseconds>();
+      //   std::cout << "op " << i << " :average load latency: " << 1.0 * duration / 10000 << " ns." <<std::endl;
+      // }
+      // // std::cout << "average load latency: " << duration << std::endl;
+      // timer.Start();
+      // db->PrintStatic();
     }
   }
   if(is_loading) {
@@ -548,7 +615,10 @@ int main(int argc, const char *argv[])
       db = new AlexDB();
     } else if(dbName == "learngroup") {
       db = new LearnGroupDB();
-    } else {
+    } else if(dbName == "letree") {
+      db = new LetDB();
+    }
+    else {
       db = new ComboTreeDb();
     }
     db->Init();
@@ -577,6 +647,9 @@ int main(int argc, const char *argv[])
       cout << total_ops / duration / 1000 << endl << endl;
     }
     db->Info();
+    cout << "Start workloads ... \n";
+    fflush(stdout);
+    sleep(10);
     for(size_t i = 0; i < ArrayLen(workloads); i ++) {
       // cout << "Loads[" << i << "]: " << workloads[i] << endl;
       string workload = workdloads_dir + "/" + workloads[i];
@@ -604,6 +677,7 @@ int main(int argc, const char *argv[])
       cout << "# Transaction throughput (KTPS)" << endl;
       cout << props["dbname"] << '\t' << workloads[i] << '\t' << num_threads << '\t';
       cout << total_ops / duration / 1000 << endl << endl;
+      db->PrintStatic();
       db->Info();
     }
     delete db;

@@ -527,6 +527,10 @@ public:
       return *(uint64_t*)pkey(total_indexs[idx]);
     }
 
+    ALWAYS_INLINE uint64_t min_key() const {
+        return key(0);
+    }
+
     status Put(CLevel::MemControl* mem, uint64_t key, uint64_t value) {
         status ret = status::OK;
         bool find = false;
@@ -920,6 +924,10 @@ public:
       return records[idx].key;
     }
 
+    ALWAYS_INLINE uint64_t min_key() const {
+      return records[0].key;
+    }
+
     status Put(CLevel::MemControl* mem, uint64_t key, uint64_t value) {
         status ret = status::OK;
         int idx = 0;
@@ -1174,6 +1182,7 @@ public:
         }
         assert(key(sorted_index_[0]) < split_key);
         next = new (mem->Allocate<UnSortBuncket>()) UnSortBuncket(split_key, prefix_len);
+        // next = new (NVM::data_alloc->alloc(sizeof(UnSortBuncket))) UnSortBuncket(split_key, prefix_len);
         // int idx = 0;
         prefix_len = 0;
         int idx = 0;
@@ -1187,8 +1196,8 @@ public:
         NVM::Mem_persist(next, sizeof(*next));
         int m = entries;
         for(int i = entries/2; i < m; i++) {
-            uint64_t *value_;
-            remove_key(key(sorted_index_[i]), value_);
+            // uint64_t *value_;
+            remove_key(key(sorted_index_[i]), nullptr);
             fence();
             entries--;
             clflush(&header);
@@ -1220,6 +1229,16 @@ public:
 
     ALWAYS_INLINE uint64_t key(int idx) const {
       return records[idx].key;
+    }
+
+    ALWAYS_INLINE uint64_t min_key( ) const {
+        uint64_t min_key = key(0);
+        for(int i = 1; i < entries; i++) {
+            if(key(i) < min_key) {
+                min_key  = key(i);
+            }
+        }
+        return min_key;
     }
 
     status Put(CLevel::MemControl* mem, uint64_t key, uint64_t value) {
@@ -1378,12 +1397,13 @@ public:
     };
 };
 
-// typedef Buncket<256, 8> buncket_t;
-typedef UnSortBuncket<256, 8> buncket_t;  
+typedef Buncket<256, 8> buncket_t;
+// typedef SortBuncket<256, 8> buncket_t;
+// typedef UnSortBuncket<256, 8> buncket_t;  
 // c层节点的定义， C层节点需支持Put，Get，Update，Delete
 // C层节点内部需要实现一个Iter作为迭代器，
 
-static_assert(sizeof(Buncket<256, 8>) == 256);
+static_assert(sizeof(buncket_t) == 256);
 
 class __attribute__((packed)) BuncketPointer {
 
@@ -1395,6 +1415,7 @@ public:
     ALWAYS_INLINE bool HasSetup() const { return !(pointer_[0] & 1); };
 
     void Setup(CLevel::MemControl* mem, uint64_t key, int prefix_len) {
+//        buncket_t *buncket = new (NVM::data_alloc->alloc(sizeof(buncket_t))) buncket_t(key, prefix_len);
         buncket_t *buncket = new (mem->Allocate<buncket_t>()) buncket_t(key, prefix_len);
         uint64_t pointer = (uint64_t)(buncket) - mem->BaseAddr();
         memcpy(pointer_, &pointer, sizeof(pointer_));
@@ -1497,7 +1518,7 @@ struct  PointerBEntry {
      * @param mem 
      */
     void AdjustEntryKey(CLevel::MemControl* mem) {
-        // entry_key = Pointer(0, mem)->key(0);
+        entry_key = Pointer(0, mem)->min_key();
     }
 
     /**
@@ -1513,8 +1534,8 @@ struct  PointerBEntry {
         return pos;
     }
     
-    status Put(CLevel::MemControl* mem, uint64_t key, uint64_t value) {
-        retry:
+    status Put(CLevel::MemControl* mem, uint64_t key, uint64_t value, bool *split = nullptr) {
+    retry:
         // Common::timers["ALevel_times"].start();
         int pos = Find_pos(key);
         if (unlikely(!entrys[pos].IsValid())) {
@@ -1537,6 +1558,7 @@ struct  PointerBEntry {
             entrys[pos + 1].buf.suffix_bytes = 8 - prefix_len;
             entrys[0].buf.entries ++;
             // this->Show(mem);
+            if(split) *split = true;
             clflush(&entrys[0]);
             goto retry;
         }
