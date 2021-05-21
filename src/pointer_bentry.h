@@ -1397,8 +1397,8 @@ public:
     };
 };
 
-typedef Buncket<256, 8> buncket_t;
-// typedef SortBuncket<256, 8> buncket_t;
+// typedef Buncket<256, 8> buncket_t;
+typedef SortBuncket<256, 8> buncket_t;
 // typedef UnSortBuncket<256, 8> buncket_t;  
 // c层节点的定义， C层节点需支持Put，Get，Update，Delete
 // C层节点内部需要实现一个Iter作为迭代器，
@@ -1599,7 +1599,7 @@ struct  PointerBEntry {
     void Show(CLevel::MemControl* mem) {
         for(int i = 0; i < buf.entries && entrys[i].IsValid(); i ++) {
             std::cout << "Entry key: "  << entrys[i].entry_key << std::endl;
-            (entrys[i].pointer.pointer(mem->BaseAddr()))->Show();
+            // (entrys[i].pointer.pointer(mem->BaseAddr()))->Show();
         }
     }
 
@@ -1620,6 +1620,7 @@ struct  PointerBEntry {
       Iter(const PointerBEntry* entry, const CLevel::MemControl* mem)
         : entry_(entry), mem_(mem)
       {
+          if(!entry_) return;
           if(entry_->entrys[0].IsValid()) {
               new (&biter_) buncket_t::Iter(entry_->Pointer(0, mem), entry_->entrys[0].buf.prefix_bytes);
           }

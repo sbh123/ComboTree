@@ -173,6 +173,7 @@ size_t GET_SIZE    = 1000000;
 size_t DELETE_SIZE = 1000000;
 int Loads_type = 0;
 
+void combotree_expand_test(std::vector<uint64_t> &data_base);
 int main(int argc, char *argv[]) {
     static struct option opts[] = {
   /* NAME               HAS_ARG            FLAG  SHORTNAME*/
@@ -243,6 +244,9 @@ int main(int argc, char *argv[]) {
 
   // Load 
   NVM::env_init();
+
+  combotree_expand_test(data_base);
+  return 0;
   KvDB* db = nullptr;
   if(dbName == "fastfair") {
     db = new FastFairDb();
@@ -319,4 +323,32 @@ int main(int argc, char *argv[]) {
   delete db;
 
   return 0;
+}
+
+void combotree_expand_test(std::vector<uint64_t> &data_base) {
+  ComboTree *tree;
+#ifdef SERVER
+      tree = new ComboTree("/pmem0/", (1024*1024*1024*100UL), true);
+#else
+      tree = new ComboTree("/mnt/pmem0/", (1024*1024*512UL), true);
+#endif
+  Timer timer;
+  uint64_t us_times;
+  uint64_t load_pos = 0; 
+  {
+     // Load
+    timer.Record("start");
+    for(load_pos = 0; load_pos < LOAD_SIZE; load_pos ++) {
+      tree->Put(data_base[load_pos], data_base[load_pos]);
+      if((load_pos + 1) % 100000 == 0) std::cerr << "Operate: " << load_pos + 1 << '\r';  
+    }
+    std::cerr << std::endl;
+    timer.Record("stop");
+    us_times = timer.Microsecond("stop", "start");
+    std::cout << "[Metic-Load]: Load " << LOAD_SIZE << ": " 
+              << "cost " << us_times/1000000.0 << "s, " 
+              << "iops " << (double)(LOAD_SIZE)/(double)us_times*1000000.0 << " ." << std::endl;
+  }
+
+  tree->ExpandComboTree_();
 }

@@ -92,7 +92,7 @@ class ComboTree {
    private:
     NoSortIterImpl* pimpl_;
   };
-
+  void ExpandComboTree_();
  private:
   const std::string POOL_LAYOUT = "Combo Tree";
 
@@ -120,7 +120,7 @@ class ComboTree {
   bool IsKeyInOldBLevel(uint64_t key, uint64_t& begin, uint64_t& end) const;
   bool ValidPoolDir_();
   void ChangeToComboTree_();
-  void ExpandComboTree_();
+  // void ExpandComboTree_();
   size_t Scan_(uint64_t min_key, uint64_t max_key, size_t max_size,
       size_t& count, void (*callback)(uint64_t,uint64_t,void*), void* arg,
       std::function<uint64_t()> cur_max_key);

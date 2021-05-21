@@ -83,8 +83,8 @@ int main() {
     //     free(index_data);
     // }
     // pgm_dynamic_test();
-    rmi_model_test();
-    // letree_test();
+    // rmi_model_test();
+    letree_test();
     NVM::env_exit();
     return 0;
 }                       
@@ -171,11 +171,11 @@ void letree_test() {
 
     int size = 1000;
 
-    Random rnd(0, UINT64_MAX - 1);
+    Random rnd(0, UINT64_MAX - 1, 0);
     // uint64_t *index_data = (uint64_t *)malloc(size * sizeof(uint64_t));
     std::vector<std::pair<uint64_t,uint64_t>> data;
     for(int i = 0; i < size; i++) {
-        data.push_back({rnd.Next(), i});
+        data.push_back({rnd.Next(), i + 1});
     }
     std::sort(data.begin(), data.end()); 
     let.bulk_load(data);
@@ -183,10 +183,12 @@ void letree_test() {
         int max_error = 0;
         std::cout << "Find entry test\n";
         for(int i = 0; i < size; i++) {
-            int pos = let.find_entry(data[i].first);
-            max_error = std::max(std::abs(pos - i), max_error);
-            if(max_error != 0) {
-                let.find_entry(data[i].first);
+            int pos = let.find_group(data[i].first);
+            uint64_t value;
+            auto ret = let.Get(data[i].first, value);
+            if(!ret) {
+                std::cerr << "Get [" << i << "]faild\n";
+                auto ret = let.Get(data[i].first, value);
             }
         }
         std::cout << "Max error: " << max_error << std::endl;
@@ -199,7 +201,7 @@ void letree_test() {
             let.Put(rnd.Next(), i * i + 1);
         }
     }
-
+    let.ExpandTree();
     {
         // Get test
         Random rnd(0, UINT64_MAX - 1, 8);
@@ -211,8 +213,18 @@ void letree_test() {
             if(!ret) {
                 std::cerr << "Get [" << i << "]faild\n";
                 auto ret = let.Get(key, value);
+                assert(0);
             }
         }
+    }
+    {
+        // std::cout << "Iter test\n";
+        // letree::Iter it(&let);
+        // int i = 0;
+        // while(!it.end() && i <  test_num / 100) {
+        //     std::cout << "[" << i ++ << "]: " << it.key() << ".\n ";
+        //     it.next();
+        // }
     }
     // int max_error = 0;
     // for(int i = 0; i < size; i++) {

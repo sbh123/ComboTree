@@ -39,7 +39,7 @@ else()
 endif(SERVER)
 
 if(BRANGE)
-  set(EXPAND_THREADS      4)
+  set(EXPAND_THREADS   16)
 endif(BRANGE)
 
 if(NO_ENTRY_BUF)
