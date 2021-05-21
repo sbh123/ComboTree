@@ -16,7 +16,7 @@ option(STREAMING_LOAD   "Use Non-temporal Load"   OFF)
 option(STREAMING_STORE  "Use Non-temporal Store"  OFF)
 option(NO_LOCK          "Don't use lock"          OFF)
 option(BRANGE           "Multi-thread expanding"  ON)
-option(NO_ENTRY_BUF     "BEntry without KVBuffer" OFF)
+option(NO_ENTRY_BUF     "BEntry without KVBuffer" ON)
 
 # ComboTree Configuration
 # use `make clean && make CXX_DEFINES="-DNAME=VALUE"` to override during compile
@@ -39,7 +39,7 @@ else()
 endif(SERVER)
 
 if(BRANGE)
-  set(EXPAND_THREADS   16)
+  set(EXPAND_THREADS   4)
 endif(BRANGE)
 
 if(NO_ENTRY_BUF)

@@ -249,12 +249,13 @@ struct __attribute__((aligned(64))) BEntry {
       // std::cout << "Entry key: " << key << std::endl;
     }
     
-    bool Put(CLevel::MemControl* mem, uint64_t key, uint64_t value) {
+    status Put(CLevel::MemControl* mem, uint64_t key, uint64_t value) {
       if (unlikely(!clevel.HasSetup())) {
         clevel.Setup(mem, buf.suffix_bytes);
       }
       // std::cout << "Put key: " << key << ", value " << value << std::endl;
-      return clevel.Put(mem, key, value);
+      auto ret = clevel.Put(mem, key, value);
+      return ret ? status::OK : status::Failed;
     }
     bool Update(CLevel::MemControl* mem, uint64_t key, uint64_t value) {
       if (unlikely(!clevel.HasSetup())) {

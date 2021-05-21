@@ -20,11 +20,12 @@ namespace combotree {
 
 class Test;
 // #define POINTER_BENTRY
+// #define NobufBEntry
 class BLevel {
 #ifdef POINTER_BENTRY
     typedef combotree::PointerBEntry bentry_t;
 #else
-#if NO_ENTRY_BUF
+#ifdef NO_ENTRY_BUF
   typedef combotree::NobufBEntry bentry_t;
 #else
   typedef combotree::BEntry bentry_t;

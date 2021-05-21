@@ -198,6 +198,8 @@ class rmi_line_model {
     using stage_1_model_t = LinearModel<T>;
     using stage_1_model_builder_t = LinearModelBuilder<T>;
 public:
+    class builder_t;
+public:
     rmi_line_model() : stage_1(nullptr) { }
 
     // ~rmi_model() {
@@ -231,6 +233,30 @@ public:
 private:
     stage_1_model_t *stage_1;
     static const size_t linear_sample = 8;
+};
+
+template <class T>
+class rmi_line_model<T>::builder_t {
+public:
+  explicit builder_t(rmi_line_model<T>* model) 
+    : builder_(model->stage_1) {
+    }
+
+  template<typename key_t = T>
+  inline void add(key_t key, int y, T (*func)(const key_t&) = to_key<T, key_t>) {
+    if((key_seq % rmi_line_model<T>::linear_sample) == 0)
+      builder_.add(key, y, func);
+    key_seq ++;
+  }
+
+  void build() {
+    builder_.build();
+  }
+
+
+private:
+  rmi_line_model<T>::stage_1_model_builder_t builder_;
+  int key_seq = 0;
 };
 
 template <class T>

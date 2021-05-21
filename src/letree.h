@@ -483,37 +483,61 @@ public:
     ALWAYS_INLINE int find_group(const uint64_t &key) const {
         int group_id = model.predict(key) / group_entrys;
         group_id = std::min(std::max(0, group_id), (int)nr_groups_ - 1);
-        if(key < group_space[group_id].entry_space[0].entry_key && group_id > 0) {
+        // if(key < group_space[group_id].entry_space[0].entry_key && group_id > 0) {
+        //     group_id --;
+        // }
+        /** 忽略空的group和边界 **/
+        while(group_id > 0 && (group_space[group_id].nr_entries_ == 0 ||
+                (key < group_space[group_id].entry_space[0].entry_key))) {
             group_id --;
         }
         return group_id;
     }
 
-
-
     void ExpandTree() {
-        std::vector<uint64_t> entry_keys;
         size_t entry_count = 0;
+        int entry_seq = 0;
+
         // Show();
         Timer timer;
         timer.Start();
-        for(int i = 0; i < nr_groups_; i++) {
-            if(group_space[i].next_entry_count == 0) continue;
-            entry_count += group_space[i].next_entry_count;
-            group_space[i].AdjustEntryKey(clevel_mem_);
-            group::EntryIter e_iter(&group_space[i]);
-            while (!e_iter.end())
-            {
-               entry_keys.push_back((*e_iter).entry_key);
-               e_iter.next();
+        {
+            /*采用一层线性模型*/
+            LearnModel::rmi_line_model<uint64_t>::builder_t bulder(&model);
+            for(int i = 0; i < nr_groups_; i++) {
+                if(group_space[i].next_entry_count == 0) continue;
+                entry_count += group_space[i].next_entry_count;
+                group_space[i].AdjustEntryKey(clevel_mem_);
+                group::EntryIter e_iter(&group_space[i]);
+                while (!e_iter.end())
+                {
+                    bulder.add((*e_iter).entry_key, entry_seq);
+                    e_iter.next();
+                    entry_seq ++;
+                }
             }
+            bulder.build();
         }
 
-        model.init(entry_keys, entry_keys.size(), entry_keys.size() / 256);
+        // {
+        //     std::vector<uint64_t> entry_keys;
+        //     for(int i = 0; i < nr_groups_; i++) {
+        //         if(group_space[i].next_entry_count == 0) continue;
+        //         entry_count += group_space[i].next_entry_count;
+        //         group_space[i].AdjustEntryKey(clevel_mem_);
+        //         group::EntryIter e_iter(&group_space[i]);
+        //         while (!e_iter.end())
+        //         {
+        //         entry_keys.push_back((*e_iter).entry_key);
+        //         e_iter.next();
+        //         }
+        //     }
+        //     model.init(entry_keys, entry_keys.size(), entry_keys.size() / 256);
+        // }
         // std::cout << "Entry count: " << 
-        LOG(Debug::INFO, "Entry_count: %ld, %ld", entry_count, entry_keys.size());
-
-        int new_nr_groups = std::ceil(1.0 * entry_keys.size() / group_entrys);
+        LOG(Debug::INFO, "Entry_count: %ld, %d", entry_count, entry_seq);
+        // int new_nr_groups = std::ceil(1.0 * entry_count / group_entrys);
+        int new_nr_groups = std::ceil(1.0 * entry_count / group_entrys);
         group *new_group_space = (group *)NVM::data_alloc->alloc(new_nr_groups * sizeof(group));
         pmem_memset_persist(new_group_space, 0, new_nr_groups * sizeof(group));
         int group_id = 0;
@@ -566,6 +590,7 @@ public:
             if(new_group_space[i].next_entry_count == 0) continue;
             new_group_space[i].re_tarin();
         }
+        pmem_persist(new_group_space, new_nr_groups * sizeof(group));
         nr_groups_ = new_nr_groups;
         group_space = new_group_space;
         uint64_t expand_time = timer.End();

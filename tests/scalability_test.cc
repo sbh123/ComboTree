@@ -295,8 +295,8 @@ int main(int argc, char** argv) {
   //   if(LOAD_SIZE == load_finished) break;
   // }
   {
-    PUT_SIZE = 100000;
-    GET_SIZE = 10000;
+    PUT_SIZE = 10000000;
+    GET_SIZE = 1000000;
     uint64_t GetMetic = PUT_SIZE;
     for(load_pos = 0; load_pos < LOAD_SIZE; load_pos ++) {
         auto ret = db->Put(key[load_pos], key[load_pos]);
@@ -316,7 +316,8 @@ int main(int argc, char** argv) {
           std::cout << "[Metic-Write]: "; 
           db->PrintStatic();
           prev_pos = load_pos + 1;
-          if(prev_pos % GetMetic == 0){ // small get only 10%
+          // if(prev_pos % GetMetic == 0)
+          { // small get only 10%
             size_t value;
             get_timer.Clear();
             get_timer.Record("start");
@@ -336,8 +337,8 @@ int main(int argc, char** argv) {
             std::cout << "[Metic-Read]: ";
             db->PrintStatic();
             // GET_SIZE = pow(10, (int)std::log10(prev_pos) - 1);
-            GET_SIZE = prev_pos / 10;
-            GET_SIZE = std::min(1000000UL, GET_SIZE);
+            // GET_SIZE = prev_pos / 10;
+            // GET_SIZE = std::min(1000000UL, GET_SIZE);
             // GetMetic = std::min(1000000UL, GET_SIZE * 10);
             std::cout << "Get size: " << GET_SIZE << ": " << GetMetic << std::endl;
           }
