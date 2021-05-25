@@ -197,7 +197,7 @@ void letree_test() {
     {
         // Put test
         Random rnd(0, UINT64_MAX - 1, 8);
-        std::cout << "Put test \n";
+        std::cout << "Put test: \n";
         for(size_t i = 0; i < test_num; i ++) {
             let.Put(rnd.Next(), i * i + 1);
         }
@@ -206,7 +206,7 @@ void letree_test() {
     {
         // Get test
         Random rnd(0, UINT64_MAX - 1, 8);
-        std::cout << "Get test \n";
+        std::cout << "Get test: \n";
         for(size_t i = 0; i < test_num; i ++) {
             uint64_t value;
             uint64_t key = rnd.Next();
@@ -217,15 +217,40 @@ void letree_test() {
                 assert(0);
             }
         }
+        // Common::g_metic.show_metic();
     }
     {
-        // std::cout << "Iter test\n";
-        // letree::Iter it(&let);
-        // int i = 0;
-        // while(!it.end() && i <  test_num / 100) {
-        //     std::cout << "[" << i ++ << "]: " << it.key() << ".\n ";
-        //     it.next();
-        // }
+        std::cout << "Iter test:\n";
+        letree::Iter it(&let);
+        int i = 0;
+        while(!it.end() && i < 100) {
+            std::cout << "[" << i ++ << "]: " << it.key() << ".\n ";
+            it.next();
+        }
+    }
+    {
+        // Put test
+        Random rnd(0, UINT64_MAX - 1, 18);
+        std::cout << "Put test: \n";
+        for(size_t i = 0; i < test_num; i ++) {
+            let.Put(rnd.Next(), i * i + 1);
+        }
+    }
+    {
+        // Get test
+        Random rnd(0, UINT64_MAX - 1, 18);
+        std::cout << "Get test: \n";
+        for(size_t i = 0; i < test_num; i ++) {
+            uint64_t value;
+            uint64_t key = rnd.Next();
+            auto ret = let.Get(key, value);
+            if(!ret) {
+                std::cerr << "Get [" << i << "]faild\n";
+                auto ret = let.Get(key, value);
+                assert(0);
+            }
+        }
+        // Common::g_metic.show_metic();
     }
     // int max_error = 0;
     // for(int i = 0; i < size; i++) {

@@ -113,6 +113,19 @@ public:
         // return malloc(size);
     }
 
+    void *alloc_aligned(size_t size, size_t align = 64)
+    {
+        std::unique_lock<std::mutex> lock(lock_);
+        size_t reserve = align - ((uint64_t)current_addr) % align;
+        void* p = (char *)current_addr + reserve;
+        used_ += size + reserve;
+        current_addr = (char *)(current_addr) + size;
+        assert(used_ <= mapped_len_);
+        // std::cout << "Alloc at pos: " << p << std::endl;
+        return p;
+        // return malloc(size);
+    }
+
     void Free(void *p, size_t size) {
         if(p == nullptr) return;
         std::unique_lock<std::mutex> lock(lock_);

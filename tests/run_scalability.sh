@@ -7,7 +7,8 @@ function Run() {
     opnum=$3
     scansize=$4
     thread=$5
-    gdb --args ${BUILDDIR}/scalability_test --dbname ${dbname} --load-size ${loadnum} \
+    # gdb --args 
+    ${BUILDDIR}/scalability_test --dbname ${dbname} --load-size ${loadnum} \
         --put-size ${opnum} --get-size ${opnum} --delete-size ${opnum}\
         -t $thread | tee scalability-${dbname}-${thread}-400m.txt
 }

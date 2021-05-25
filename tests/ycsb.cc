@@ -28,9 +28,9 @@ const char *workloads[] = {
   "workloada.spec",
   "workloadb.spec",
   "workloadc.spec",
-  "workloadd.spec",
-  "workloade.spec",
-  "workloadf.spec",
+  // "workloadd.spec",
+  // "workloade.spec",
+  // "workloadf.spec",
   // "workloada_insert_0.spec",
   // "workloada_insert_10.spec",
   // "workloada_insert_20.spec",
@@ -546,7 +546,7 @@ public:
   } 
 
   void Begin_trans() {
-    let_->ExpandTree();
+    // let_->ExpandTree();
   }
   void PrintStatic() {
       Common::g_metic.show_metic();

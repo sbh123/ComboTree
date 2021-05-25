@@ -15,8 +15,8 @@
 namespace combotree
 {
 
-static const size_t max_entry_count = 1024 * 4;
-static const size_t min_entry_count = 256;
+static const size_t max_entry_count = 1024;
+static const size_t min_entry_count = 64;
 typedef combotree::PointerBEntry bentry_t;
 
 /**
@@ -49,7 +49,7 @@ public:
 
     void bulk_load(std::vector<std::pair<uint64_t,uint64_t>>& data, CLevel::MemControl *mem) {
         nr_entries_ = data.size();
-        bentry_t *new_entry_space = (bentry_t *)NVM::data_alloc->alloc(nr_entries_ * sizeof(bentry_t));
+        bentry_t *new_entry_space = (bentry_t *)NVM::data_alloc->alloc_aligned(nr_entries_ * sizeof(bentry_t));
         size_t new_entry_count = 0;
         for(size_t i = 0; i < data.size(); i++) {
             new (&new_entry_space[new_entry_count ++]) bentry_t(data[i].first, data[i].second, mem);
@@ -67,6 +67,7 @@ public:
             new (&entry_space[new_entry_count ++]) bentry_t(data[start + i].first, 
                 data[start + i].second, 0, mem);
         }
+        min_key = data[0].first;
         NVM::Mem_persist(entry_space, nr_entries_ * sizeof(bentry_t));
         model.init<bentry_t *, bentry_t>(entry_space, new_entry_count, new_entry_count / 100, get_entry_key);
         next_entry_count = nr_entries_;
@@ -81,19 +82,23 @@ public:
     }
 
     ALWAYS_INLINE void reserve_space() {
-        entry_space = (bentry_t *)NVM::data_alloc->alloc(next_entry_count * sizeof(bentry_t));
+        entry_space = (bentry_t *)NVM::data_alloc->alloc_aligned(next_entry_count * sizeof(bentry_t));
     }
 
     ALWAYS_INLINE void re_tarin() {
         assert(nr_entries_ <= next_entry_count);
         model.init<bentry_t *, bentry_t>(entry_space, nr_entries_, nr_entries_ / 100, get_entry_key);
+        min_key = entry_space[0].entry_key;
+        // NVM::Mem_persist(entry_space, nr_entries_ * sizeof(bentry_t));
+        pmem_persist(entry_space, nr_entries_ * sizeof(bentry_t));
     }
 
     int find_entry(const uint64_t & key) const {
         int m = model.predict(key);
         m = std::min(std::max(0, m), (int)nr_entries_ - 1);
 
-        return exponential_search_upper_bound(m, key);
+        // return exponential_search_upper_bound(m, key);
+        return linear_search_upper_bound(m, key);
     }
 
     inline int exponential_search_upper_bound(int m, const uint64_t & key) const {
@@ -115,6 +120,25 @@ public:
             r = m + std::min<int>(bound, size);
         }
         return std::max(binary_search_upper_bound(l, r, key) - 1, 0);
+    }
+
+    inline int linear_search_upper_bound(int m, const uint64_t & key) const {
+        int bound = 1;
+        int l, r;  // will do binary search in range [l, r)
+        if(entry_space[m].entry_key > key) {
+            int size = m;
+            while (bound < size && (entry_space[m - bound].entry_key > key)) {
+                bound ++;
+            }
+            return std::max<int>(m - bound, 0);
+        } else {
+            int size = nr_entries_ - m;
+            while (bound < size && (entry_space[m + bound].entry_key <= key)) {
+                bound ++;
+            }
+            return std::min<int>(m + bound - 1, nr_entries_ - 1);
+        }
+        return 0;
     }
 
     inline int binary_search_upper_bound(int l, int r, const uint64_t& key) const {
@@ -162,7 +186,7 @@ public:
             if(next_entry_count > max_entry_count) {
                 return ret;
             }
-            expand_tree(mem);
+            expand(mem);
             split = false;
             goto retry0;
         }
@@ -170,9 +194,9 @@ public:
     }
 
     bool Get(CLevel::MemControl* mem, uint64_t key, uint64_t& value) const {
-        // Common::g_metic.tracepoint("None");
+        Common::g_metic.tracepoint("None");
         int entry_id = find_entry(key);
-        // Common::g_metic.tracepoint("FindGoup");
+        Common::g_metic.tracepoint("FindEntry");
         auto ret = entry_space[entry_id].Get(mem, key, value);
         if(!ret) {
             std::cout << "Key: " << key << std::endl;
@@ -180,6 +204,7 @@ public:
             entry_space[entry_id + 1].Show(mem);
             entry_space[entry_id + 2].Show(mem);
         }
+        Common::g_metic.tracepoint("EntryGet");
         return ret;
     }
 
@@ -203,11 +228,11 @@ public:
         entry_space[0].AdjustEntryKey(mem);
     }
 
-    void expand_tree(CLevel::MemControl* mem) {
+    void expand(CLevel::MemControl* mem) {
         bentry_t::EntryIter it;
         // Timer timer;
         // timer.Start();
-        bentry_t *new_entry_space = (bentry_t *)NVM::data_alloc->alloc(next_entry_count * sizeof(bentry_t));
+        bentry_t *new_entry_space = (bentry_t *)NVM::data_alloc->alloc_aligned(next_entry_count * sizeof(bentry_t));
         size_t new_entry_count = 0;
         entry_space[0].AdjustEntryKey(mem);
         for(size_t i = 0; i < nr_entries_; i++) {
@@ -414,7 +439,7 @@ public:
 
     letree(size_t groups) : nr_groups_(groups) {
         clevel_mem_ = new CLevel::MemControl(CLEVEL_PMEM_FILE, CLEVEL_PMEM_FILE_SIZE);
-        group_space = (group *)NVM::data_alloc->alloc(groups * sizeof(group));   
+        group_space = (group *)NVM::data_alloc->alloc_aligned(groups * sizeof(group));   
     }
 
     ~letree() {
@@ -431,7 +456,7 @@ public:
         int group_id = 0;
         model.init<std::vector<std::pair<uint64_t,uint64_t>>&, std::pair<uint64_t,uint64_t>>(data, size, size / 256, first_key);
         nr_groups_ = size / min_entry_count;
-        group_space = (group *)NVM::data_alloc->alloc(nr_groups_ * sizeof(group));
+        group_space = (group *)NVM::data_alloc->alloc_aligned(nr_groups_ * sizeof(group));
         pmem_memset_persist(group_space, 0, nr_groups_ * sizeof(group));
         for(int i = 0; i < size; i ++) {
             group_id = model.predict(data[i].first) / min_entry_count;
@@ -466,9 +491,9 @@ public:
     }
 
     bool Get(uint64_t key, uint64_t& value) const {
-        // Common::g_metic.tracepoint("None");
+        Common::g_metic.tracepoint("None");
         int group_id = find_group(key);
-        // Common::g_metic.tracepoint("FindGoup");
+        Common::g_metic.tracepoint("FindGoup");
         auto ret = group_space[group_id].Get(clevel_mem_, key, value);
         if(!ret) {
             std::cout  << "Group [" << group_id << "].\n";
@@ -488,7 +513,7 @@ public:
     ALWAYS_INLINE int find_group(const uint64_t &key) const {
         int group_id = model.predict(key) / min_entry_count;
         group_id = std::min(std::max(0, group_id), (int)nr_groups_ - 1);
-        if(key < group_space[group_id].entry_space[0].entry_key && group_id > 0) {
+        if(key < group_space[group_id].min_key && group_id > 0) {
             group_id --;
         }
         /** 忽略空的group和边界 **/
@@ -543,7 +568,7 @@ public:
         LOG(Debug::INFO, "Entry_count: %ld, %d", entry_count, entry_seq);
         // int new_nr_groups = std::ceil(1.0 * entry_count / min_entry_count);
         int new_nr_groups = std::ceil(1.0 * entry_count / min_entry_count);
-        group *new_group_space = (group *)NVM::data_alloc->alloc(new_nr_groups * sizeof(group));
+        group *new_group_space = (group *)NVM::data_alloc->alloc_aligned(new_nr_groups * sizeof(group));
         pmem_memset_persist(new_group_space, 0, new_nr_groups * sizeof(group));
         int group_id = 0;
 
@@ -615,7 +640,6 @@ public:
 private:
     group *group_space;
     int nr_groups_;
-    static const size_t min_entry_count = 64;
     LearnModel::rmi_line_model<uint64_t> model;
     CLevel::MemControl *clevel_mem_;
 };
