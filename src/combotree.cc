@@ -209,6 +209,10 @@ void ComboTree::ExpandComboTree_() {
   s = State::PREPARE_EXPANDING;
   if (!status_.compare_exchange_strong(s, State::COMBO_TREE_EXPANDING, std::memory_order_release))
     assert(0);
+  {
+    need_sleep_.store(false);
+    BLevel::expand_wait_cv.notify_all();
+  }
 
   blevel_->Expansion(old_blevel_);
 
@@ -291,11 +295,16 @@ status ComboTree::Put(uint64_t key, uint64_t value) {
       CheckKey(key);
       // if (!ret) continue;
       if(ret == status::Full) {
-         ExpandComboTree_();
-         continue;
+        //  ExpandComboTree_();
+        std::thread th(&ComboTree::ExpandComboTree_, this);
+        th.detach();
+        continue;
       }
-      if (Size() >= EXPANSION_FACTOR * BLEVEL_EXPAND_BUF_KEY * blevel_->Entries())
-        ExpandComboTree_();
+      if (Size() >= EXPANSION_FACTOR * BLEVEL_EXPAND_BUF_KEY * blevel_->Entries()) {
+        // ExpandComboTree_();
+        std::thread th(&ComboTree::ExpandComboTree_, this);
+        th.detach();
+      }
       ret = status::OK;
       break;
     } else if (status_.load(std::memory_order_acquire) == State::PREPARE_EXPANDING) {

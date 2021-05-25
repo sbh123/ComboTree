@@ -11,7 +11,7 @@ function Run() {
     thread=$5
     # ${WORKLOADDIR}/workloads_set.sh ${loadnum} ${opnum}
 
-    ${BUILDDIR}/ycsb -db ${dbname} -threads ${thread} -P ${WORKLOADDIR} | tee ycsb-${dbname}-${WORKLOAD}-tmp.txt
+    ${BUILDDIR}/ycsb -db ${dbname} -threads ${thread} -P ${WORKLOADDIR} | tee ycsb-${dbname}-${WORKLOAD}-tmp1.txt
 }
 
 function run_all() {

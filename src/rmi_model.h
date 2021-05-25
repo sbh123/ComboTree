@@ -200,7 +200,7 @@ class rmi_line_model {
 public:
     class builder_t;
 public:
-    rmi_line_model() : stage_1(nullptr) { }
+    rmi_line_model() { }
 
     // ~rmi_model() {
     //   if(stage_1) delete stage_1;
@@ -208,30 +208,27 @@ public:
     // }
 
     template<typename RandomIt, typename key_t = T>
-    void init(RandomIt first, size_t size, size_t sg_num, T (*func)(const key_t&) = to_key<T, key_t>) {
-        if(stage_1) common_alloc->Free(stage_1, sizeof(stage_1_model_t));
-
+    void init(RandomIt first, size_t size, size_t sg_num, T (*func)(const key_t&) = to_key<T, key_t>) 
+    {
         {
-          stage_1 = (stage_1_model_t *)common_alloc->alloc(sizeof(stage_1_model_t));
-          stage_1_model_builder_t builder(stage_1);
+          stage_1_model_builder_t builder(&stage_1);
           size_t sample = linear_sample;
 
           for(size_t i = 0; i < size; i += sample) {
               builder.add(first[i], i, func);
           }
           builder.build();
-          NVM::Mem_persist(stage_1, sizeof(stage_1_model_t));
         }
     }
     
     template<typename key_t = T>
     inline int predict(key_t key, T (*func)(const key_t&) = to_key<T, key_t>) const  {
-      int stage_model_i = stage_1->predict(key, func);
+      int stage_model_i = stage_1.predict(key, func);
       return stage_model_i;
     } 
 
 private:
-    stage_1_model_t *stage_1;
+    stage_1_model_t stage_1;
     static const size_t linear_sample = 8;
 };
 
@@ -239,7 +236,7 @@ template <class T>
 class rmi_line_model<T>::builder_t {
 public:
   explicit builder_t(rmi_line_model<T>* model) 
-    : builder_(model->stage_1) {
+    : builder_(&model->stage_1) {
     }
 
   template<typename key_t = T>

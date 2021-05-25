@@ -172,6 +172,7 @@ void letree_test() {
     int size = 1000;
 
     Random rnd(0, UINT64_MAX - 1, 0);
+    std::cout << "Group size: " << sizeof(combotree::group) << std::endl;
     // uint64_t *index_data = (uint64_t *)malloc(size * sizeof(uint64_t));
     std::vector<std::pair<uint64_t,uint64_t>> data;
     for(int i = 0; i < size; i++) {

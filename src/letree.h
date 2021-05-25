@@ -15,7 +15,8 @@
 namespace combotree
 {
 
-static const size_t max_entry_count = 1024 * 64;
+static const size_t max_entry_count = 1024 * 4;
+static const size_t min_entry_count = 256;
 typedef combotree::PointerBEntry bentry_t;
 
 /**
@@ -24,9 +25,9 @@ typedef combotree::PointerBEntry bentry_t;
  * 2. EXPAND_ALL 宏定义控制采用每次扩展所有EntryGroup，还是采用重复指针一次扩展一个EntryGroup
  */
 class letree;
-class group {
+// class __attribute__((aligned(64))) group {
+class  group {
 public:
-    static const size_t Repeats = 4;
     class Iter;
     class BEntryIter;
     class EntryIter;
@@ -204,8 +205,8 @@ public:
 
     void expand_tree(CLevel::MemControl* mem) {
         bentry_t::EntryIter it;
-        Timer timer;
-        timer.Start();
+        // Timer timer;
+        // timer.Start();
         bentry_t *new_entry_space = (bentry_t *)NVM::data_alloc->alloc(next_entry_count * sizeof(bentry_t));
         size_t new_entry_count = 0;
         entry_space[0].AdjustEntryKey(mem);
@@ -227,9 +228,9 @@ public:
         next_entry_count = nr_entries_;
 
 
-        uint64_t expand_time = timer.End();
-        LOG(Debug::INFO, "Finish expanding group, new entry count %ld,  expansion time is %lfs", 
-                nr_entries_, (double)expand_time/1000000.0);
+        // uint64_t expand_time = timer.End();
+        // LOG(Debug::INFO, "Finish expanding group, new entry count %ld,  expansion time is %lfs", 
+        //         nr_entries_, (double)expand_time/1000000.0);
     }
 
     void Show(CLevel::MemControl* mem) {
@@ -247,16 +248,20 @@ public:
 
 
 private:
-    size_t nr_entries_;
-    size_t next_entry_count;
+    int nr_entries_;
+    int next_entry_count;
+    uint64_t min_key;
 
     // RMI::LinearModel<RMI::Key_64> model;
     // RMI::TwoStageRMI<RMI::Key_64, 3, 2> model;
-    LearnModel::rmi_model<uint64_t> model;
-
+    // LearnModel::rmi_model<uint64_t> model;
+    LearnModel::rmi_line_model<uint64_t> model;
     bentry_t *entry_space;
+    uint8_t reserve[24];
     // CLevel::MemControl *clevel_mem_;
 };
+
+static_assert(sizeof(group) == 64);
 
 class group::BEntryIter
 {
@@ -425,11 +430,11 @@ public:
         size_t size = data.size();
         int group_id = 0;
         model.init<std::vector<std::pair<uint64_t,uint64_t>>&, std::pair<uint64_t,uint64_t>>(data, size, size / 256, first_key);
-        nr_groups_ = size / group_entrys;
+        nr_groups_ = size / min_entry_count;
         group_space = (group *)NVM::data_alloc->alloc(nr_groups_ * sizeof(group));
         pmem_memset_persist(group_space, 0, nr_groups_ * sizeof(group));
         for(int i = 0; i < size; i ++) {
-            group_id = model.predict(data[i].first) / group_entrys;
+            group_id = model.predict(data[i].first) / min_entry_count;
             group_id = std::min(std::max(0, group_id), (int)nr_groups_ - 1);
 
             group_space[group_id].inc_entry_count();
@@ -481,16 +486,16 @@ public:
     }
 
     ALWAYS_INLINE int find_group(const uint64_t &key) const {
-        int group_id = model.predict(key) / group_entrys;
+        int group_id = model.predict(key) / min_entry_count;
         group_id = std::min(std::max(0, group_id), (int)nr_groups_ - 1);
-        // if(key < group_space[group_id].entry_space[0].entry_key && group_id > 0) {
-        //     group_id --;
-        // }
-        /** 忽略空的group和边界 **/
-        while(group_id > 0 && (group_space[group_id].nr_entries_ == 0 ||
-                (key < group_space[group_id].entry_space[0].entry_key))) {
+        if(key < group_space[group_id].entry_space[0].entry_key && group_id > 0) {
             group_id --;
         }
+        /** 忽略空的group和边界 **/
+        // while(group_id > 0 && (group_space[group_id].nr_entries_ == 0 ||
+        //         (key < group_space[group_id].entry_space[0].entry_key))) {
+        //     group_id --;
+        // }
         return group_id;
     }
 
@@ -536,8 +541,8 @@ public:
         // }
         // std::cout << "Entry count: " << 
         LOG(Debug::INFO, "Entry_count: %ld, %d", entry_count, entry_seq);
-        // int new_nr_groups = std::ceil(1.0 * entry_count / group_entrys);
-        int new_nr_groups = std::ceil(1.0 * entry_count / group_entrys);
+        // int new_nr_groups = std::ceil(1.0 * entry_count / min_entry_count);
+        int new_nr_groups = std::ceil(1.0 * entry_count / min_entry_count);
         group *new_group_space = (group *)NVM::data_alloc->alloc(new_nr_groups * sizeof(group));
         pmem_memset_persist(new_group_space, 0, new_nr_groups * sizeof(group));
         int group_id = 0;
@@ -545,7 +550,7 @@ public:
         // int prev_group_id  = 0;
         // for(int  i = 1; i < entry_keys.size(); i ++) {
         //     assert(entry_keys[i] > entry_keys[i-1]);
-        //     group_id = model.predict(entry_keys[i]) / group_entrys;
+        //     group_id = model.predict(entry_keys[i]) / min_entry_count;
         //     group_id = std::min(std::max(0, group_id), (int)new_nr_groups - 1);
         //     if(group_id < prev_group_id) {
         //         model.predict(entry_keys[i-1]);
@@ -559,7 +564,7 @@ public:
             group::EntryIter e_iter(&group_space[i]);
             while (!e_iter.end())
             {
-                group_id = model.predict((*e_iter).entry_key) / group_entrys;
+                group_id = model.predict((*e_iter).entry_key) / min_entry_count;
                 group_id = std::min(std::max(0, group_id), (int)new_nr_groups - 1);
                 new_group_space[group_id].inc_entry_count();
                 e_iter.next();
@@ -576,7 +581,7 @@ public:
             group::EntryIter e_iter(&group_space[i]);
             while (!e_iter.end())
             {
-                group_id = model.predict((*e_iter).entry_key) / group_entrys;
+                group_id = model.predict((*e_iter).entry_key) / min_entry_count;
                 group_id = std::min(std::max(0, group_id), (int)new_nr_groups - 1);
                 new_group_space[group_id].append_entry(&(*e_iter));
                 // assert((*e_iter).entry_key >= prev_key);
@@ -610,7 +615,7 @@ public:
 private:
     group *group_space;
     int nr_groups_;
-    static const size_t group_entrys = 64;
+    static const size_t min_entry_count = 64;
     LearnModel::rmi_line_model<uint64_t> model;
     CLevel::MemControl *clevel_mem_;
 };
