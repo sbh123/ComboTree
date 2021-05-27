@@ -195,7 +195,7 @@ void ComboTree::ExpandComboTree_() {
   sleeped_threads_.store(1);
   need_sleep_.store(true);
 
-  Timer timer;
+  Meticer timer;
   timer.Start();
 
   // old_blevel_ is set when last expanding finish.
@@ -244,7 +244,7 @@ void ComboTree::ExpandComboTree_() {
 
   permit_delete_.store(false);
 
-  Timer timer;
+  Meticer timer;
   timer.Start();
 
   learn_index_t *old_rmi_index = learn_index_;

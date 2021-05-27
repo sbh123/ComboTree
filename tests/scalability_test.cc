@@ -198,8 +198,8 @@ int main(int argc, char** argv) {
     db = new XIndexDb();
   } else if(dbName == "alex") {
     db = new AlexDB();
-  // } else if(dbName == "learngroup") {
-  //   db = new LearnGroupDB();
+  } else if(dbName == "letree") {
+    db = new LetDB();
   } else {
     db = new ComboTreeDb();
   }

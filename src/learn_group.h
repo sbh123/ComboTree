@@ -358,7 +358,7 @@ public:
     void ExpandAllGroup() {
         size_t  new_cap = nr_groups_ * 3;
         std::vector<uint64_t> train_keys;
-        Timer timer;
+        Meticer timer;
         timer.Start();
         // static_assert(sizeof(LearnGroup) == 64);
         LearnGroup *new_group_entrys_ = (LearnGroup *)NVM::data_alloc->alloc(new_cap * sizeof(LearnGroup));
@@ -439,7 +439,7 @@ public:
      */
     void ExpandEntrys(std::vector<LearnGroup *> &expand_groups, size_t start_id, size_t end_id)
     {
-        Timer timer;
+        Meticer timer;
         timer.Start();
         // size_t start_pos = 0;
         // int expand_keys;

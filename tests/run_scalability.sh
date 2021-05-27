@@ -51,4 +51,4 @@ function main() {
         Run $dbname $loadnum $opnum $scansize $thread
     fi 
 }
-main combotree 400000000 100000 4000000 1
+main letree 400000000 100000 4000000 1

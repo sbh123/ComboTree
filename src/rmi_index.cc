@@ -12,7 +12,7 @@ int RMI_Index::file_id_ = 0;
 RMI_Index::RMI_Index(BLevel* blevel, int span)
     : span_(span), blevel_(blevel)
 {
-  Timer timer;
+  Meticer timer;
   timer.Start();
   nr_blevel_entry_ = blevel_->Entries() - 1;
   min_key_ = blevel_->EntryKey(1);

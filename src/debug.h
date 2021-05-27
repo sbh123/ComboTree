@@ -48,7 +48,7 @@ inline __attribute__((always_inline)) const char* level_string__(Debug level) {
   } while (0)
 
 // microseconds timer
-class Timer {
+class Meticer {
  public:
   void Start() { start_ = std::chrono::high_resolution_clock::now(); }
 

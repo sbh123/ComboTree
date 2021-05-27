@@ -896,7 +896,7 @@ public:
         return next_bucket;
     }
 
-    int Find(uint64_t target, bool& find) const {
+    ALWAYS_INLINE int Find(uint64_t target, bool& find) const {
         int left = 0;
         int right = entries - 1;
         while (left <= right) {
@@ -913,6 +913,13 @@ public:
         }
         find = false;
         return left;
+    }
+
+    ALWAYS_INLINE int LinearFind(uint64_t target, bool& find) const {
+        int i = 0;
+        for(; i < entries && target > records[i].key; i++) ;
+        find = (i < entries) && (target == records[i].key);
+        return i;
     }
 
     ALWAYS_INLINE uint64_t value(int idx) const {
@@ -956,7 +963,8 @@ public:
     status Get(CLevel::MemControl* mem, uint64_t key, uint64_t& value) const
     {
         bool find = false;
-        int pos = Find(key, find);
+        // int pos = Find(key, find);
+        int pos = LinearFind(key, find);
         if(!find || this->value(pos)== 0) {
             // Show();
             return status::NoExist;

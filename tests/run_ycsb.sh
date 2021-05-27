@@ -26,6 +26,6 @@ function run_all() {
 # Run pgm 4000000 100000 10000 1
 # for dbname
 Run letree 4000000 100000 10000 1
-sleep 100
+# sleep 100
 # Run learngroup 4000000 100000 10000 1
 # run_all 4000000 100000 10000

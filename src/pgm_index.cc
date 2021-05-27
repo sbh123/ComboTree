@@ -13,7 +13,7 @@ PGM_Index::PGM_Index(BLevel* blevel, int span)
 {
   // actual blevel entry count is blevel_->nr_entry_ - 1
   // because the first entry in blevel is 0
-  Timer timer;
+  Meticer timer;
   timer.Start();
   nr_blevel_entry_ = blevel_->Entries() - 1;
   min_key_ = blevel_->EntryKey(1);

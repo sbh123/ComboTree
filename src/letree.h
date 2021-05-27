@@ -87,18 +87,18 @@ public:
 
     ALWAYS_INLINE void re_tarin() {
         assert(nr_entries_ <= next_entry_count);
+        pmem_persist(entry_space, nr_entries_ * sizeof(bentry_t));
         model.init<bentry_t *, bentry_t>(entry_space, nr_entries_, nr_entries_ / 100, get_entry_key);
         min_key = entry_space[0].entry_key;
         // NVM::Mem_persist(entry_space, nr_entries_ * sizeof(bentry_t));
-        pmem_persist(entry_space, nr_entries_ * sizeof(bentry_t));
     }
 
     int find_entry(const uint64_t & key) const {
         int m = model.predict(key);
         m = std::min(std::max(0, m), (int)nr_entries_ - 1);
 
-        // return exponential_search_upper_bound(m, key);
-        return linear_search_upper_bound(m, key);
+        return exponential_search_upper_bound(m, key);
+        // return linear_search_upper_bound(m, key);
     }
 
     inline int exponential_search_upper_bound(int m, const uint64_t & key) const {
@@ -119,27 +119,30 @@ public:
             l = m + bound / 2;
             r = m + std::min<int>(bound, size);
         }
+        if(r - l < 6) {
+            return std::max(linear_search_upper_bound(l, r, key) - 1, 0);
+        }
         return std::max(binary_search_upper_bound(l, r, key) - 1, 0);
     }
 
-    inline int linear_search_upper_bound(int m, const uint64_t & key) const {
-        int bound = 1;
-        int l, r;  // will do binary search in range [l, r)
-        if(entry_space[m].entry_key > key) {
-            int size = m;
-            while (bound < size && (entry_space[m - bound].entry_key > key)) {
-                bound ++;
-            }
-            return std::max<int>(m - bound, 0);
-        } else {
-            int size = nr_entries_ - m;
-            while (bound < size && (entry_space[m + bound].entry_key <= key)) {
-                bound ++;
-            }
-            return std::min<int>(m + bound - 1, nr_entries_ - 1);
-        }
-        return 0;
-    }
+    // inline int linear_search_upper_bound(int m, const uint64_t & key) const {
+    //     int bound = 1;
+    //     int l, r;  // will do binary search in range [l, r)
+    //     if(entry_space[m].entry_key > key) {
+    //         int size = m;
+    //         while (bound < size && (entry_space[m - bound].entry_key > key)) {
+    //             bound ++;
+    //         }
+    //         return std::max<int>(m - bound, 0);
+    //     } else {
+    //         int size = nr_entries_ - m;
+    //         while (bound < size && (entry_space[m + bound].entry_key <= key)) {
+    //             bound ++;
+    //         }
+    //         return std::min<int>(m + bound - 1, nr_entries_ - 1);
+    //     }
+    //     return 0;
+    // }
 
     inline int binary_search_upper_bound(int l, int r, const uint64_t& key) const {
         while (l < r) {
@@ -150,6 +153,11 @@ public:
                 r = mid;
             }
         }
+        return l;
+    }
+
+    inline int linear_search_upper_bound(int l, int r, const uint64_t& key) const {
+        while(l < r && entry_space[l].entry_key <= key) l ++;
         return l;
     }
 
@@ -194,9 +202,9 @@ public:
     }
 
     bool Get(CLevel::MemControl* mem, uint64_t key, uint64_t& value) const {
-        Common::g_metic.tracepoint("None");
+        // Common::g_metic.tracepoint("None");
         int entry_id = find_entry(key);
-        Common::g_metic.tracepoint("FindEntry");
+        // Common::g_metic.tracepoint("FindEntry");
         auto ret = entry_space[entry_id].Get(mem, key, value);
         if(!ret) {
             std::cout << "Key: " << key << std::endl;
@@ -204,8 +212,13 @@ public:
             entry_space[entry_id + 1].Show(mem);
             entry_space[entry_id + 2].Show(mem);
         }
-        Common::g_metic.tracepoint("EntryGet");
+        // Common::g_metic.tracepoint("EntryGet");
         return ret;
+    }
+
+    bool fast_fail(CLevel::MemControl* mem, uint64_t key, uint64_t& value) {
+        if(nr_entries_ <= 0 || key < min_key) return false;
+        return Get(mem, key, value);
     }
 
     bool Update(CLevel::MemControl* mem, uint64_t key, uint64_t value) {
@@ -230,7 +243,7 @@ public:
 
     void expand(CLevel::MemControl* mem) {
         bentry_t::EntryIter it;
-        // Timer timer;
+        // Meticer timer;
         // timer.Start();
         bentry_t *new_entry_space = (bentry_t *)NVM::data_alloc->alloc_aligned(next_entry_count * sizeof(bentry_t));
         size_t new_entry_count = 0;
@@ -491,17 +504,21 @@ public:
     }
 
     bool Get(uint64_t key, uint64_t& value) const {
-        Common::g_metic.tracepoint("None");
-        int group_id = find_group(key);
-        Common::g_metic.tracepoint("FindGoup");
-        auto ret = group_space[group_id].Get(clevel_mem_, key, value);
-        if(!ret) {
-            std::cout  << "Group [" << group_id << "].\n";
-            group_space[group_id].Show(clevel_mem_);
-            std::cout  << "Group [" << group_id + 1 << "].\n";
-            group_space[group_id + 1].Show(clevel_mem_);
+        // // Common::g_metic.tracepoint("None");
+        // int group_id = find_group(key);
+        // // Common::g_metic.tracepoint("FindGoup");
+        // auto ret = group_space[group_id].Get(clevel_mem_, key, value);
+        // if(!ret) {
+        //     std::cout  << "Group [" << group_id << "].\n";
+        //     group_space[group_id].Show(clevel_mem_);
+        //     std::cout  << "Group [" << group_id + 1 << "].\n";
+        //     group_space[group_id + 1].Show(clevel_mem_);
+        // }
+        // return ret;
+        if(find_fast(key, value)) {
+            return true;
         }
-        return ret;
+        return find_slow(key, value);
     }
 
     bool Delete(uint64_t key) {
@@ -513,15 +530,28 @@ public:
     ALWAYS_INLINE int find_group(const uint64_t &key) const {
         int group_id = model.predict(key) / min_entry_count;
         group_id = std::min(std::max(0, group_id), (int)nr_groups_ - 1);
-        if(key < group_space[group_id].min_key && group_id > 0) {
-            group_id --;
-        }
-        /** 忽略空的group和边界 **/
-        // while(group_id > 0 && (group_space[group_id].nr_entries_ == 0 ||
-        //         (key < group_space[group_id].entry_space[0].entry_key))) {
+        // if(key < group_space[group_id].min_key && group_id > 0) {
         //     group_id --;
         // }
+        /** 忽略空的group和边界 **/
+        while(group_id > 0 && (group_space[group_id].nr_entries_ == 0 ||
+                (key < group_space[group_id].entry_space[0].entry_key))) {
+            group_id --;
+        }
+        while (group_space[group_id].nr_entries_ == 0) group_id ++;
+        
         return group_id;
+    }
+
+    ALWAYS_INLINE bool find_fast(uint64_t key, uint64_t& value) const {
+        int group_id = model.predict(key) / min_entry_count;
+        group_id = std::min(std::max(0, group_id), (int)nr_groups_ - 1);
+        return group_space[group_id].fast_fail(clevel_mem_, key, value);
+    }
+
+    ALWAYS_INLINE bool find_slow(uint64_t key, uint64_t& value) const {
+        int group_id = find_group(key);
+        return group_space[group_id].Get(clevel_mem_, key, value);
     }
 
     void ExpandTree() {
@@ -529,7 +559,7 @@ public:
         int entry_seq = 0;
 
         // Show();
-        Timer timer;
+        Meticer timer;
         timer.Start();
         {
             /*采用一层线性模型*/

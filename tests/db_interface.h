@@ -24,6 +24,8 @@
 #endif
 
 #include "stx/btree_map.h"
+#include "../src/letree.h"
+#include "random.h"
 
 using combotree::ComboTree;
 using FastFair::btree;
@@ -532,6 +534,81 @@ public:
     }
 private:
   btree_t *tree_;
+};
+
+class LetDB : public ycsbc::KvDB  {
+  static const size_t init_num = 2000;
+  void Prepare() {
+    std::vector<std::pair<uint64_t,uint64_t>> initial_kv;
+    combotree::Random rnd(0, UINT64_MAX - 1);
+    initial_kv.push_back({0, UINT64_MAX});
+    for (uint64_t i = 0; i < init_num - 1; ++i) {
+        uint64_t key = rnd.Next();
+        uint64_t value = rnd.Next();
+        initial_kv.push_back({key, value});
+    }
+    sort(initial_kv.begin(), initial_kv.end());
+    let_->bulk_load(initial_kv);
+  }
+public:
+  LetDB(): let_(nullptr) {}
+  LetDB(combotree::letree *root): let_(root) {}
+  virtual ~LetDB() {
+    delete let_;
+  }
+
+  void Init()
+  {
+    NVM::data_init();
+    let_ = new combotree::letree();
+    Prepare();
+  }
+
+  void Info()
+  {
+    NVM::show_stat();
+    let_->Info();
+  }
+
+  int Put(uint64_t key, uint64_t value) 
+  {
+    // alex_->insert(key, value);
+    let_->Put(key, value);
+    return 1;
+  }
+  int Get(uint64_t key, uint64_t &value)
+  {
+      let_->Get(key, value);
+      return 1;
+  }
+  int Delete(uint64_t key) {
+      let_->Delete(key);
+      return 1;
+  }
+  int Update(uint64_t key, uint64_t value) {
+      let_->Update(key, value);
+      return 1;
+  }
+  int Scan(uint64_t start_key, int len, std::vector<std::pair<uint64_t, uint64_t>>& results) 
+  {
+    combotree::letree::Iter it(let_, start_key);
+    int num_entries = 0;
+    while (num_entries < len && !it.end()) {
+      results.push_back({it.key(), it.value()});
+      num_entries ++;
+      it.next();
+    }
+    return 1;
+  } 
+
+  void Begin_trans() {
+    // let_->ExpandTree();
+  }
+  void PrintStatic() {
+      Common::g_metic.show_metic();
+  }
+private:
+  combotree::letree *let_;
 };
 
 } //namespace dbInter

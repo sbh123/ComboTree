@@ -86,7 +86,7 @@ bool BEntry::Delete(CLevel::MemControl* mem, uint64_t key, uint64_t* value) {
 
 void BEntry::FlushToCLevel(CLevel::MemControl* mem) {
   // TODO: let anothor thread do this? e.g. a little thread pool
-  Timer timer;
+  Meticer timer;
   timer.Start();
 
   if (!clevel.HasSetup()) {

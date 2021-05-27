@@ -232,7 +232,7 @@ void letree_test() {
         // Put test
         Random rnd(0, UINT64_MAX - 1, 18);
         std::cout << "Put test: \n";
-        for(size_t i = 0; i < test_num; i ++) {
+        for(size_t i = 0; i < test_num * 10; i ++) {
             let.Put(rnd.Next(), i * i + 1);
         }
     }
@@ -240,7 +240,7 @@ void letree_test() {
         // Get test
         Random rnd(0, UINT64_MAX - 1, 18);
         std::cout << "Get test: \n";
-        for(size_t i = 0; i < test_num; i ++) {
+        for(size_t i = 0; i < test_num * 10; i ++) {
             uint64_t value;
             uint64_t key = rnd.Next();
             auto ret = let.Get(key, value);
