@@ -1,6 +1,7 @@
 #!/bin/bash
 BUILDDIR=$(dirname "$0")/../build/
-WORKLOAD="workloads"  #workloads
+# WORKLOAD="workloads"  #workloads
+WORKLOAD="insert_ratio"  #insert_ratio
 WORKLOADDIR=$(dirname "$0")/../include/ycsb/$WORKLOAD/
 
 function Run() {
@@ -9,13 +10,14 @@ function Run() {
     opnum=$3
     scanop=$4
     thread=$5
+    date | tee ycsb-${dbname}-${WORKLOAD}-log.txt
     # ${WORKLOADDIR}/workloads_set.sh ${loadnum} ${opnum}
-
-    ${BUILDDIR}/ycsb -db ${dbname} -threads ${thread} -P ${WORKLOADDIR} | tee ycsb-${dbname}-${WORKLOAD}-tmp1.txt
+    numactl --cpubind=1 --membind=1 \
+    ${BUILDDIR}/ycsb -db ${dbname} -threads ${thread} -P ${WORKLOADDIR} | tee  -a ycsb-${dbname}-${WORKLOAD}-log.txt
 }
 
 function run_all() {
-    dbs="learngroup fastfair alex pgm xindex"
+    dbs="fastfair alex pgm xindex"
     for dbname in $dbs; do
         echo "Run: " $dbname
         Run $dbname $1 $2 $3 1

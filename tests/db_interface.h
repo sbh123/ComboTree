@@ -234,6 +234,12 @@ public:
     pgm_ = new DynamicPGM();
   }
 
+  void Bulk_load(const std::pair<uint64_t, uint64_t> data[], int size) {
+    
+    if(pgm_) delete pgm_;
+    pgm_ = new DynamicPGM(&data[0], &data[0] + size);
+  }
+
   void Info()
   {
     NVM::show_stat();
@@ -299,6 +305,20 @@ public:
     NVM::data_init();
     prepare_xindex(init_num, work_num, bg_num);
   }
+
+  void Bulk_load(const std::pair<uint64_t, uint64_t> data[], int size) {
+    std::vector<index_key_t> initial_keys;
+    std::vector<uint64_t> vals;
+    initial_keys.resize(size);
+    vals.resize(size);
+    for (size_t i = 0; i < size; ++i) {
+      initial_keys[i] = data[i].first;
+      vals[i] = data[i].second;
+    }
+    if(xindex_) delete xindex_;
+    xindex_ = new xindex_t(initial_keys, vals, work_num, bg_num);
+  }
+
   void Info()
   {
     NVM::show_stat();
@@ -432,6 +452,10 @@ public:
     alex_ = new alex_t();
   }
 
+  void Bulk_load(const std::pair<uint64_t, uint64_t> data[], int size) {
+    alex_->bulk_load(data, size);
+  }
+
   void Info()
   {
     NVM::show_stat();
@@ -500,6 +524,12 @@ public:
     NVM::show_stat();
   }
 
+  void Bulk_load(const std::pair<uint64_t, uint64_t> data[], int size) {
+    for(int  i = 0; i < size; i ++) {
+      tree_->btree_insert(data[i].first, (char *)data[i].second);
+    }
+  }
+
   void Close() { 
 
     }
@@ -539,16 +569,16 @@ private:
 class LetDB : public ycsbc::KvDB  {
   static const size_t init_num = 2000;
   void Prepare() {
-    std::vector<std::pair<uint64_t,uint64_t>> initial_kv;
-    combotree::Random rnd(0, UINT64_MAX - 1);
-    initial_kv.push_back({0, UINT64_MAX});
-    for (uint64_t i = 0; i < init_num - 1; ++i) {
-        uint64_t key = rnd.Next();
-        uint64_t value = rnd.Next();
-        initial_kv.push_back({key, value});
-    }
-    sort(initial_kv.begin(), initial_kv.end());
-    let_->bulk_load(initial_kv);
+    // std::vector<std::pair<uint64_t,uint64_t>> initial_kv;
+    // combotree::Random rnd(0, UINT64_MAX - 1);
+    // initial_kv.push_back({0, UINT64_MAX});
+    // for (uint64_t i = 0; i < init_num - 1; ++i) {
+    //     uint64_t key = rnd.Next();
+    //     uint64_t value = rnd.Next();
+    //     initial_kv.push_back({key, value});
+    // }
+    // sort(initial_kv.begin(), initial_kv.end());
+    // let_->bulk_load(initial_kv);
   }
 public:
   LetDB(): let_(nullptr) {}
@@ -570,12 +600,17 @@ public:
     let_->Info();
   }
 
+  virtual void Bulk_load(const std::pair<uint64_t, uint64_t> data[], int size) {
+    let_->bulk_load(data, size);
+  }
+
   int Put(uint64_t key, uint64_t value) 
   {
     // alex_->insert(key, value);
     let_->Put(key, value);
     return 1;
   }
+
   int Get(uint64_t key, uint64_t &value)
   {
       let_->Get(key, value);

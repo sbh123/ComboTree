@@ -211,7 +211,7 @@ void letree_test() {
             uint64_t value;
             uint64_t key = rnd.Next();
             auto ret = let.Get(key, value);
-            if(!ret) {
+            if(!ret || value != (i * i + 1))  {
                 std::cerr << "Get [" << i << "]faild\n";
                 auto ret = let.Get(key, value);
                 assert(0);

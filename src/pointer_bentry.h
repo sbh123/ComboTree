@@ -967,6 +967,7 @@ public:
         int pos = LinearFind(key, find);
         if(!find || this->value(pos)== 0) {
             // Show();
+            assert(0);
             return status::NoExist;
         }
         value = this->value(pos);

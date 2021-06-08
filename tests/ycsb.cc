@@ -25,18 +25,23 @@ using xindex::XIndex;
 
 
 const char *workloads[] = {
-  "workloada.spec",
-  "workloadb.spec",
-  "workloadc.spec",
-  "workloadd.spec",
-  "workloade.spec",
-  "workloadf.spec",
-  // "workloada_insert_0.spec",
-  // "workloada_insert_10.spec",
-  // "workloada_insert_20.spec",
-  // "workloada_insert_50.spec",
-  // "workloada_insert_80.spec",
-  // "workloada_insert_100.spec",
+  // "workloada.spec",
+  // "workloadb.spec",
+  // "workloadc.spec",
+  // "workloadd.spec",
+  // "workloade.spec",
+  // "workloadf.spec",
+  "workloada_insert_0.spec",
+  "workloada_insert_10.spec",
+  "workloada_insert_20.spec",
+  "workloada_insert_30.spec",
+  "workloada_insert_40.spec",
+  "workloada_insert_50.spec",
+  "workloada_insert_60.spec",
+  "workloada_insert_70.spec",
+  "workloada_insert_80.spec",
+  "workloada_insert_90.spec",
+  "workloada_insert_100.spec",
   // "workload_read.spec",
   // "workload_insert.spec",
 
@@ -247,6 +252,7 @@ public:
       return 1;
   }
   int Update(uint64_t key, uint64_t value) {
+      xindex_->remove(key, 0);
       xindex_->put(index_key_t(key), value >> 6, 0);
       return 1;
   }
@@ -459,7 +465,9 @@ public:
       return 1;
   }
   int Update(uint64_t key, uint64_t value) {
-      root_->Update(key, value);
+      root_->Delete(key);
+      root_->Put(key, value);
+      // root_->Update(key, value);
       return 1;
   }
   int Scan(uint64_t start_key, int len, std::vector<std::pair<uint64_t, uint64_t>>& results) 
@@ -530,7 +538,8 @@ public:
       return 1;
   }
   int Update(uint64_t key, uint64_t value) {
-      let_->Update(key, value);
+      let_->Delete(key);
+      let_->Put(key, value);
       return 1;
   }
   int Scan(uint64_t start_key, int len, std::vector<std::pair<uint64_t, uint64_t>>& results) 
@@ -545,9 +554,6 @@ public:
     return 1;
   } 
 
-  void Begin_trans() {
-    // let_->ExpandTree();
-  }
   void PrintStatic() {
       Common::g_metic.show_metic();
   }
@@ -665,7 +671,7 @@ int main(int argc, const char *argv[])
       total_ops = stoi(props[ycsbc::CoreWorkload::OPERATION_COUNT_PROPERTY]);
       cerr << props["dbname"] << " start \t" << workloads[i] << "\t: ops " << total_ops << endl;
       utils::Timer<double> timer;
-      // db->Begin_trans();
+      db->Begin_trans();
       timer.Start();
       for (int i = 0; i < num_threads; ++i) {
           actual_ops.emplace_back(async(launch::async,

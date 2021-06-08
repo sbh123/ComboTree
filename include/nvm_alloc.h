@@ -51,6 +51,15 @@ public:
         return malloc(size);
     }
 
+    void *alloc_aligned(size_t size, size_t align = 64)
+    {
+        void *ret = nullptr;
+        posix_memalign(&ret, align, size);
+        // std::cout << "Alloc at pos: " << p << std::endl;
+        return ret;
+        // return malloc(size);
+    }
+
     void Info() {}
     
     void Free(void *p, size_t size) {

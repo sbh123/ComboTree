@@ -8,7 +8,7 @@
 #include "bentry.h"
 #include "common_time.h"
 #include "pointer_bentry.h"
-#include "learnindex/learn_index.h"
+// #include "learnindex/learn_index.h"
 #include "rmi_model.h"
 #include "statistic.h"
 
@@ -25,8 +25,8 @@ typedef combotree::PointerBEntry bentry_t;
  * 2. EXPAND_ALL 宏定义控制采用每次扩展所有EntryGroup，还是采用重复指针一次扩展一个EntryGroup
  */
 class letree;
-// class __attribute__((aligned(64))) group {
-class  group {
+class __attribute__((aligned(64))) group {
+// class  group {
 public:
     class Iter;
     class BEntryIter;
@@ -47,6 +47,20 @@ public:
             NVM::data_alloc->Free(entry_space, nr_entries_ * sizeof(bentry_t));
     }
 
+    void Init(CLevel::MemControl *mem) {
+
+        nr_entries_ = 1;
+        entry_space = (bentry_t *)NVM::data_alloc->alloc_aligned(nr_entries_ * sizeof(bentry_t));
+
+        new (&entry_space[0]) bentry_t(0, 8, mem);
+
+        NVM::Mem_persist(entry_space, nr_entries_ * sizeof(bentry_t));
+        model.init<bentry_t *, bentry_t>(entry_space, 1, 1, get_entry_key);
+
+        next_entry_count = 1;
+        NVM::Mem_persist(this, sizeof(*this));
+    }
+
     void bulk_load(std::vector<std::pair<uint64_t,uint64_t>>& data, CLevel::MemControl *mem) {
         nr_entries_ = data.size();
         bentry_t *new_entry_space = (bentry_t *)NVM::data_alloc->alloc_aligned(nr_entries_ * sizeof(bentry_t));
@@ -55,7 +69,8 @@ public:
             new (&new_entry_space[new_entry_count ++]) bentry_t(data[i].first, data[i].second, mem);
         }
         NVM::Mem_persist(new_entry_space, nr_entries_ * sizeof(bentry_t));
-        model.init<bentry_t *, bentry_t>(new_entry_space, new_entry_count, new_entry_count / 100, get_entry_key);
+        model.init<bentry_t *, bentry_t>(new_entry_space, new_entry_count, 
+                std::ceil(1.0 * new_entry_count / 100), get_entry_key);
         entry_space = new_entry_space;
         next_entry_count = nr_entries_;
     }
@@ -69,7 +84,22 @@ public:
         }
         min_key = data[0].first;
         NVM::Mem_persist(entry_space, nr_entries_ * sizeof(bentry_t));
-        model.init<bentry_t *, bentry_t>(entry_space, new_entry_count, new_entry_count / 100, get_entry_key);
+        model.init<bentry_t *, bentry_t>(entry_space, new_entry_count, 
+                std::ceil(1.0 * new_entry_count / 100), get_entry_key);
+        next_entry_count = nr_entries_;
+    }
+
+    void bulk_load(const std::pair<uint64_t, uint64_t> data[], size_t start, size_t count, CLevel::MemControl *mem) {
+        nr_entries_ = count;
+        size_t new_entry_count = 0;
+        for(size_t i = 0; i < count; i++) {
+            new (&entry_space[new_entry_count ++]) bentry_t(data[start + i].first, 
+                data[start + i].second, 0, mem);
+        }
+        min_key = data[0].first;
+        NVM::Mem_persist(entry_space, nr_entries_ * sizeof(bentry_t));
+        model.init<bentry_t *, bentry_t>(entry_space, new_entry_count, 
+                std::ceil(1.0 * new_entry_count / 100), get_entry_key);
         next_entry_count = nr_entries_;
     }
 
@@ -88,7 +118,8 @@ public:
     ALWAYS_INLINE void re_tarin() {
         assert(nr_entries_ <= next_entry_count);
         pmem_persist(entry_space, nr_entries_ * sizeof(bentry_t));
-        model.init<bentry_t *, bentry_t>(entry_space, nr_entries_, nr_entries_ / 100, get_entry_key);
+        model.init<bentry_t *, bentry_t>(entry_space, nr_entries_, 
+            std::ceil(1.0 * nr_entries_ / 100), get_entry_key);
         min_key = entry_space[0].entry_key;
         // NVM::Mem_persist(entry_space, nr_entries_ * sizeof(bentry_t));
     }
@@ -192,6 +223,7 @@ public:
 
         if(ret == status::Full ) { // LearnGroup数组满了，需要扩展
             if(next_entry_count > max_entry_count) {
+                LOG(Debug::INFO, "Need expand tree: group entry count %d.", next_entry_count);
                 return ret;
             }
             expand(mem);
@@ -211,6 +243,7 @@ public:
             entry_space[entry_id].Show(mem);
             entry_space[entry_id + 1].Show(mem);
             entry_space[entry_id + 2].Show(mem);
+            assert(0);
         }
         // Common::g_metic.tracepoint("EntryGet");
         return ret;
@@ -260,7 +293,8 @@ public:
 
         NVM::Mem_persist(new_entry_space, new_entry_count * sizeof(bentry_t));
 
-        model.init<bentry_t *, bentry_t>(new_entry_space, new_entry_count, new_entry_count / 128, get_entry_key);
+        model.init<bentry_t *, bentry_t>(new_entry_space, new_entry_count, 
+            std::ceil(1.0 * new_entry_count / 100), get_entry_key);
         entry_space = new_entry_space;
         nr_entries_ = new_entry_count;
         next_entry_count = nr_entries_;
@@ -289,12 +323,12 @@ private:
     int nr_entries_;
     int next_entry_count;
     uint64_t min_key;
-
+    bentry_t *entry_space;
     // RMI::LinearModel<RMI::Key_64> model;
     // RMI::TwoStageRMI<RMI::Key_64, 3, 2> model;
     // LearnModel::rmi_model<uint64_t> model;
+    // uint8_t reserve[16];
     LearnModel::rmi_line_model<uint64_t> model;
-    bentry_t *entry_space;
     uint8_t reserve[24];
     // CLevel::MemControl *clevel_mem_;
 };
@@ -460,6 +494,12 @@ public:
         if(group_space) NVM::data_alloc->Free(group_space, nr_groups_ * sizeof(group));
     }
 
+    void Init() {
+        nr_groups_ = 1;
+        group_space = (group *)NVM::data_alloc->alloc_aligned(sizeof(group));  
+        group_space[0].Init(clevel_mem_);
+    }
+
     static inline uint64_t first_key(const std::pair<uint64_t,uint64_t> & kv) {
         return kv.first;
     }
@@ -475,6 +515,27 @@ public:
             group_id = model.predict(data[i].first) / min_entry_count;
             group_id = std::min(std::max(0, group_id), (int)nr_groups_ - 1);
 
+            group_space[group_id].inc_entry_count();
+        }
+        size_t start = 0;
+        for(int i = 0; i < nr_groups_; i ++) {
+            if(group_space[i].next_entry_count == 0) continue;
+            group_space[i].reserve_space();
+            group_space[i].bulk_load(data, start, group_space[i].next_entry_count, clevel_mem_);
+            start += group_space[i].next_entry_count;
+        }
+    }
+
+    
+    void bulk_load(const std::pair<uint64_t, uint64_t> data[], int size) {
+        int group_id = 0;
+        model.init<const std::pair<uint64_t, uint64_t>[], std::pair<uint64_t,uint64_t>>(data, size, size / 256, first_key);
+        nr_groups_ = size / min_entry_count;
+        group_space = (group *)NVM::data_alloc->alloc_aligned(nr_groups_ * sizeof(group));
+        pmem_memset_persist(group_space, 0, nr_groups_ * sizeof(group));
+        for(int i = 0; i < size; i ++) {
+            group_id = model.predict(data[i].first) / min_entry_count;
+            group_id = std::min(std::max(0, group_id), (int)nr_groups_ - 1);
             group_space[group_id].inc_entry_count();
         }
         size_t start = 0;
@@ -504,9 +565,9 @@ public:
     }
 
     bool Get(uint64_t key, uint64_t& value) const {
-        // // Common::g_metic.tracepoint("None");
+        // Common::g_metic.tracepoint("None");
         // int group_id = find_group(key);
-        // // Common::g_metic.tracepoint("FindGoup");
+        // Common::g_metic.tracepoint("FindGoup");
         // auto ret = group_space[group_id].Get(clevel_mem_, key, value);
         // if(!ret) {
         //     std::cout  << "Group [" << group_id << "].\n";
@@ -569,6 +630,7 @@ public:
                 entry_count += group_space[i].next_entry_count;
                 group_space[i].AdjustEntryKey(clevel_mem_);
                 group::EntryIter e_iter(&group_space[i]);
+                // int sample = std::ceil(1.0 * group_space[i].next_entry_count / min_entry_count);
                 while (!e_iter.end())
                 {
                     bulder.add((*e_iter).entry_key, entry_seq);
@@ -672,6 +734,7 @@ private:
     int nr_groups_;
     LearnModel::rmi_line_model<uint64_t> model;
     CLevel::MemControl *clevel_mem_;
+    int entries_per_group = min_entry_count;
 };
 
 

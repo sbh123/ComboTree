@@ -108,6 +108,7 @@ class KvDB {
   /// Clears any state for accessing this DB.
   /// Called once per DB client (thread); there is a single DB instance globally.
   ///
+  virtual void Bulk_load(const std::pair<uint64_t, uint64_t> data[], int size) { }
   virtual void Close() { }
   virtual void Info() { }
   virtual void Begin_trans() {}

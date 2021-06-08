@@ -282,12 +282,12 @@ public:
         auto &target = level(used_levels - 1);
         target.resize(n);
         auto out = target.begin();
-        *out++ = Item(first->first, first->second);
+        *out++ = Item(first->first, (char *)(first->second));
         while (++first != last) {
             if (first->first < std::prev(out)->first)
                 throw std::invalid_argument("Range is not sorted");
             if (first->first != std::prev(out)->first)
-                *out++ = Item(first->first, first->second);
+                *out++ = Item(first->first, (char *)(first->second));
         }
         target.resize(std::distance(target.begin(), out));
 

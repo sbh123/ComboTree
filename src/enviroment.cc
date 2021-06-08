@@ -17,7 +17,7 @@ Stat const_stat;
 
 #ifdef SERVER
 const size_t common_alloc_size = 4 *1024 * 1024 * 1024UL;
-const size_t data_alloc_size = 100 * 1024 * 1024 * 1024UL;
+const size_t data_alloc_size = 200 * 1024 * 1024 * 1024UL;
 #else
 const size_t common_alloc_size = 1024 * 1024 * 1024UL;
 const size_t data_alloc_size = 4 * 1024 * 1024 * 1024UL;

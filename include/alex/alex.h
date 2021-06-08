@@ -986,11 +986,11 @@ class Alex {
   // Returns null pointer if there is no exact match of the key
   P* get_payload(const T& key) const {
     stats_.num_lookups++;
-    Common::g_metic.tracepoint("None");
+    // Common::g_metic.tracepoint("None");
     data_node_type* leaf = get_leaf(key);
-    Common::g_metic.tracepoint("GetLeaf");
+    // Common::g_metic.tracepoint("GetLeaf");
     int idx = leaf->find_key(key);
-    Common::g_metic.tracepoint("LeafFindKey");
+    // Common::g_metic.tracepoint("LeafFindKey");
     if (idx < 0) {
       return nullptr;
     } else {
