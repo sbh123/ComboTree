@@ -14,6 +14,7 @@
 #include "random.h"
 #include "nvm_alloc.h"
 #include "timer.h"
+#include "util.h"
 
 size_t LOAD_SIZE   = 10000000;
 size_t PUT_SIZE    = 6000000;
@@ -79,6 +80,13 @@ inline uint64_t FNVHash64(uint64_t val) {
     hash = hash * kFNVPrime64;
   }
   return hash;
+}
+
+template<typename T>
+std::vector<T>load_data_from_osm(
+    const std::string dataname = "/home/sbh/generate_random_osm_cellid.dat")
+{
+  return util::load_data<T>(dataname);
 }
 
 inline uint64_t Hash(uint64_t val) { return FNVHash64(val); }
@@ -167,25 +175,25 @@ int main(int argc, char** argv) {
   std::vector<uint64_t> key;
 
   if (use_data_file) {
-    std::ifstream data("./data.dat");
-    if (!data.good()) {
-      std::cout << "can not open data.dat!" << std::endl;
-      assert(0);
-    }
-    for (size_t i = 0; i < LOAD_SIZE+PUT_SIZE; ++i) {
-      uint64_t k;
-      data >> k;
-      key.push_back(k);
-    }
-    std::cout << "finish read data.dat" << std::endl;
+    // std::ifstream data("./data.dat");
+    // if (!data.good()) {
+    //   std::cout << "can not open data.dat!" << std::endl;
+    //   assert(0);
+    // }
+    // for (size_t i = 0; i < LOAD_SIZE+PUT_SIZE; ++i) {
+    //   uint64_t k;
+    //   data >> k;
+    //   key.push_back(k);
+    // }
+    // std::cout << "finish read data.dat" << std::endl;
+    key = load_data_from_osm<uint64_t>("/home/sbh/generate_random_osm_longlat.dat");
   } else if(Load_Only) {
 
   } else {
     Random rnd(0, LOAD_SIZE+PUT_SIZE-1);
+    key.resize(LOAD_SIZE+PUT_SIZE);
     for (size_t i = 0; i < LOAD_SIZE+PUT_SIZE; ++i)
-      key.push_back(Hash(i));
-    for (size_t i = 0; i < LOAD_SIZE+PUT_SIZE; ++i)
-      std::swap(key[i],key[rnd.Next()]);
+      key[i] = Hash(i);
   }
   NVM::env_init();
   KvDB* db = nullptr;
@@ -295,6 +303,19 @@ int main(int argc, char** argv) {
   //   if(LOAD_SIZE == load_finished) break;
   // }
   {
+    int init_size = 1e3;
+    std::mt19937_64 gen_payload(std::random_device{}());
+    auto values = new std::pair<uint64_t, uint64_t>[init_size];
+    for (int i = 0; i < init_size; i++) {
+      values[i].first = key[LOAD_SIZE + PUT_SIZE + i];
+      values[i].second = static_cast<uint64_t>(gen_payload());
+    }
+    std::sort(values, values + init_size,
+              [](auto const& a, auto const& b) { return a.first < b.first; });
+    db->Bulk_load(values, init_size);
+    load_pos = init_size;
+  }
+  {
     PUT_SIZE = 10000000;
     GET_SIZE = 1000000;
     uint64_t GetMetic = PUT_SIZE;
@@ -313,8 +334,8 @@ int main(int argc, char** argv) {
                   << "cost " << total_time/1000000.0 << "s, " 
                   << "iops " << (double)(load_pos - prev_pos + 1)/(double)total_time*1000000.0 << " .";
           NVM::const_stat.PrintOperate(load_pos - prev_pos + 1);
-          std::cout << "[Metic-Write]: "; 
-          db->PrintStatic();
+          // std::cout << "[Metic-Write]: "; 
+          // db->PrintStatic();
           prev_pos = load_pos + 1;
           // if(prev_pos % GetMetic == 0)
           { // small get only 10%

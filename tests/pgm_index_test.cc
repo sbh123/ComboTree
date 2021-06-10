@@ -203,6 +203,7 @@ void letree_test() {
         }
     }
     let.ExpandTree();
+    let.Show();
     {
         // Get test
         Random rnd(0, UINT64_MAX - 1, 8);

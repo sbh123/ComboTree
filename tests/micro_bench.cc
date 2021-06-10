@@ -109,6 +109,7 @@ std::vector<T>read_data_from_osm(const std::string load_file,
             << " M values/s)" << std::endl;   
   return data;
 }
+
 template<typename T>
 std::vector<T>load_data_from_osm(
     const std::string dataname = "/home/sbh/generate_random_osm_cellid.dat")

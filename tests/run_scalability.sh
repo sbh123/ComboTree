@@ -7,19 +7,19 @@ function Run() {
     opnum=$3
     scansize=$4
     thread=$5
-    # gdb --args 
-    ${BUILDDIR}/scalability_test --dbname ${dbname} --load-size ${loadnum} \
+    # gdb --args \
+    numactl --cpubind=1 --membind=1 ${BUILDDIR}/scalability_test --dbname ${dbname} --load-size ${loadnum} \
         --put-size ${opnum} --get-size ${opnum} --delete-size ${opnum}\
-        -t $thread | tee scalability-${dbname}-${thread}-400m.txt
+        -t $thread --use-data-file | tee scalability-${dbname}-longlat-400m.txt
 }
 
 # DBName: combotree fastfair pgm xindex alex
 function run_all() {
-    dbs="combotree fastfair pgm alex xindex"
+    dbs="letree fastfair pgm alex xindex"
     for dbname in $dbs; do
         echo "Run: " $dbname
         Run $dbname $1 $2 $3 1
-        # sleep 100
+        sleep 100
     done
 }
 
@@ -51,4 +51,4 @@ function main() {
         Run $dbname $loadnum $opnum $scansize $thread
     fi 
 }
-main letree 400000000 100000 4000000 1
+main alex 400000000 100000 4000000 1

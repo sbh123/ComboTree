@@ -743,7 +743,11 @@ class letree::Iter
 public:
 
     Iter(letree *tree) : tree_(tree), group_id_(0), giter(&tree->group_space[0], tree->clevel_mem_) { 
-
+        while (giter.end()){
+            group_id_ ++;
+            if(group_id_ >= tree_->nr_groups_) break;
+            new (&giter) group::Iter(&tree_->group_space[group_id_], tree_->clevel_mem_);
+        }
     }
     Iter(letree *tree, uint64_t start_key) : tree_(tree), group_id_(0), 
             giter(&tree->group_space[0], tree->clevel_mem_)  {

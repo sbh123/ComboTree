@@ -591,7 +591,7 @@ public:
   {
     NVM::data_init();
     let_ = new combotree::letree();
-    Prepare();
+    let_->Init();
   }
 
   void Info()

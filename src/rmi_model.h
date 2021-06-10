@@ -246,6 +246,12 @@ public:
     key_seq ++;
   }
 
+  template<typename key_t = T>
+  inline void add_one(key_t key, int y, T (*func)(const key_t&) = to_key<T, key_t>) {
+    builder_.add(key, y, func);
+    key_seq ++;
+  }
+
   void build() {
     builder_.build();
   }
