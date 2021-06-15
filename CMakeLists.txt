@@ -112,8 +112,8 @@ add_executable(benchmark tests/benchmark.cc)
 target_link_libraries(benchmark combotree)
 
 # multi_benchmark
-add_executable(multi_benchmark tests/multi_benchmark.cc)
-target_link_libraries(multi_benchmark combotree)
+add_executable(multi_bench tests/multi_bench.cc)
+target_link_libraries(multi_bench combotree)
 
 # scalability_test
 add_executable(scalability_test tests/scalability_test.cc)

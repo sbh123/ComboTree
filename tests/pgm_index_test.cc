@@ -170,6 +170,7 @@ void letree_test() {
     size_t test_num = 1000000;
 
     int size = 1000;
+    int thread_num = 4;
 
     Random rnd(0, UINT64_MAX - 1, 0);
     std::cout << "Group size: " << sizeof(combotree::group) << std::endl;
@@ -203,7 +204,7 @@ void letree_test() {
         }
     }
     let.ExpandTree();
-    let.Show();
+    // let.Show();
     {
         // Get test
         Random rnd(0, UINT64_MAX - 1, 8);
@@ -231,26 +232,44 @@ void letree_test() {
     }
     {
         // Put test
-        Random rnd(0, UINT64_MAX - 1, 18);
-        std::cout << "Put test: \n";
-        for(size_t i = 0; i < test_num * 10; i ++) {
-            let.Put(rnd.Next(), i * i + 1);
+        std::vector<std::thread> threads;
+        std::atomic_int thread_id_count(0);
+        for(int i = 0; i < thread_num; i ++) {
+            threads.emplace_back([&](){
+                int thread_id = thread_id_count.fetch_add(1);
+                std::cout << "Thread " << thread_id << ": Put test ...\n";
+                Random rnd(0, UINT64_MAX - 1, 18 * (thread_id + 1));
+                for(size_t i = 0; i < test_num * 10; i ++) {
+                    let.Put(rnd.Next(), i * i + 1);
+                }
+            });
         }
+        for (auto& t : threads)
+            t.join();
     }
     {
         // Get test
-        Random rnd(0, UINT64_MAX - 1, 18);
-        std::cout << "Get test: \n";
-        for(size_t i = 0; i < test_num * 10; i ++) {
-            uint64_t value;
-            uint64_t key = rnd.Next();
-            auto ret = let.Get(key, value);
-            if(!ret) {
-                std::cerr << "Get [" << i << "]faild\n";
-                auto ret = let.Get(key, value);
-                assert(0);
-            }
+        std::vector<std::thread> threads;
+        std::atomic_int thread_id_count(0);
+        for(int i = 0; i < thread_num; i ++) {
+            threads.emplace_back([&](){
+                int thread_id = thread_id_count.fetch_add(1);
+                Random rnd(0, UINT64_MAX - 1, 18 * (thread_id + 1));
+                std::cout << "Thread " << thread_id << ": Get test ...\n";
+                for(size_t i = 0; i < test_num * 10; i ++) {
+                    uint64_t value;
+                    uint64_t key = rnd.Next();
+                    auto ret = let.Get(key, value);
+                    if(!ret) {
+                        std::cerr << "Get [" << i << "]faild\n";
+                        auto ret = let.Get(key, value);
+                        assert(0);
+                    }
+                }
+            });
         }
+        for (auto& t : threads)
+            t.join();
         // Common::g_metic.show_metic();
     }
     // int max_error = 0;

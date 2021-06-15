@@ -289,12 +289,17 @@ private:
 
 class XIndexDb : public ycsbc::KvDB  {
   static const int init_num = 10000;
-  static const int bg_num = 1;
-  static const int work_num = 1;
+  int bg_num_ = 1;
+  int work_num_ = 1;
   typedef KV::Key_t index_key_t;
   typedef xindex::XIndex<index_key_t, uint64_t> xindex_t;
 public:
   XIndexDb(): xindex_(nullptr) {}
+  XIndexDb(int bg_num, int work_num): xindex_(nullptr),
+         bg_num_(bg_num), work_num_(work_num) {
+
+  }
+
   XIndexDb(xindex_t *xindex): xindex_(xindex) {}
   virtual ~XIndexDb() {
     delete xindex_;
@@ -303,7 +308,7 @@ public:
   void Init()
   {
     NVM::data_init();
-    prepare_xindex(init_num, work_num, bg_num);
+    // prepare_xindex(init_num, work_num, bg_num);
   }
 
   void Bulk_load(const std::pair<uint64_t, uint64_t> data[], int size) {
@@ -316,13 +321,15 @@ public:
       vals[i] = data[i].second;
     }
     if(xindex_) delete xindex_;
-    xindex_ = new xindex_t(initial_keys, vals, work_num, bg_num);
+
+    xindex_ = new xindex_t(initial_keys, vals, work_num_, bg_num_);
   }
 
   void Info()
   {
     NVM::show_stat();
   }
+
   int Put(uint64_t key, uint64_t value) 
   {
     // pgm_->insert(key, (char *)value);
@@ -342,6 +349,23 @@ public:
       xindex_->remove(key, 0);
       return 1;
   }
+
+  int MultPut(uint64_t key, uint64_t value, int work_id) 
+  {
+    xindex_->put(index_key_t(key), value, work_id);
+    return 1;
+  }
+  int MultGet(uint64_t key, uint64_t &value, int work_id) 
+  {
+    xindex_->get(index_key_t(key), value, work_id);
+    return 1;
+  }
+  int MultDelete(uint64_t key, int work_id) 
+  {
+    xindex_->remove(key, work_id);;
+    return 1;
+  }
+
   int Scan(uint64_t start_key, int len, std::vector<std::pair<uint64_t, uint64_t>>& results) 
   {
     std::vector<std::pair<index_key_t, uint64_t>> tmpresults;
@@ -624,6 +648,21 @@ public:
       let_->Update(key, value);
       return 1;
   }
+
+  int MultPut(uint64_t key, uint64_t value, int work_id) { 
+    let_->Put(key, value);
+    return 1;
+  }
+  int MultGet(uint64_t key, uint64_t &value, int work_id) { 
+    let_->Get(key, value);
+    return 1;
+  }
+
+  int MultDelete(uint64_t key, int work_id) { 
+    let_->Delete(key);
+    return 0;
+  }
+
   int Scan(uint64_t start_key, int len, std::vector<std::pair<uint64_t, uint64_t>>& results) 
   {
     combotree::letree::Iter it(let_, start_key);

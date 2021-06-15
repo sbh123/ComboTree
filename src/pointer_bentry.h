@@ -965,7 +965,8 @@ public:
         bool find = false;
         // int pos = Find(key, find);
         int pos = LinearFind(key, find);
-        if(!find || this->value(pos)== 0) {
+        // if(!find || this->value(pos)== 0) {
+        if(!find) {
             // Show();
             assert(0);
             return status::NoExist;

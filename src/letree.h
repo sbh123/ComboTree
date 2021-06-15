@@ -1,5 +1,7 @@
 #pragma once
 
+#include <thread>
+
 #include "combotree_config.h"
 #include "kvbuffer.h"
 #include "clevel.h"
@@ -486,17 +488,20 @@ public:
 
     letree(size_t groups) : nr_groups_(groups) {
         clevel_mem_ = new CLevel::MemControl(CLEVEL_PMEM_FILE, CLEVEL_PMEM_FILE_SIZE);
-        group_space = (group *)NVM::data_alloc->alloc_aligned(groups * sizeof(group));   
+        group_space = (group *)NVM::data_alloc->alloc_aligned(groups * sizeof(group)); 
+        lock_space = new std::mutex[groups];  
     }
 
     ~letree() {
         if(clevel_mem_) { delete clevel_mem_;}
         if(group_space) NVM::data_alloc->Free(group_space, nr_groups_ * sizeof(group));
+        if(lock_space) delete [] lock_space;
     }
 
     void Init() {
         nr_groups_ = 1;
         group_space = (group *)NVM::data_alloc->alloc_aligned(sizeof(group));  
+        lock_space = new std::mutex[1]; 
         group_space[0].Init(clevel_mem_);
     }
 
@@ -507,9 +512,15 @@ public:
     void bulk_load(std::vector<std::pair<uint64_t,uint64_t>>& data) {
         size_t size = data.size();
         int group_id = 0;
+        if(nr_groups_ != 0) {
+            if(group_space) NVM::data_alloc->Free(group_space, nr_groups_ * sizeof(group));
+            if(lock_space) delete [] lock_space;
+        }
+
         model.init<std::vector<std::pair<uint64_t,uint64_t>>&, std::pair<uint64_t,uint64_t>>(data, size, size / 256, first_key);
         nr_groups_ = size / min_entry_count;
         group_space = (group *)NVM::data_alloc->alloc_aligned(nr_groups_ * sizeof(group));
+        lock_space = new std::mutex[nr_groups_]; 
         pmem_memset_persist(group_space, 0, nr_groups_ * sizeof(group));
         for(int i = 0; i < size; i ++) {
             group_id = model.predict(data[i].first) / min_entry_count;
@@ -529,9 +540,15 @@ public:
     
     void bulk_load(const std::pair<uint64_t, uint64_t> data[], int size) {
         int group_id = 0;
+        if(nr_groups_ != 0) {
+            if(group_space) NVM::data_alloc->Free(group_space, nr_groups_ * sizeof(group));
+            if(lock_space) delete [] lock_space;
+        }
+
         model.init<const std::pair<uint64_t, uint64_t>[], std::pair<uint64_t,uint64_t>>(data, size, size / 256, first_key);
         nr_groups_ = size / min_entry_count;
         group_space = (group *)NVM::data_alloc->alloc_aligned(nr_groups_ * sizeof(group));
+        lock_space = new std::mutex[nr_groups_]; 
         pmem_memset_persist(group_space, 0, nr_groups_ * sizeof(group));
         for(int i = 0; i < size; i ++) {
             group_id = model.predict(data[i].first) / min_entry_count;
@@ -548,9 +565,14 @@ public:
     }
 
     status Put(uint64_t key, uint64_t value) {
+        status ret = status::Failed;
     retry0:
-        int group_id = find_group(key);
-        auto ret = group_space[group_id].Put(clevel_mem_, key, value);
+        trans_begin();
+        {
+            int group_id = find_group(key);
+            std::unique_lock<std::mutex> lock(lock_space[group_id]);
+            ret = group_space[group_id].Put(clevel_mem_, key, value);
+        }
         if(ret == status::Full ) { // LearnGroup 太大了
             ExpandTree();
             goto retry0;
@@ -559,12 +581,15 @@ public:
     }
 
     bool Update(uint64_t key, uint64_t value) {
+        trans_begin();
         int group_id = find_group(key);
+        std::unique_lock<std::mutex> lock(lock_space[group_id]);
         auto ret = group_space[group_id].Update(clevel_mem_, key, value);
         return ret;
     }
 
-    bool Get(uint64_t key, uint64_t& value) const {
+    bool Get(uint64_t key, uint64_t& value) {
+        trans_begin();
         // Common::g_metic.tracepoint("None");
         // int group_id = find_group(key);
         // Common::g_metic.tracepoint("FindGoup");
@@ -583,7 +608,9 @@ public:
     }
 
     bool Delete(uint64_t key) {
+        trans_begin();
         int group_id = find_group(key);
+        std::unique_lock<std::mutex> lock(lock_space[group_id]);
         auto ret = group_space[group_id].Delete(clevel_mem_, key);
         return ret;
     }
@@ -604,15 +631,24 @@ public:
         return group_id;
     }
 
-    ALWAYS_INLINE bool find_fast(uint64_t key, uint64_t& value) const {
+    ALWAYS_INLINE bool find_fast(uint64_t key, uint64_t& value) {
         int group_id = model.predict(key) / min_entry_count;
         group_id = std::min(std::max(0, group_id), (int)nr_groups_ - 1);
+        std::unique_lock<std::mutex> lock(lock_space[group_id]);
         return group_space[group_id].fast_fail(clevel_mem_, key, value);
     }
 
-    ALWAYS_INLINE bool find_slow(uint64_t key, uint64_t& value) const {
+    ALWAYS_INLINE bool find_slow(uint64_t key, uint64_t& value) {
         int group_id = find_group(key);
+        std::unique_lock<std::mutex> lock(lock_space[group_id]);
         return group_space[group_id].Get(clevel_mem_, key, value);
+    }
+
+    ALWAYS_INLINE void trans_begin() {
+        if(is_tree_expand.load(std::memory_order_acquire)) {
+            std::unique_lock<std::mutex> lock(expand_wait_lock);
+            expand_wait_cv.wait(lock);
+        }
     }
 
     void ExpandTree() {
@@ -620,6 +656,10 @@ public:
         int entry_seq = 0;
 
         // Show();
+        if(is_tree_expand.load(std::memory_order_acquire)) return ;
+
+        is_tree_expand.store(true);
+
         Meticer timer;
         timer.Start();
         {
@@ -661,6 +701,8 @@ public:
         // int new_nr_groups = std::ceil(1.0 * entry_count / min_entry_count);
         int new_nr_groups = std::ceil(1.0 * entry_count / min_entry_count);
         group *new_group_space = (group *)NVM::data_alloc->alloc_aligned(new_nr_groups * sizeof(group));
+        std::mutex *new_lock_space = new std::mutex[new_nr_groups];
+
         pmem_memset_persist(new_group_space, 0, new_nr_groups * sizeof(group));
         int group_id = 0;
 
@@ -713,11 +755,23 @@ public:
             new_group_space[i].re_tarin();
         }
         pmem_persist(new_group_space, new_nr_groups * sizeof(group));
+        
+        if(nr_groups_ != 0) {
+            if(group_space) NVM::data_alloc->Free(group_space, nr_groups_ * sizeof(group));
+            if(lock_space) delete [] lock_space;
+        }
+
         nr_groups_ = new_nr_groups;
         group_space = new_group_space;
+        lock_space = new_lock_space;
+
+        is_tree_expand.store(false);
+        expand_wait_cv.notify_all();
+
         uint64_t expand_time = timer.End();
         LOG(Debug::INFO, "Finish expanding group, new group count %ld,  expansion time is %lfs", 
                 nr_groups_, (double)expand_time/1000000.0);
+        
         // Show();
     }
 
@@ -731,6 +785,12 @@ public:
     void Info() {}
 private:
     group *group_space;
+
+    std::mutex *lock_space;
+    std::mutex expand_wait_lock;
+    std::condition_variable expand_wait_cv;
+    std::atomic_bool is_tree_expand = false;
+
     int nr_groups_;
     LearnModel::rmi_line_model<uint64_t> model;
     CLevel::MemControl *clevel_mem_;

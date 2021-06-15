@@ -245,4 +245,126 @@ class FastRandom {
   static constexpr uint64_t Max() { return std::numeric_limits<uint64_t>::max(); }
 };
 
+uint64_t get_cellid(const std::string &line) {
+  uint64_t id;
+  double lat, lon;
+  std::stringstream strin(line);
+          strin >> id >> lon >> lat;
+  return id;
+}
+
+double get_longitude(const std::string &line) {
+  uint64_t id;
+  double lat, lon;
+  std::stringstream strin(line);
+          strin >> id >> lon >> lat;
+  return lon;
+}
+
+double get_lat(const std::string &line) {
+  uint64_t id;
+  double lat, lon;
+  std::stringstream strin(line);
+          strin >> id >> lon >> lat;
+  return lat;
+}
+
+uint64_t get_longlat(const std::string &line) {
+  uint64_t id;
+  double lat, lon;
+  std::stringstream strin(line);
+          strin >> id >> lon >> lat;
+  return (lon * 180 + lat) * 1e7;
+}
+
+template<typename T>
+std::vector<T>read_data_from_osm(const std::string load_file, 
+    T (*get_data)(const std::string &) = []{ return static_cast<T>(0);},
+    const std::string output = "/home/sbh/generate_random_osm_longlat.dat")
+{
+  std::vector<T> data;
+  std::set<T> unique_keys;
+  std::cout << "Use: " << __FUNCTION__ << std::endl;
+    const uint64_t ns = util::timing([&] { 
+      std::ifstream in(load_file);
+      if (!in.is_open()) {
+        std::cerr << "unable to open " << load_file << std::endl;
+        exit(EXIT_FAILURE);
+      }
+      uint64_t id, size = 0;
+      double lat, lon;
+      while (!in.eof())
+      {
+        /* code */
+        std::string tmp;
+        getline(in, tmp); // 去除第一行
+        while(getline(in, tmp)) {
+          T key = get_data(tmp);
+          unique_keys.insert(key);
+          size ++;
+          if(size % 100000 == 0) std::cerr << "Load: " << size << "\r";
+        }
+      }
+      in.close();
+      std::cerr << "Finshed loads ......\n";
+      data.assign(unique_keys.begin(), unique_keys.end());
+      std::random_shuffle(data.begin(), data.end());
+      size = data.size();
+      std::cerr << "Finshed random ......\n"; 
+      std::ofstream out(output, std::ios::binary);
+      out.write(reinterpret_cast<char*>(&size), sizeof(uint64_t));
+      out.write(reinterpret_cast<char*>(data.data()), data.size() * sizeof(uint64_t));
+      out.close(); 
+      std::cout << "read size: " << size << ", unique data: " << unique_keys.size() << std::endl;
+  });
+  const uint64_t ms = ns/1e6;
+  std::cout << "generate " << data.size() << " values in "
+            << ms << " ms (" << static_cast<double>(data.size())/1000/ms
+            << " M values/s)" << std::endl;   
+  return data;
+}
+
+template<typename T>
+std::vector<T>load_data_from_osm(
+    const std::string dataname = "/home/sbh/generate_random_osm_cellid.dat")
+{
+  return util::load_data<T>(dataname);
+}
+
+std::vector<uint64_t> generate_random_ycsb(size_t op_num)
+{
+  std::vector<uint64_t> data; 
+  data.resize(op_num);
+  std::cout << "Use: " << __FUNCTION__ << std::endl;
+  const uint64_t ns = util::timing([&] { 
+    combotree::Random rnd(0, op_num - 1);
+    for (size_t i = 0; i < op_num; ++i)
+      data[i] = utils::Hash(i);
+    // for (size_t i = 0; i < op_num; ++i)
+    //   std::swap(data[i], data[rnd.Next()]);
+  });
+  const uint64_t ms = ns/1e6;
+  std::cout << "generate " << data.size() << " values in "
+            << ms << " ms (" << static_cast<double>(data.size())/1000/ms
+            << " M values/s)" << std::endl;   
+  return data;
+}
+
+std::vector<uint64_t> generate_uniform_random(size_t op_num)
+{
+  std::vector<uint64_t> data; 
+  data.resize(op_num);
+  std::cout << "Use: " << __FUNCTION__ << std::endl;
+  const uint64_t ns = util::timing([&] { 
+    combotree::Random rnd(0, UINT64_MAX);
+    for (size_t i = 0; i < op_num; ++i)
+      data[i] = rnd.Next();
+  });
+  const uint64_t ms = ns/1e6;
+  std::cout << "generate " << data.size() << " values in "
+            << ms << " ms (" << static_cast<double>(data.size())/1000/ms
+            << " M values/s)" << std::endl;  
+  return data;
+}
+
 } // namespace util

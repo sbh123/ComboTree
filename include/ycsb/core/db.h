@@ -118,6 +118,10 @@ class KvDB {
   virtual int Delete(uint64_t key) = 0;
   virtual int Scan(uint64_t start_key, int len, std::vector<std::pair<uint64_t, uint64_t>>& results) = 0;
   virtual void PrintStatic() {}
+
+  virtual int MultPut(uint64_t key, uint64_t value, int work_id) { return 0;}
+  virtual int MultGet(uint64_t key, uint64_t &value, int work_id) { return 0;}
+  virtual int MultDelete(uint64_t key, int work_id) { return 0;}
   // virtual int Delete(const std::string &table, const std::string &key) = 0;
   
   virtual ~KvDB() { }
