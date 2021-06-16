@@ -47,8 +47,8 @@ fi
 # logfile="scalability-$dbname-longlat-400m.txt"
 # scalability_get_read_iops $logfile $dbname
 
-for thread in 4 8 12 16 24 48
+for thread in 4 8 12 16 24 32 48
 do
     logfile=multi-${dbname}-th${thread}.txt
-    mult_th_iops_result $logfile "Metic-Get"
+    mult_th_iops_result $logfile "Metic-Load"
 done

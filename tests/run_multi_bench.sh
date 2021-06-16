@@ -8,7 +8,7 @@ function Run() {
     scansize=$4
     thread=$5
     # numactl --cpubind=1 --membind=1 
-    gdb --args ${BUILDDIR}/multi_bench --dbname ${dbname} \
+    numactl --cpubind=1 --membind=1 ${BUILDDIR}/multi_bench --dbname ${dbname} \
         --load-size ${loadnum} --put-size ${opnum} --get-size ${opnum} \
         -t $thread | tee multi-${dbname}-th${thread}.txt
 }
@@ -29,7 +29,7 @@ opnum=10000000
 scansize=4000000
 # thread=4
 
-for thread in 4 8 12 16 24 48
+for thread in 46 48
 do
     Run $dbname $loadnum $opnum $scansize $thread
 done

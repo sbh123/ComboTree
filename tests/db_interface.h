@@ -10,6 +10,7 @@
 #include "../src/combotree_config.h"
 #include "fast-fair/btree.h"
 #include "fast-fair/btree_old.h"
+#include "fast-fair/con_btree.h"
 
 #ifdef USE_MEM
 
@@ -220,7 +221,7 @@ class PGMDynamicDb : public ycsbc::KvDB {
 #else
   using PGMType = PGM_OLD_NVM::PGMIndex<uint64_t>;
 #endif
-  typedef pgm::DynamicPGMIndex<uint64_t, char *, PGMType> DynamicPGM;
+  typedef pgm::DynamicPGMIndex<uint64_t, uint64_t, PGMType> DynamicPGM;
 public:
   PGMDynamicDb(): pgm_(nullptr) {}
   PGMDynamicDb(DynamicPGM *pgm): pgm_(pgm) {}
@@ -251,7 +252,7 @@ public:
   }
   int Put(uint64_t key, uint64_t value) 
   {
-    pgm_->insert(key, (char *)value);
+    pgm_->insert(key, value);
     return 1;
   }
   int Get(uint64_t key, uint64_t &value)
@@ -261,7 +262,7 @@ public:
       return 1;
   }
   int Update(uint64_t key, uint64_t value) {
-      pgm_->insert(key, (char *)value);
+      pgm_->insert(key, value);
       return 1;
   }
 
@@ -529,7 +530,8 @@ private:
 class fastfairDB : public ycsbc::KvDB  {
   typedef uint64_t KEY_TYPE;
   typedef uint64_t PAYLOAD_TYPE;
-  typedef fastfair::btree btree_t;
+  // typedef fastfair::btree btree_t;
+  typedef ConFastFair::btree btree_t;
 public:
   fastfairDB(): tree_(nullptr) {}
   fastfairDB(btree_t *btree): tree_(btree) {}
@@ -556,7 +558,7 @@ public:
 
   void Close() { 
 
-    }
+  }
     int Put(uint64_t key, uint64_t value) 
     {
         tree_->btree_insert(key, (char *)value);
@@ -576,6 +578,20 @@ public:
     int Delete(uint64_t key) {
         tree_->btree_delete(key);
         return 1;
+    }
+
+    int MultPut(uint64_t key, uint64_t value, int work_id) { 
+      tree_->btree_insert(key, (char *)value);
+      return 1;
+    }
+    int MultGet(uint64_t key, uint64_t &value, int work_id) { 
+      value = (uint64_t)tree_->btree_search(key);
+      return 1;
+    }
+
+    int MultDelete(uint64_t key, int work_id) { 
+      tree_->btree_delete(key);
+      return 1;
     }
 
     int Scan(uint64_t start_key, int len, std::vector<std::pair<uint64_t, uint64_t>>& results) 
@@ -660,7 +676,7 @@ public:
 
   int MultDelete(uint64_t key, int work_id) { 
     let_->Delete(key);
-    return 0;
+    return 1;
   }
 
   int Scan(uint64_t start_key, int len, std::vector<std::pair<uint64_t, uint64_t>>& results) 

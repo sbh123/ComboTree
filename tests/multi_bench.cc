@@ -127,7 +127,7 @@ int main(int argc, char *argv[]) {
   NVM::env_init();
   KvDB* db = nullptr;
   if(dbName == "fastfair") {
-    db = new FastFairDb();
+    db = new fastfairDB();
   } else if(dbName == "xindex") {
     db = new XIndexDb(2, thread_num);
   } else if(dbName == "letree") {
@@ -140,18 +140,19 @@ int main(int argc, char *argv[]) {
   uint64_t us_times;
   uint64_t load_pos = 0; 
   std::cout << "Start run ...." << std::endl;
-  {
-    int init_size = 1e3;
-    std::mt19937_64 gen_payload(std::random_device{}());
-    auto values = new std::pair<uint64_t, uint64_t>[init_size];
-    for (int i = 0; i < init_size; i++) {
-      values[i].first = data_base[data_base.size() - i - 1];
-      values[i].second = static_cast<uint64_t>(gen_payload());
-    }
-    std::sort(values, values + init_size,
-              [](auto const& a, auto const& b) { return a.first < b.first; });
-    db->Bulk_load(values, init_size);
-  }
+  // {
+  //   int init_size = LOAD_SIZE;
+  //   std::mt19937_64 gen_payload(std::random_device{}());
+  //   auto values = new std::pair<uint64_t, uint64_t>[init_size];
+  //   for (int i = 0; i < init_size; i++) {
+  //     // values[i].first = data_base[data_base.size() - i - 1];
+  //     values[i].first = data_base[i];
+  //     values[i].second = static_cast<uint64_t>(gen_payload());
+  //   }
+  //   std::sort(values, values + init_size,
+  //             [](auto const& a, auto const& b) { return a.first < b.first; });
+  //   db->Bulk_load(values, init_size);
+  // }
 
   {
      // Load
